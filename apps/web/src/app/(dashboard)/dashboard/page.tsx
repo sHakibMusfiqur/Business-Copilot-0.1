@@ -2,8 +2,6 @@
 
 import { motion } from 'framer-motion';
 import {
-  TrendingUp,
-  TrendingDown,
   Users,
   ShoppingCart,
   DollarSign,
@@ -12,6 +10,7 @@ import {
   ArrowDownRight,
   MoreHorizontal,
 } from 'lucide-react';
+
 import { formatCurrency } from '@/lib/utils';
 
 const stats = [

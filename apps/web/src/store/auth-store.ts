@@ -1,5 +1,6 @@
-import { create } from 'zustand';
 import type { User } from '@bc/types';
+import { create } from 'zustand';
+
 import { setAccessToken } from '@/lib/api';
 
 interface AuthState {

@@ -4,12 +4,14 @@ import {
   ConflictException,
   Logger,
 } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
+import type { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
-import { PrismaService } from '../prisma/prisma.service';
-import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
-import { CurrentUserPayload } from '../common/decorators/current-user.decorator';
+
+import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
+import type { PrismaService } from '../prisma/prisma.service';
+
+import type { LoginDto } from './dto/login.dto';
+import type { RegisterDto } from './dto/register.dto';
 
 interface Tokens {
   accessToken: string;

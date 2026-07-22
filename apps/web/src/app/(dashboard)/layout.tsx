@@ -1,14 +1,6 @@
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { QueryProvider } from '@/providers/query-provider';
-import { ThemeProvider } from '@/providers/theme-provider';
-import { AuthProvider } from '@/providers/auth-provider';
-import { useAuthStore } from '@/store/auth-store';
-import { generateInitials } from '@/lib/utils';
-import { logout as apiLogout } from '@/lib/api';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard,
   Users,
@@ -23,7 +15,6 @@ import {
   Wallet,
   BarChart3,
   Bell,
-  FileText,
   Bot,
   Settings,
   ChevronLeft,
@@ -31,13 +22,22 @@ import {
   LogOut,
   Search,
   Sun,
-  Moon,
   Menu,
   X,
   ChevronDown,
   HelpCircle,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import { useState } from 'react';
+
+import { logout as apiLogout } from '@/lib/api';
+import { generateInitials } from '@/lib/utils';
+import { AuthProvider } from '@/providers/auth-provider';
+import { QueryProvider } from '@/providers/query-provider';
+import { ThemeProvider } from '@/providers/theme-provider';
+import { useAuthStore } from '@/store/auth-store';
+
 
 const sidebarItems = [
   { section: 'Main', items: [

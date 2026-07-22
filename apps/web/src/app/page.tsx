@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
   ArrowRight,
@@ -12,6 +11,7 @@ import {
   Receipt,
   Sparkles,
 } from 'lucide-react';
+import Link from 'next/link';
 
 const features = [
   { icon: Bot, title: 'AI Copilot', description: 'Intelligent business assistant powered by AI' },

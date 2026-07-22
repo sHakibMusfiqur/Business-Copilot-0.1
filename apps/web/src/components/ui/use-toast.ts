@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+
 import type { ToastActionElement, ToastProps } from '@/components/ui/toast';
 
 const TOAST_LIMIT = 5;
@@ -13,12 +14,12 @@ type ToasterToast = ToastProps & {
   action?: ToastActionElement;
 };
 
-const actionTypes = {
-  ADD_TOAST: 'ADD_TOAST',
-  UPDATE_TOAST: 'UPDATE_TOAST',
-  DISMISS_TOAST: 'DISMISS_TOAST',
-  REMOVE_TOAST: 'REMOVE_TOAST',
-} as const;
+type ActionType = {
+  readonly ADD_TOAST: 'ADD_TOAST';
+  readonly UPDATE_TOAST: 'UPDATE_TOAST';
+  readonly DISMISS_TOAST: 'DISMISS_TOAST';
+  readonly REMOVE_TOAST: 'REMOVE_TOAST';
+};
 
 let count = 0;
 
@@ -26,8 +27,6 @@ function genId() {
   count = (count + 1) % Number.MAX_SAFE_INTEGER;
   return count.toString();
 }
-
-type ActionType = typeof actionTypes;
 
 type Action =
   | { type: ActionType['ADD_TOAST']; toast: ToasterToast }
@@ -63,7 +62,7 @@ const reducer = (state: State, action: Action): State => {
           t.id === action.toast.id ? { ...t, ...action.toast } : t,
         ),
       };
-    case 'DISMISS_TOAST':
+    case 'DISMISS_TOAST': {
       const { toastId } = action;
       if (toastId) {
         addToRemoveQueue(toastId);
@@ -72,10 +71,11 @@ const reducer = (state: State, action: Action): State => {
       }
       return {
         ...state,
-        toasts: state.toasts.map((t) =>
+        toasts:       state.toasts.map((t) =>
           t.id === toastId || toastId === undefined ? { ...t, open: false } : t,
         ),
       };
+    }
     case 'REMOVE_TOAST':
       if (action.toastId === undefined) return { ...state, toasts: [] };
       return { ...state, toasts: state.toasts.filter((t) => t.id !== action.toastId) };
