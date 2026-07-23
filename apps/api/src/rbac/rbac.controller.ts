@@ -1,0 +1,173 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Put,
+  Delete,
+  Body,
+  Param,
+  UseGuards,
+  HttpCode,
+  HttpStatus,
+  ForbiddenException,
+} from '@nestjs/common';
+import { ApiTags, ApiBearerAuth, ApiOkResponse, ApiCreatedResponse, ApiUnauthorizedResponse, ApiForbiddenResponse, ApiNotFoundResponse } from '@nestjs/swagger';
+
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+
+import { RbacService } from './rbac.service';
+import { CreateRoleDto } from './dto/create-role.dto';
+import { UpdateRoleDto } from './dto/update-role.dto';
+import { AssignPermissionsDto } from './dto/assign-permissions.dto';
+import { AssignUserRolesDto } from './dto/assign-user-roles.dto';
+
+@ApiTags('RBAC')
+@Controller()
+@UseGuards(JwtAuthGuard)
+export class RbacController {
+  constructor(private readonly rbacService: RbacService) {}
+
+  private requireOrg(user: CurrentUserPayload): string {
+    if (!user.organizationId) {
+      throw new ForbiddenException('User does not belong to an organization');
+    }
+    return user.organizationId;
+  }
+
+  // ─── Permissions ───────────────────────────────────────────────
+
+  @Get('permissions')
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ description: 'All permissions retrieved' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  async getPermissions(@CurrentUser() user: CurrentUserPayload) {
+    const orgId = this.requireOrg(user);
+    return this.rbacService.findAllPermissions(orgId);
+  }
+
+  @Get('permissions/grouped')
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ description: 'Permissions grouped by module' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  async getPermissionsGrouped(@CurrentUser() user: CurrentUserPayload) {
+    const orgId = this.requireOrg(user);
+    return this.rbacService.findPermissionsGrouped(orgId);
+  }
+
+  // ─── Roles ─────────────────────────────────────────────────────
+
+  @Get('roles')
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ description: 'All roles retrieved' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  async getRoles(@CurrentUser() user: CurrentUserPayload) {
+    const orgId = this.requireOrg(user);
+    return this.rbacService.findAllRoles(orgId);
+  }
+
+  @Post('roles')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiBearerAuth('access-token')
+  @ApiCreatedResponse({ description: 'Role created' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiForbiddenResponse({ description: 'User does not belong to an organization' })
+  async createRole(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: CreateRoleDto,
+  ) {
+    const orgId = this.requireOrg(user);
+    return this.rbacService.createRole(orgId, dto);
+  }
+
+  @Patch('roles/:id')
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ description: 'Role updated' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiNotFoundResponse({ description: 'Role not found' })
+  async updateRole(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id') roleId: string,
+    @Body() dto: UpdateRoleDto,
+  ) {
+    const orgId = this.requireOrg(user);
+    return this.rbacService.updateRole(orgId, roleId, dto);
+  }
+
+  @Delete('roles/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ description: 'Role deleted' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiNotFoundResponse({ description: 'Role not found' })
+  async deleteRole(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id') roleId: string,
+  ) {
+    const orgId = this.requireOrg(user);
+    await this.rbacService.deleteRole(orgId, roleId);
+  }
+
+  // ─── Role Permissions ──────────────────────────────────────────
+
+  @Get('roles/:id/permissions')
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ description: 'Role permissions retrieved' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiNotFoundResponse({ description: 'Role not found' })
+  async getRolePermissions(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id') roleId: string,
+  ) {
+    const orgId = this.requireOrg(user);
+    return this.rbacService.getRolePermissions(orgId, roleId);
+  }
+
+  @Put('roles/:id/permissions')
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ description: 'Permissions assigned to role' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiNotFoundResponse({ description: 'Role not found' })
+  async assignPermissions(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id') roleId: string,
+    @Body() dto: AssignPermissionsDto,
+  ) {
+    const orgId = this.requireOrg(user);
+    await this.rbacService.assignPermissions(orgId, roleId, dto);
+    return { message: 'Permissions updated successfully' };
+  }
+
+  // ─── User Roles ────────────────────────────────────────────────
+
+  @Get('users/:id/roles')
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ description: 'User roles retrieved' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiNotFoundResponse({ description: 'User not found' })
+  async getUserRoles(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id') userId: string,
+  ) {
+    const orgId = this.requireOrg(user);
+    return this.rbacService.getUserRoles(orgId, userId);
+  }
+
+  @Put('users/:id/roles')
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ description: 'Roles assigned to user' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiNotFoundResponse({ description: 'User or role not found' })
+  async assignUserRoles(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id') userId: string,
+    @Body() dto: AssignUserRolesDto,
+  ) {
+    const orgId = this.requireOrg(user);
+    await this.rbacService.assignUserRoles(orgId, userId, dto);
+    return { message: 'Roles updated successfully' };
+  }
+
+}

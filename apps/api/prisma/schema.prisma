@@ -119,6 +119,7 @@ model Organization {
   purchaseOrders PurchaseOrder[]
   employees  Employee[]
   leads      Lead[]
+  roles      Role[]
 }
 
 model OrganizationMember {
@@ -148,6 +149,7 @@ model User {
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id])
   lastLoginAt    DateTime?
+  deletedAt      DateTime?
   createdAt      DateTime   @default(now())
   updatedAt      DateTime   @updatedAt
 
@@ -159,6 +161,61 @@ model User {
   createdInvoices Invoice[]   @relation("CreatedByUser")
   files          File[]
   memberOf       OrganizationMember[]
+  roleAssignments UserRoleAssignment[]
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  module      String
+  label       String
+  description String?
+  createdAt   DateTime @default(now())
+
+  rolePermissions RolePermission[]
+}
+
+model Role {
+  id             String   @id @default(cuid())
+  name           String
+  description    String?
+  isSystem       Boolean  @default(false)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  rolePermissions RolePermission[]
+  userAssignments UserRoleAssignment[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+model RolePermission {
+  id           String     @id @default(cuid())
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+}
+
+model UserRoleAssignment {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roleId    String
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
 }
 
 model RefreshToken {

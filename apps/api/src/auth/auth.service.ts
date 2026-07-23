@@ -91,6 +91,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
+    if (!user.isActive) {
+      throw new UnauthorizedException('Account is deactivated. Contact your administrator.');
+    }
+
     let isPasswordValid: boolean;
     try {
       isPasswordValid = await argon2.verify(user.password, dto.password);
@@ -141,11 +145,17 @@ export class AuthService {
           name: true,
           role: true,
           organizationId: true,
+          isActive: true,
         },
       });
 
       if (!user) {
         throw new UnauthorizedException('User not found');
+      }
+
+      if (!user.isActive) {
+        await this.prisma.refreshToken.delete({ where: { id: storedToken.id } });
+        throw new UnauthorizedException('Account is deactivated. Contact your administrator.');
       }
 
       await this.prisma.refreshToken.delete({ where: { id: storedToken.id } });

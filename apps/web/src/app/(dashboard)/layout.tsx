@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard,
   Users,
+  UsersRound,
   Building2,
   ShoppingCart,
   Package,
@@ -26,6 +27,7 @@ import {
   X,
   ChevronDown,
   HelpCircle,
+  Shield,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -60,6 +62,10 @@ const sidebarItems = [
   ]},
   { section: 'People', items: [
     { label: 'Employees', href: '/dashboard/employees', icon: Users2 },
+  ]},
+  { section: 'Administration', items: [
+    { label: 'Users', href: '/dashboard/users', icon: UsersRound },
+    { label: 'Roles', href: '/dashboard/roles', icon: Shield },
   ]},
   { section: 'Intelligence', items: [
     { label: 'Reports', href: '/dashboard/reports', icon: BarChart3 },

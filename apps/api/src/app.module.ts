@@ -7,6 +7,8 @@ import { ConfigModule } from './config/config.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { OrganizationModule } from './organization/organization.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { RbacModule } from './rbac/rbac.module';
+import { UsersModule } from './users/users.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
 @Module({
@@ -21,6 +23,8 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
     AuthModule,
     OrganizationModule,
     DashboardModule,
+    RbacModule,
+    UsersModule,
   ],
   providers: [
     {

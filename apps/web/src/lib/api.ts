@@ -133,3 +133,120 @@ export async function getDashboardOverview() {
   const response = await api.get('/dashboard/overview');
   return response.data;
 }
+
+// ─── RBAC ────────────────────────────────────────────────────────
+
+export async function getRoles() {
+  const response = await api.get('/roles');
+  return response.data;
+}
+
+export async function getRoleById(id: string) {
+  const response = await api.get(`/roles/${id}`);
+  return response.data;
+}
+
+export async function createRole(data: { name: string; description?: string }) {
+  const response = await api.post('/roles', data);
+  return response.data;
+}
+
+export async function updateRole(id: string, data: { name?: string; description?: string }) {
+  const response = await api.patch(`/roles/${id}`, data);
+  return response.data;
+}
+
+export async function deleteRole(id: string) {
+  await api.delete(`/roles/${id}`);
+}
+
+export async function getPermissions() {
+  const response = await api.get('/permissions');
+  return response.data;
+}
+
+export async function getPermissionsGrouped() {
+  const response = await api.get('/permissions/grouped');
+  return response.data;
+}
+
+export async function getRolePermissions(roleId: string) {
+  const response = await api.get(`/roles/${roleId}/permissions`);
+  return response.data;
+}
+
+export async function assignPermissions(roleId: string, permissionNames: string[]) {
+  const response = await api.put(`/roles/${roleId}/permissions`, { permissionNames });
+  return response.data;
+}
+
+export async function getUserRoles(userId: string) {
+  const response = await api.get(`/users/${userId}/roles`);
+  return response.data;
+}
+
+export async function assignUserRoles(userId: string, roleIds: string[]) {
+  const response = await api.put(`/users/${userId}/roles`, { roleIds });
+  return response.data;
+}
+
+export async function getOrganizationUsers() {
+  const response = await api.get('/users/assignable');
+  return response.data;
+}
+
+// ─── User Management ────────────────────────────────────────────
+
+export interface UserListParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  role?: string;
+  isActive?: boolean;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
+export async function getUsers(params?: UserListParams) {
+  const response = await api.get('/users', { params });
+  return response.data;
+}
+
+export async function getUserById(id: string) {
+  const response = await api.get(`/users/${id}`);
+  return response.data;
+}
+
+export async function createUser(data: {
+  name: string;
+  email: string;
+  isActive?: boolean;
+  role?: string;
+  roleIds?: string[];
+}) {
+  const response = await api.post('/users', data);
+  return response.data;
+}
+
+export async function updateUser(
+  id: string,
+  data: {
+    name?: string;
+    isActive?: boolean;
+    role?: string;
+    roleIds?: string[];
+  },
+) {
+  const response = await api.patch(`/users/${id}`, data);
+  return response.data;
+}
+
+export async function deleteUser(id: string) {
+  const response = await api.delete(`/users/${id}`);
+  return response.data;
+}
+
+export async function updateUserStatus(id: string, isActive: boolean) {
+  const response = await api.patch(`/users/${id}/status`, { isActive });
+  return response.data;
+}
