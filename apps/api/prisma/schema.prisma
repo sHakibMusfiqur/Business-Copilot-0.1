@@ -15,6 +15,12 @@ enum UserRole {
   VIEWER
 }
 
+enum OrganizationMemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
 enum Gender {
   MALE
   FEMALE
@@ -88,7 +94,7 @@ enum TaxType {
 
 model Organization {
   id        String   @id @default(cuid())
-  name      String
+  name      String   @unique
   slug      String   @unique
   logo      String?
   email     String?
@@ -105,6 +111,7 @@ model Organization {
   updatedAt DateTime @updatedAt
 
   users      User[]
+  members    OrganizationMember[]
   customers  Customer[]
   suppliers  Supplier[]
   products   Product[]
@@ -112,6 +119,21 @@ model Organization {
   purchaseOrders PurchaseOrder[]
   employees  Employee[]
   leads      Lead[]
+}
+
+model OrganizationMember {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           OrganizationMemberRole @default(MEMBER)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+  @@index([userId])
 }
 
 model User {
@@ -136,6 +158,7 @@ model User {
   activities     Activity[]
   createdInvoices Invoice[]   @relation("CreatedByUser")
   files          File[]
+  memberOf       OrganizationMember[]
 }
 
 model RefreshToken {

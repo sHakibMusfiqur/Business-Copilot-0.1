@@ -106,6 +106,7 @@ export class AuthService {
       id: user.id,
       email: user.email,
       role: user.role,
+      organizationId: user.organizationId ?? undefined,
     });
 
     const { password: _, ...userWithoutPassword } = user;
@@ -153,6 +154,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         role: user.role,
+        organizationId: user.organizationId ?? undefined,
       });
 
       return {
@@ -193,7 +195,7 @@ export class AuthService {
     return user;
   }
 
-  private async generateTokens(payload: CurrentUserPayload): Promise<Tokens> {
+  async generateTokens(payload: CurrentUserPayload): Promise<Tokens> {
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload),
       this.jwtService.signAsync(payload, {

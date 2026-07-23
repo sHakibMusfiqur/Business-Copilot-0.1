@@ -4,6 +4,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 
 import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from './config/config.module';
+import { OrganizationModule } from './organization/organization.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
@@ -17,6 +18,7 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
     ConfigModule,
     PrismaModule,
     AuthModule,
+    OrganizationModule,
   ],
   providers: [
     {

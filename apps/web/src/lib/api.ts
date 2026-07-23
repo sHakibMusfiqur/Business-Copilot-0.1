@@ -123,3 +123,8 @@ export async function getMe() {
   const response = await api.get('/auth/me');
   return response.data;
 }
+
+export async function createOrganization(name: string) {
+  const response = await api.post('/organizations', { name });
+  return response.data;
+}
