@@ -1,6 +1,5 @@
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
-import importX from 'eslint-plugin-import-x';
 import reactHooks from 'eslint-plugin-react-hooks';
 import nextPlugin from '@next/eslint-plugin-next';
 import prettier from 'eslint-config-prettier';
@@ -51,32 +50,6 @@ export default tseslint.config(
   },
 
   // =========================================================
-  // Layer 5: Import rules (from eslint-plugin-import-x)
-  // =========================================================
-  {
-    plugins: { 'import-x': importX },
-    rules: {
-      'import-x/order': [
-        'error',
-        {
-          groups: [
-            'builtin',
-            'external',
-            'internal',
-            'parent',
-            'sibling',
-            'index',
-          ],
-          'newlines-between': 'always',
-          alphabetize: { order: 'asc' },
-        },
-      ],
-      'import-x/no-duplicates': 'error',
-      'import-x/no-unresolved': 'off',
-    },
-  },
-
-  // =========================================================
   // Layer 6: NestJS overrides (apps/api)
   // =========================================================
   {
@@ -84,7 +57,6 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/no-unsafe-declaration-merging': 'off',
-      'import-x/no-default-export': 'error',
     },
   },
 
@@ -106,21 +78,7 @@ export default tseslint.config(
   },
 
   // =========================================================
-  // Layer 8: Next.js config files (allow default exports)
-  // =========================================================
-  {
-    files: [
-      'apps/web/next.config.ts',
-      'apps/web/tailwind.config.ts',
-      'apps/web/postcss.config.js',
-    ],
-    rules: {
-      'import-x/no-default-export': 'off',
-    },
-  },
-
-  // =========================================================
-  // Layer 9: Prettier (must be last to disable conflicting rules)
+  // Layer 8: Prettier (must be last to disable conflicting rules)
   // =========================================================
   prettier,
 );
