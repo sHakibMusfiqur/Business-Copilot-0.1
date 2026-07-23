@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 env:
-  NODE_VERSION: "20"
+  NODE_VERSION: "24"
 
 jobs:
   lint:
@@ -35,6 +35,13 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
+
+      - name: Verify Node and npm versions
+        run: |
+          echo "Node Version:"
+          node -v
+          echo "npm Version:"
+          npm -v
 
       - name: Install dependencies
         run: npm ci
@@ -77,6 +84,13 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
 
+      - name: Verify Node and npm versions
+        run: |
+          echo "Node Version:"
+          node -v
+          echo "npm Version:"
+          npm -v
+
       - name: Install dependencies
         run: npm ci
 
@@ -110,6 +124,13 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: "npm"
+
+      - name: Verify Node and npm versions
+        run: |
+          echo "Node Version:"
+          node -v
+          echo "npm Version:"
+          npm -v
 
       - name: Install dependencies
         run: npm ci
