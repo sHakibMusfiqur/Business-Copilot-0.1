@@ -1,47 +1,90 @@
-import { PrismaClient, UserRole } from '@prisma/client';
-import * as bcrypt from 'bcryptjs';
+import { PrismaClient, UserRole, OrganizationMemberRole } from '@prisma/client';
+import * as argon2 from 'argon2';
 
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('Seeding database...');
 
-  const adminPassword = await bcrypt.hash('Admin123!', 12);
-  const userPassword = await bcrypt.hash('User1234!', 12);
+  const adminPassword = await argon2.hash('Admin123!');
+  const userPassword = await argon2.hash('User1234!');
+
+  const org = await prisma.organization.upsert({
+    where: { name: 'Acme Corp' },
+    update: {},
+    create: {
+      name: 'Acme Corp',
+      slug: 'acme-corp',
+    },
+  });
+  console.log(`Organization: ${org.name} (${org.id})`);
 
   const admin = await prisma.user.upsert({
     where: { email: 'admin@business-copilot.com' },
-    update: {},
+    update: { organizationId: org.id },
     create: {
       email: 'admin@business-copilot.com',
       password: adminPassword,
       name: 'Admin User',
       role: UserRole.ADMIN,
       isActive: true,
+      organizationId: org.id,
+    },
+  });
+
+  await prisma.organizationMember.upsert({
+    where: { organizationId_userId: { organizationId: org.id, userId: admin.id } },
+    update: { role: OrganizationMemberRole.OWNER },
+    create: {
+      organizationId: org.id,
+      userId: admin.id,
+      role: OrganizationMemberRole.OWNER,
     },
   });
 
   const manager = await prisma.user.upsert({
     where: { email: 'manager@business-copilot.com' },
-    update: {},
+    update: { organizationId: org.id },
     create: {
       email: 'manager@business-copilot.com',
       password: userPassword,
       name: 'Manager User',
       role: UserRole.MANAGER,
       isActive: true,
+      organizationId: org.id,
+    },
+  });
+
+  await prisma.organizationMember.upsert({
+    where: { organizationId_userId: { organizationId: org.id, userId: manager.id } },
+    update: { role: OrganizationMemberRole.MEMBER },
+    create: {
+      organizationId: org.id,
+      userId: manager.id,
+      role: OrganizationMemberRole.MEMBER,
     },
   });
 
   const user = await prisma.user.upsert({
     where: { email: 'user@business-copilot.com' },
-    update: {},
+    update: { organizationId: org.id },
     create: {
       email: 'user@business-copilot.com',
       password: userPassword,
       name: 'Regular User',
       role: UserRole.USER,
       isActive: true,
+      organizationId: org.id,
+    },
+  });
+
+  await prisma.organizationMember.upsert({
+    where: { organizationId_userId: { organizationId: org.id, userId: user.id } },
+    update: { role: OrganizationMemberRole.MEMBER },
+    create: {
+      organizationId: org.id,
+      userId: user.id,
+      role: OrganizationMemberRole.MEMBER,
     },
   });
 

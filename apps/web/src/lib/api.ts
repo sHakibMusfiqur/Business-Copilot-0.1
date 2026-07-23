@@ -128,3 +128,8 @@ export async function createOrganization(name: string) {
   const response = await api.post('/organizations', { name });
   return response.data;
 }
+
+export async function getDashboardOverview() {
+  const response = await api.get('/dashboard/overview');
+  return response.data;
+}
