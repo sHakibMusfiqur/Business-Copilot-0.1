@@ -3,12 +3,14 @@ import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 
 import { AuthModule } from './auth/auth.module';
+import { CategoriesModule } from './categories/categories.module';
 import { ConfigModule } from './config/config.module';
 import { CustomersModule } from './customers/customers.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { OrganizationModule } from './organization/organization.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RbacModule } from './rbac/rbac.module';
+import { ProductsModule } from './products/products.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { UsersModule } from './users/users.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
@@ -23,9 +25,11 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
     ConfigModule,
     PrismaModule,
     AuthModule,
+    CategoriesModule,
     CustomersModule,
     OrganizationModule,
     DashboardModule,
+    ProductsModule,
     RbacModule,
     SuppliersModule,
     UsersModule,

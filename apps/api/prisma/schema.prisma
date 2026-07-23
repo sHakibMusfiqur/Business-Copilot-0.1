@@ -279,6 +279,7 @@ model Supplier {
   updatedAt      DateTime @updatedAt
 
   purchaseOrders PurchaseOrder[]
+  products       Product[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -305,14 +306,21 @@ model Product {
   name            String
   sku             String
   barcode         String?
+  brand           String?
   description     String?
   categoryId      String?
   category        Category? @relation(fields: [categoryId], references: [id])
+  supplierId      String?
+  supplier        Supplier? @relation(fields: [supplierId], references: [id])
   unitPrice       Decimal    @default(0)
   costPrice       Decimal    @default(0)
   unit            String     @default("pcs")
   taxRate         Decimal    @default(0)
+  minimumStock    Int        @default(0)
+  maximumStock    Int        @default(0)
+  imageUrl        String?
   isActive        Boolean    @default(true)
+  deletedAt       DateTime?
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
 

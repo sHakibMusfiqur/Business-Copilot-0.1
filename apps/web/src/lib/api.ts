@@ -394,3 +394,85 @@ export async function updateSupplierStatus(id: string, isActive: boolean) {
   const response = await api.patch(`/suppliers/${id}/status`, { isActive });
   return response.data;
 }
+
+// ─── Product Management ─────────────────────────────────────────
+
+export interface ProductListParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  isActive?: boolean;
+  categoryId?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
+export async function getProducts(params?: ProductListParams) {
+  const response = await api.get('/products', { params });
+  return response.data;
+}
+
+export async function getProductById(id: string) {
+  const response = await api.get(`/products/${id}`);
+  return response.data;
+}
+
+export async function createProduct(data: {
+  name: string;
+  sku: string;
+  barcode?: string;
+  brand?: string;
+  description?: string;
+  categoryId?: string;
+  supplierId?: string;
+  costPrice?: number;
+  unitPrice?: number;
+  unit?: string;
+  taxRate?: number;
+  minimumStock?: number;
+  maximumStock?: number;
+  imageUrl?: string;
+  isActive?: boolean;
+}) {
+  const response = await api.post('/products', data);
+  return response.data;
+}
+
+export async function updateProduct(
+  id: string,
+  data: {
+    name?: string;
+    sku?: string;
+    barcode?: string;
+    brand?: string;
+    description?: string;
+    categoryId?: string;
+    supplierId?: string;
+    costPrice?: number;
+    unitPrice?: number;
+    unit?: string;
+    taxRate?: number;
+    minimumStock?: number;
+    maximumStock?: number;
+    imageUrl?: string;
+    isActive?: boolean;
+  },
+) {
+  const response = await api.patch(`/products/${id}`, data);
+  return response.data;
+}
+
+export async function deleteProduct(id: string) {
+  const response = await api.delete(`/products/${id}`);
+  return response.data;
+}
+
+export async function updateProductStatus(id: string, isActive: boolean) {
+  const response = await api.patch(`/products/${id}/status`, { isActive });
+  return response.data;
+}
+
+export async function getCategories() {
+  const response = await api.get('/categories');
+  return response.data;
+}
