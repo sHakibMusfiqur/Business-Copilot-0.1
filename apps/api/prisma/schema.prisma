@@ -245,6 +245,7 @@ model Customer {
   notes          String?
   creditLimit    Decimal  @default(0)
   isActive       Boolean  @default(true)
+  deletedAt      DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -273,6 +274,7 @@ model Supplier {
   paymentTerms   String?
   notes          String?
   isActive       Boolean  @default(true)
+  deletedAt      DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

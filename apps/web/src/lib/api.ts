@@ -250,3 +250,147 @@ export async function updateUserStatus(id: string, isActive: boolean) {
   const response = await api.patch(`/users/${id}/status`, { isActive });
   return response.data;
 }
+
+// ─── Customer Management ────────────────────────────────────────
+
+export interface CustomerListParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  isActive?: boolean;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
+export async function getCustomers(params?: CustomerListParams) {
+  const response = await api.get('/customers', { params });
+  return response.data;
+}
+
+export async function getCustomerById(id: string) {
+  const response = await api.get(`/customers/${id}`);
+  return response.data;
+}
+
+export async function createCustomer(data: {
+  name: string;
+  email?: string;
+  phone?: string;
+  company?: string;
+  taxId?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  country?: string;
+  notes?: string;
+  isActive?: boolean;
+}) {
+  const response = await api.post('/customers', data);
+  return response.data;
+}
+
+export async function updateCustomer(
+  id: string,
+  data: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    company?: string;
+    taxId?: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+    country?: string;
+    notes?: string;
+    isActive?: boolean;
+  },
+) {
+  const response = await api.patch(`/customers/${id}`, data);
+  return response.data;
+}
+
+export async function deleteCustomer(id: string) {
+  const response = await api.delete(`/customers/${id}`);
+  return response.data;
+}
+
+export async function updateCustomerStatus(id: string, isActive: boolean) {
+  const response = await api.patch(`/customers/${id}/status`, { isActive });
+  return response.data;
+}
+
+// ─── Supplier Management ────────────────────────────────────────
+
+export interface SupplierListParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  isActive?: boolean;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
+export async function getSuppliers(params?: SupplierListParams) {
+  const response = await api.get('/suppliers', { params });
+  return response.data;
+}
+
+export async function getSupplierById(id: string) {
+  const response = await api.get(`/suppliers/${id}`);
+  return response.data;
+}
+
+export async function createSupplier(data: {
+  name: string;
+  email?: string;
+  phone?: string;
+  company?: string;
+  taxId?: string;
+  website?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  zipCode?: string;
+  country?: string;
+  paymentTerms?: string;
+  notes?: string;
+  isActive?: boolean;
+}) {
+  const response = await api.post('/suppliers', data);
+  return response.data;
+}
+
+export async function updateSupplier(
+  id: string,
+  data: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    company?: string;
+    taxId?: string;
+    website?: string;
+    address?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+    country?: string;
+    paymentTerms?: string;
+    notes?: string;
+    isActive?: boolean;
+  },
+) {
+  const response = await api.patch(`/suppliers/${id}`, data);
+  return response.data;
+}
+
+export async function deleteSupplier(id: string) {
+  const response = await api.delete(`/suppliers/${id}`);
+  return response.data;
+}
+
+export async function updateSupplierStatus(id: string, isActive: boolean) {
+  const response = await api.patch(`/suppliers/${id}/status`, { isActive });
+  return response.data;
+}

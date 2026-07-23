@@ -3,7 +3,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard,
-  Users,
   UsersRound,
   Building2,
   ShoppingCart,
@@ -46,7 +45,7 @@ const sidebarItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   ]},
   { section: 'Management', items: [
-    { label: 'Customers', href: '/dashboard/customers', icon: Users },
+    { label: 'Customers', href: '/dashboard/customers', icon: UsersRound },
     { label: 'Suppliers', href: '/dashboard/suppliers', icon: Building2 },
     { label: 'Products', href: '/dashboard/products', icon: Package },
     { label: 'Inventory', href: '/dashboard/inventory', icon: Warehouse },
