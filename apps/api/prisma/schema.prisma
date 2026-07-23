@@ -7,6 +7,12 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum TransactionType {
+  IN
+  OUT
+  ADJUSTMENT
+}
+
 enum UserRole {
   SUPER_ADMIN
   ADMIN
@@ -120,6 +126,7 @@ model Organization {
   employees  Employee[]
   leads      Lead[]
   roles      Role[]
+  inventoryTransactions InventoryTransaction[]
 }
 
 model OrganizationMember {
@@ -159,6 +166,7 @@ model User {
   assignedLeads  Lead[]       @relation("AssignedUser")
   activities     Activity[]
   createdInvoices Invoice[]   @relation("CreatedByUser")
+  inventoryTransactions InventoryTransaction[] @relation("CreatedByUserTransactions")
   files          File[]
   memberOf       OrganizationMember[]
   roleAssignments UserRoleAssignment[]
@@ -327,6 +335,7 @@ model Product {
   inventory       Inventory[]
   invoiceItems    InvoiceItem[]
   purchaseItems   PurchaseOrderItem[]
+  inventoryTransactions InventoryTransaction[]
 
   @@unique([organizationId, sku])
   @@index([organizationId])
@@ -357,6 +366,27 @@ model Inventory {
 
   @@unique([productId, warehouseId])
   @@index([productId])
+}
+
+model InventoryTransaction {
+  id               String          @id @default(cuid())
+  organizationId   String
+  organization     Organization    @relation(fields: [organizationId], references: [id])
+  productId        String
+  product          Product         @relation(fields: [productId], references: [id])
+  type             TransactionType
+  quantity         Int             @default(0)
+  previousQuantity Int             @default(0)
+  newQuantity      Int             @default(0)
+  reference        String?
+  notes            String?
+  createdById      String
+  createdBy        User            @relation("CreatedByUserTransactions", fields: [createdById], references: [id])
+  createdAt        DateTime        @default(now())
+
+  @@index([organizationId])
+  @@index([productId])
+  @@index([createdAt])
 }
 
 model Invoice {

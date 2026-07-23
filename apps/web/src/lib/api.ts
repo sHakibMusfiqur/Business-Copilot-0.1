@@ -476,3 +476,42 @@ export async function getCategories() {
   const response = await api.get('/categories');
   return response.data;
 }
+
+// ─── Inventory Management ───────────────────────────────────────
+
+export interface InventoryListParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  isActive?: boolean;
+  lowStock?: boolean;
+  outOfStock?: boolean;
+  categoryId?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
+export async function getInventory(params?: InventoryListParams) {
+  const response = await api.get('/inventory', { params });
+  return response.data;
+}
+
+export async function adjustStock(data: {
+  productId: string;
+  type: 'IN' | 'OUT' | 'ADJUSTMENT';
+  quantity: number;
+  notes?: string;
+}) {
+  const response = await api.post('/inventory/adjust', data);
+  return response.data;
+}
+
+export async function getInventoryHistory(productId: string) {
+  const response = await api.get(`/inventory/${productId}/history`);
+  return response.data;
+}
+
+export async function getInventorySummary() {
+  const response = await api.get('/inventory/summary');
+  return response.data;
+}
