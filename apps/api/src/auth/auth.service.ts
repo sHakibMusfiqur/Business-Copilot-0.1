@@ -4,11 +4,14 @@ import {
   ConflictException,
   Logger,
 } from '@nestjs/common';
-import type { JwtService } from '@nestjs/jwt';
-import * as bcrypt from 'bcryptjs';
+import { JwtService, JwtSignOptions } from '@nestjs/jwt';
+import * as argon2 from 'argon2';
 
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
+
+import { ConfigService } from '../config/config.service';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
-import type { PrismaService } from '../prisma/prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 
 import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
@@ -25,6 +28,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -36,29 +40,42 @@ export class AuthService {
       throw new ConflictException('Email already registered');
     }
 
-    const hashedPassword = await bcrypt.hash(dto.password, 12);
+    const hashedPassword = await argon2.hash(dto.password);
 
-    const user = await this.prisma.user.create({
-      data: {
-        email: dto.email,
-        password: hashedPassword,
-        name: dto.name,
-        role: 'USER',
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        createdAt: true,
-      },
-    });
+    let user: {
+      id: string;
+      email: string;
+      name: string;
+      role: string;
+      createdAt: Date;
+    };
+
+    try {
+      user = await this.prisma.user.create({
+        data: {
+          email: dto.email,
+          password: hashedPassword,
+          name: dto.name,
+          role: 'USER',
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          role: true,
+          createdAt: true,
+        },
+      });
+    } catch (error) {
+      if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException('Email already registered');
+      }
+      throw error;
+    }
 
     const tokens = await this.generateTokens({
       id: user.id,
       email: user.email,
-      organizationId: '',
-      tenantId: '',
       role: user.role,
     });
 
@@ -74,7 +91,12 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    const isPasswordValid = await bcrypt.compare(dto.password, user.password);
+    let isPasswordValid: boolean;
+    try {
+      isPasswordValid = await argon2.verify(user.password, dto.password);
+    } catch {
+      isPasswordValid = false;
+    }
 
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid email or password');
@@ -83,8 +105,6 @@ export class AuthService {
     const tokens = await this.generateTokens({
       id: user.id,
       email: user.email,
-      organizationId: user.organizationId ?? '',
-      tenantId: '',
       role: user.role,
     });
 
@@ -96,8 +116,21 @@ export class AuthService {
   async refreshToken(refreshToken: string) {
     try {
       const payload = this.jwtService.verify<CurrentUserPayload>(refreshToken, {
-        secret: process.env.JWT_REFRESH_SECRET ?? 'fallback-refresh-secret',
+        secret: this.configService.jwtRefreshSecret,
       });
+
+      const storedToken = await this.prisma.refreshToken.findUnique({
+        where: { token: refreshToken },
+      });
+
+      if (!storedToken) {
+        throw new UnauthorizedException('Refresh token not found');
+      }
+
+      if (storedToken.expiresAt < new Date()) {
+        await this.prisma.refreshToken.delete({ where: { id: storedToken.id } });
+        throw new UnauthorizedException('Refresh token expired');
+      }
 
       const user = await this.prisma.user.findUnique({
         where: { id: payload.id },
@@ -114,22 +147,28 @@ export class AuthService {
         throw new UnauthorizedException('User not found');
       }
 
+      await this.prisma.refreshToken.delete({ where: { id: storedToken.id } });
+
       const tokens = await this.generateTokens({
         id: user.id,
         email: user.email,
-        organizationId: user.organizationId ?? '',
-        tenantId: '',
         role: user.role,
       });
 
       return {
-        user: { ...user, organizationId: user.organizationId ?? '' },
+        user,
         ...tokens,
       };
-    } catch (error) {
-      this.logger.error('Refresh token failed', error instanceof Error ? error.message : 'Unknown error');
+    } catch {
+      this.logger.error('Refresh token failed');
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
+  }
+
+  async logout(userId: string) {
+    await this.prisma.refreshToken.deleteMany({
+      where: { userId },
+    });
   }
 
   async getProfile(userId: string) {
@@ -155,14 +194,22 @@ export class AuthService {
   }
 
   private async generateTokens(payload: CurrentUserPayload): Promise<Tokens> {
-    const refreshSecret = process.env.JWT_REFRESH_SECRET ?? 'fallback-refresh-secret';
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload),
       this.jwtService.signAsync(payload, {
-        secret: refreshSecret,
-        expiresIn: '7d',
+        secret: this.configService.jwtRefreshSecret,
+        expiresIn: this.configService.jwtRefreshExpiresIn as JwtSignOptions['expiresIn'],
       }),
     ]);
+
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    await this.prisma.refreshToken.create({
+      data: {
+        token: refreshToken,
+        userId: payload.id,
+        expiresAt,
+      },
+    });
 
     return { accessToken, refreshToken };
   }

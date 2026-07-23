@@ -7,9 +7,18 @@ import {
   HttpStatus,
   Req,
   Res,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiBody,
+  ApiCreatedResponse,
+  ApiOkResponse,
+  ApiUnauthorizedResponse,
+  ApiConflictResponse,
+} from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -17,9 +26,9 @@ import type { CurrentUserPayload } from '../common/decorators/current-user.decor
 import { Public } from '../common/decorators/public.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
-import type { AuthService } from './auth.service';
-import type { LoginDto } from './dto/login.dto';
-import type { RegisterDto } from './dto/register.dto';
+import { AuthService } from './auth.service';
+import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -28,9 +37,9 @@ export class AuthController {
 
   @Public()
   @Post('register')
-  @ApiOperation({ summary: 'Register a new user' })
-  @ApiResponse({ status: 201, description: 'User successfully registered' })
-  @ApiResponse({ status: 409, description: 'Email already registered' })
+  @ApiBody({ type: RegisterDto })
+  @ApiCreatedResponse({ description: 'User successfully registered' })
+  @ApiConflictResponse({ description: 'Email already registered' })
   async register(
     @Body() dto: RegisterDto,
     @Res({ passthrough: true }) response: Response,
@@ -43,9 +52,9 @@ export class AuthController {
   @Public()
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Login with email and password' })
-  @ApiResponse({ status: 200, description: 'Login successful' })
-  @ApiResponse({ status: 401, description: 'Invalid credentials' })
+  @ApiBody({ type: LoginDto })
+  @ApiOkResponse({ description: 'Login successful' })
+  @ApiUnauthorizedResponse({ description: 'Invalid email or password' })
   async login(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) response: Response,
@@ -58,9 +67,14 @@ export class AuthController {
   @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Refresh access token' })
-  @ApiResponse({ status: 200, description: 'Token refreshed successfully' })
-  @ApiResponse({ status: 401, description: 'Invalid refresh token' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { refreshToken: { type: 'string' } },
+    },
+  })
+  @ApiOkResponse({ description: 'Token refreshed successfully' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired refresh token' })
   async refresh(
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
@@ -68,7 +82,7 @@ export class AuthController {
     const refreshToken = request.cookies?.refresh_token ?? request.body?.refreshToken;
 
     if (!refreshToken) {
-      return { success: false, message: 'Refresh token not provided' };
+      throw new UnauthorizedException('Refresh token not provided');
     }
 
     const result = await this.authService.refreshToken(refreshToken);
@@ -80,8 +94,13 @@ export class AuthController {
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Logout user' })
-  async logout(@Res({ passthrough: true }) response: Response) {
+  @ApiOkResponse({ description: 'Logged out successfully' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  async logout(
+    @CurrentUser() user: CurrentUserPayload,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    await this.authService.logout(user.id);
     response.clearCookie('refresh_token', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -94,9 +113,18 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Get('profile')
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Get current user profile' })
-  @ApiResponse({ status: 200, description: 'Profile retrieved successfully' })
+  @ApiOkResponse({ description: 'Profile retrieved successfully' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
   async getProfile(@CurrentUser() user: CurrentUserPayload) {
+    return this.authService.getProfile(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('me')
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ description: 'Current user retrieved successfully' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  async getMe(@CurrentUser() user: CurrentUserPayload) {
     return this.authService.getProfile(user.id);
   }
 

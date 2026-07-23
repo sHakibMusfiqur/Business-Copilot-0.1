@@ -1,21 +1,24 @@
 import { Module } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
+import { JwtModule, JwtSignOptions } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
+
+import { ConfigService } from '../config/config.service';
 
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
-const jwtSecret = process.env.JWT_SECRET ?? 'fallback-secret-change-me';
-
 @Module({
   imports: [
     PassportModule.register({ defaultStrategy: 'jwt' }),
-    JwtModule.register({
-      secret: jwtSecret,
-      signOptions: {
-        expiresIn: '15m',
-      },
+    JwtModule.registerAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        secret: config.jwtSecret,
+        signOptions: {
+          expiresIn: config.jwtExpiresIn as JwtSignOptions['expiresIn'],
+        },
+      }),
     }),
   ],
   controllers: [AuthController],

@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { User, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -32,10 +32,10 @@ type RegisterFormData = z.infer<typeof registerSchema>;
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { setUser } = useAuthStore();
+  const { user, setUser } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
     register,
@@ -45,8 +45,18 @@ export default function RegisterPage() {
     resolver: zodResolver(registerSchema),
   });
 
+  useEffect(() => {
+    if (user) {
+      router.replace('/dashboard');
+    }
+  }, [user, router]);
+
+  if (user) {
+    return null;
+  }
+
   async function onSubmit(data: RegisterFormData) {
-    setIsLoading(true);
+    setIsSubmitting(true);
     setError(null);
 
     try {
@@ -58,7 +68,7 @@ export default function RegisterPage() {
         err instanceof Error ? err.message : 'Registration failed';
       setError(message);
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   }
 
@@ -190,10 +200,10 @@ export default function RegisterPage() {
 
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isSubmitting}
               className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition-all hover:bg-primary/90 disabled:opacity-50"
             >
-              {isLoading ? (
+              {isSubmitting ? (
                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
               ) : (
                 <>

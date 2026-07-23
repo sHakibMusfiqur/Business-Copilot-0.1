@@ -1,8 +1,9 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
 
-import { getProfile } from '@/lib/api';
+import { getMe } from '@/lib/api';
 import { useAuthStore } from '@/store/auth-store';
 
 interface AuthProviderProps {
@@ -10,12 +11,13 @@ interface AuthProviderProps {
 }
 
 export function AuthProvider({ children }: AuthProviderProps) {
-  const { setUser, setLoading, isLoading } = useAuthStore();
+  const router = useRouter();
+  const { user, setUser, setLoading, isLoading } = useAuthStore();
 
   useEffect(() => {
     async function loadUser() {
       try {
-        const user = await getProfile();
+        const user = await getMe();
         setUser(user);
       } catch {
         setUser(null);
@@ -23,6 +25,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
     void loadUser();
   }, [setUser, setLoading]);
+
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.replace('/login');
+    }
+  }, [isLoading, user, router]);
 
   if (isLoading) {
     return (
@@ -33,6 +41,10 @@ export function AuthProvider({ children }: AuthProviderProps) {
         </div>
       </div>
     );
+  }
+
+  if (!user) {
+    return null;
   }
 
   return <>{children}</>;

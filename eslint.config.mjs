@@ -57,6 +57,10 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/no-unsafe-declaration-merging': 'off',
+      /* Disabled because NestJS DI constructor parameter types
+         are value usages (needed for emitDecoratorMetadata), but
+         the linter sees them as type-only. */
+      '@typescript-eslint/consistent-type-imports': 'off',
     },
   },
 

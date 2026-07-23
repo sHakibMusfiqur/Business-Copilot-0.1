@@ -4,6 +4,8 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from 'axios';
 
+import { useAuthStore } from '@/store/auth-store';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 interface TokenResponse {
@@ -55,9 +57,7 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch {
         setAccessToken(null);
-        if (typeof window !== 'undefined') {
-          window.location.href = '/login';
-        }
+        useAuthStore.getState().logout();
         return Promise.reject(error);
       }
     }
@@ -116,5 +116,10 @@ export async function logout() {
 
 export async function getProfile() {
   const response = await api.get('/auth/profile');
-  return response.data.data;
+  return response.data;
+}
+
+export async function getMe() {
+  const response = await api.get('/auth/me');
+  return response.data;
 }

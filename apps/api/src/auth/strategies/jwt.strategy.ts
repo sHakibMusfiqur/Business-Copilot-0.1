@@ -4,14 +4,18 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 
 import type { CurrentUserPayload } from '../../common/decorators/current-user.decorator';
 import type { PrismaService } from '../../prisma/prisma.service';
+import type { ConfigService } from '../../config/config.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
+  ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: process.env.JWT_SECRET ?? 'fallback-secret-change-me',
+      secretOrKey: configService.jwtSecret,
     });
   }
 
@@ -33,8 +37,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       id: user.id,
       email: user.email,
       role: user.role,
-      organizationId: payload.organizationId,
-      tenantId: payload.tenantId,
     };
   }
 }
