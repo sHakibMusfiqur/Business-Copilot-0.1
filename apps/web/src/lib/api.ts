@@ -838,3 +838,112 @@ export async function getTrialBalance() {
   const response = await api.get('/accounting/trial-balance');
   return response.data;
 }
+
+// ─── CRM Management ─────────────────────────────────────────────
+
+export interface CrmLeadsListParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+  assignedToId?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
+export async function getCrmSummary() {
+  const response = await api.get('/crm/summary');
+  return response.data;
+}
+
+export async function getLeads(params?: CrmLeadsListParams) {
+  const response = await api.get('/crm/leads', { params });
+  return response.data;
+}
+
+export async function getLeadById(id: string) {
+  const response = await api.get(`/crm/leads/${id}`);
+  return response.data;
+}
+
+export async function createLead(data: {
+  name: string;
+  company?: string;
+  email?: string;
+  phone?: string;
+  source?: string;
+  status?: string;
+  estimatedValue?: number;
+  assignedToId?: string;
+  notes?: string;
+}) {
+  const response = await api.post('/crm/leads', data);
+  return response.data;
+}
+
+export async function updateLead(
+  id: string,
+  data: {
+    name?: string;
+    company?: string;
+    email?: string;
+    phone?: string;
+    source?: string;
+    status?: string;
+    estimatedValue?: number;
+    assignedToId?: string;
+    notes?: string;
+  },
+) {
+  const response = await api.patch(`/crm/leads/${id}`, data);
+  return response.data;
+}
+
+export async function deleteLead(id: string) {
+  const response = await api.delete(`/crm/leads/${id}`);
+  return response.data;
+}
+
+export async function updateLeadStatus(id: string, status: string) {
+  const response = await api.patch(`/crm/leads/${id}/status`, { status });
+  return response.data;
+}
+
+export async function assignLead(id: string, assignedToId: string | null) {
+  const response = await api.patch(`/crm/leads/${id}/assign`, { assignedToId });
+  return response.data;
+}
+
+export async function getLeadTimeline(id: string) {
+  const response = await api.get(`/crm/leads/${id}/timeline`);
+  return response.data;
+}
+
+export async function getLeadActivities(id: string, params?: { page?: number; limit?: number; completed?: boolean }) {
+  const response = await api.get(`/crm/leads/${id}/activities`, { params });
+  return response.data;
+}
+
+export async function createActivity(
+  leadId: string,
+  data: {
+    type: string;
+    title: string;
+    description?: string;
+    dueDate?: string;
+    completed?: boolean;
+  },
+) {
+  const response = await api.post(`/crm/leads/${leadId}/activities`, data);
+  return response.data;
+}
+
+export async function toggleActivity(id: string) {
+  const response = await api.patch(`/crm/activities/${id}/toggle`);
+  return response.data;
+}
+
+export async function deleteActivity(id: string) {
+  const response = await api.delete(`/crm/activities/${id}`);
+  return response.data;
+}

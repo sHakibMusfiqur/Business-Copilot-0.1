@@ -50,6 +50,11 @@ const SEED_PERMISSIONS = [
   { name: 'accounting.payables.read', module: 'accounting', label: 'View Payables' },
   { name: 'payments.create', module: 'payments', label: 'Create Payments' },
   { name: 'payments.read', module: 'payments', label: 'View Payments' },
+  { name: 'crm.read', module: 'crm', label: 'View CRM' },
+  { name: 'crm.create', module: 'crm', label: 'Create Leads' },
+  { name: 'crm.update', module: 'crm', label: 'Update Leads' },
+  { name: 'crm.delete', module: 'crm', label: 'Delete Leads' },
+  { name: 'crm.activities', module: 'crm', label: 'Manage Activities' },
 ];
 
 const ADMIN_PERMISSIONS = [
@@ -93,6 +98,11 @@ const ADMIN_PERMISSIONS = [
   'accounting.payables.read',
   'payments.create',
   'payments.read',
+  'crm.read',
+  'crm.create',
+  'crm.update',
+  'crm.delete',
+  'crm.activities',
 ];
 
 async function seedPermissions() {

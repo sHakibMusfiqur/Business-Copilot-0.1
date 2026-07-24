@@ -6,6 +6,7 @@ import { AccountingModule } from './accounting/accounting.module';
 import { AuthModule } from './auth/auth.module';
 import { CategoriesModule } from './categories/categories.module';
 import { ConfigModule } from './config/config.module';
+import { CrmModule } from './crm/crm.module';
 import { CustomersModule } from './customers/customers.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { InventoryModule } from './inventory/inventory.module';
@@ -27,6 +28,7 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
       { name: 'long', ttl: 60000, limit: 200 },
     ]),
     AccountingModule,
+    CrmModule,
     ConfigModule,
     PrismaModule,
     AuthModule,

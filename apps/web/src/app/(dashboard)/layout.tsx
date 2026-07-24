@@ -33,6 +33,7 @@ import {
   Scale,
   CreditCard,
   DollarSign,
+  Contact,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -55,6 +56,10 @@ const sidebarItems = [
     { label: 'Suppliers', href: '/suppliers', icon: Building2 },
     { label: 'Products', href: '/products', icon: Package },
     { label: 'Inventory', href: '/inventory', icon: Warehouse },
+  ]},
+  { section: 'CRM', items: [
+    { label: 'Dashboard', href: '/crm', icon: Contact },
+    { label: 'Leads', href: '/crm/leads', icon: Users2 },
   ]},
   { section: 'Sales', items: [
     { label: 'Sales Orders', href: '/sales', icon: ShoppingCart },

@@ -186,7 +186,8 @@ model User {
   notifications  Notification[]
   auditLogs      AuditLog[]
   assignedLeads  Lead[]       @relation("AssignedUser")
-  activities     Activity[]
+  activities     Activity[]   @relation("CreatedByActivities")
+  timelineEvents TimelineEvent[] @relation("CreatedByTimelineEvents")
   createdInvoices Invoice[]   @relation("CreatedByUser")
   inventoryTransactions InventoryTransaction[] @relation("CreatedByUserTransactions")
   purchaseOrders         PurchaseOrder[] @relation("CreatedByPurchaseOrders")
@@ -284,7 +285,7 @@ model Customer {
   updatedAt      DateTime @updatedAt
 
   invoices    Invoice[]
-  leads       Lead[]
+  leads       Lead[] @relation("ConvertedLeads")
   salesOrders SalesOrder[]
   receivables Receivable[]
   payments    Payment[]
@@ -808,44 +809,51 @@ model Payroll {
 }
 
 model Lead {
-  id             String     @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
-  customerId     String?
-  customer       Customer?  @relation(fields: [customerId], references: [id])
-  title          String
-  description    String?
-  source         String?
-  value          Decimal    @default(0)
-  status         LeadStatus @default(NEW)
-  assignedToId   String?
-  assignedTo     User?      @relation("AssignedUser", fields: [assignedToId], references: [id])
-  expectedCloseDate DateTime?
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  id                    String     @id @default(cuid())
+  organizationId        String
+  organization          Organization @relation(fields: [organizationId], references: [id])
+  leadNumber            String     @unique
+  name                  String
+  company               String?
+  email                 String?
+  phone                 String?
+  source                String?
+  status                LeadStatus @default(NEW)
+  estimatedValue        Decimal    @default(0)
+  assignedToId          String?
+  assignedTo            User?      @relation("AssignedUser", fields: [assignedToId], references: [id])
+  notes                 String?
+  convertedToCustomerId String?
+  convertedToCustomer   Customer?  @relation("ConvertedLeads", fields: [convertedToCustomerId], references: [id])
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+  deletedAt             DateTime?
 
-  activities Activity[]
+  activities      Activity[]
+  timelineEvents  TimelineEvent[]
 
   @@index([organizationId])
+  @@index([status])
   @@index([assignedToId])
+  @@index([deletedAt])
 }
 
 model Activity {
   id          String       @id @default(cuid())
-  leadId      String?
-  lead        Lead?        @relation(fields: [leadId], references: [id])
-  userId      String
-  user        User         @relation(fields: [userId], references: [id])
-  type        ActivityType @default(NOTE)
-  subject     String
+  leadId      String
+  lead        Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type        ActivityType
+  title       String
   description String?
   dueDate     DateTime?
   completed   Boolean      @default(false)
+  createdById String
+  createdBy   User         @relation("CreatedByActivities", fields: [createdById], references: [id])
   createdAt   DateTime     @default(now())
   updatedAt   DateTime     @updatedAt
 
   @@index([leadId])
-  @@index([userId])
+  @@index([createdById])
 }
 
 model Notification {
@@ -895,4 +903,18 @@ model AuditLog {
   @@index([userId])
   @@index([entity, entityId])
   @@index([createdAt])
+}
+
+model TimelineEvent {
+  id          String   @id @default(cuid())
+  leadId      String
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type        String
+  description String
+  metadata    Json?
+  createdById String
+  createdBy   User     @relation("CreatedByTimelineEvents", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([leadId])
 }
