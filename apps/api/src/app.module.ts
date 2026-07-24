@@ -13,6 +13,7 @@ import { PurchaseModule } from './purchase/purchase.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RbacModule } from './rbac/rbac.module';
 import { ProductsModule } from './products/products.module';
+import { SalesModule } from './sales/sales.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { UsersModule } from './users/users.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
@@ -35,6 +36,7 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
     ProductsModule,
     PurchaseModule,
     RbacModule,
+    SalesModule,
     SuppliersModule,
     UsersModule,
   ],

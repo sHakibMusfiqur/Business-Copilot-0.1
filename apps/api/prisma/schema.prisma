@@ -33,6 +33,14 @@ enum Gender {
   OTHER
 }
 
+enum SalesStatus {
+  DRAFT
+  PENDING
+  CONFIRMED
+  DELIVERED
+  CANCELLED
+}
+
 enum PurchaseStatus {
   DRAFT
   PENDING
@@ -135,6 +143,7 @@ model Organization {
   leads      Lead[]
   roles      Role[]
   inventoryTransactions InventoryTransaction[]
+  salesOrders           SalesOrder[]
 }
 
 model OrganizationMember {
@@ -175,7 +184,8 @@ model User {
   activities     Activity[]
   createdInvoices Invoice[]   @relation("CreatedByUser")
   inventoryTransactions InventoryTransaction[] @relation("CreatedByUserTransactions")
-  purchaseOrders  PurchaseOrder[] @relation("CreatedByPurchaseOrders")
+  purchaseOrders         PurchaseOrder[] @relation("CreatedByPurchaseOrders")
+  salesOrders            SalesOrder[] @relation("CreatedBySalesOrders")
   files          File[]
   memberOf       OrganizationMember[]
   roleAssignments UserRoleAssignment[]
@@ -266,8 +276,9 @@ model Customer {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  invoices Invoice[]
-  leads    Lead[]
+  invoices    Invoice[]
+  leads       Lead[]
+  salesOrders SalesOrder[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -344,6 +355,7 @@ model Product {
   inventory       Inventory[]
   invoiceItems    InvoiceItem[]
   purchaseItems   PurchaseOrderItem[]
+  salesOrderItems SalesOrderItem[]
   inventoryTransactions InventoryTransaction[]
 
   @@unique([organizationId, sku])
@@ -484,6 +496,49 @@ model PurchaseOrderItem {
   lineTotal       Decimal       @default(0)
 
   @@index([purchaseOrderId])
+}
+
+model SalesOrder {
+  id              String       @id @default(cuid())
+  orderNumber     String       @unique
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  customerId      String?
+  customer        Customer?    @relation(fields: [customerId], references: [id])
+  orderDate       DateTime     @default(now())
+  status          SalesStatus  @default(DRAFT)
+  subtotal        Decimal      @default(0)
+  discount        Decimal      @default(0)
+  tax             Decimal      @default(0)
+  shippingCost    Decimal      @default(0)
+  total           Decimal      @default(0)
+  notes           String?
+  createdById     String
+  createdBy       User         @relation("CreatedBySalesOrders", fields: [createdById], references: [id])
+  deletedAt       DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  items SalesOrderItem[]
+
+  @@index([organizationId])
+  @@index([customerId])
+}
+
+model SalesOrderItem {
+  id           String     @id @default(cuid())
+  salesOrderId String
+  salesOrder   SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  productId    String?
+  product      Product?   @relation(fields: [productId], references: [id])
+  description  String
+  quantity     Decimal    @default(1)
+  unitPrice    Decimal    @default(0)
+  discount     Decimal    @default(0)
+  tax          Decimal    @default(0)
+  lineTotal    Decimal    @default(0)
+
+  @@index([salesOrderId])
 }
 
 model ChartOfAccount {

@@ -4,6 +4,8 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from 'axios';
 
+import type { SaleListResponse, Sale } from '@/components/sales/sales-types';
+
 import { useAuthStore } from '@/store/auth-store';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
@@ -585,5 +587,79 @@ export async function receivePurchase(id: string, notes?: string) {
 
 export async function deletePurchase(id: string) {
   const response = await api.delete(`/purchase/${id}`);
+  return response.data;
+}
+
+// ─── Sales Management ───────────────────────────────────────────
+
+export interface SalesListParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  customerId?: string;
+  status?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
+export async function getSales(params?: SalesListParams): Promise<SaleListResponse> {
+  const response = await api.get('/sales', { params });
+  return response.data;
+}
+
+export async function getSaleById(id: string): Promise<Sale> {
+  const response = await api.get(`/sales/${id}`);
+  return response.data;
+}
+
+export async function createSale(
+  data: {
+    customerId: string;
+    notes?: string;
+    items: Array<{
+      productId: string;
+      quantity: number;
+      unitPrice: number;
+      discount?: number;
+      tax?: number;
+    }>;
+  },
+): Promise<{ id: string; orderNumber: string; status: string; total: number; createdAt: string }> {
+  const response = await api.post('/sales', data);
+  return response.data;
+}
+
+export async function updateSale(
+  id: string,
+  data: {
+    customerId?: string;
+    notes?: string;
+    items?: Array<{
+      productId: string;
+      quantity: number;
+      unitPrice: number;
+      discount?: number;
+      tax?: number;
+    }>;
+  },
+): Promise<{ id: string; message: string } | { id: string; orderNumber: string; status: string; total: number; updatedAt: string }> {
+  const response = await api.patch(`/sales/${id}`, data);
+  return response.data;
+}
+
+export async function confirmSale(id: string): Promise<{ id: string; orderNumber: string; status: string }> {
+  const response = await api.post(`/sales/${id}/confirm`);
+  return response.data;
+}
+
+export async function deliverSale(id: string, notes?: string): Promise<{ id: string; orderNumber: string; status: string; updatedAt: string }> {
+  const response = await api.post(`/sales/${id}/deliver`, { notes });
+  return response.data;
+}
+
+export async function deleteSale(id: string): Promise<{ message: string }> {
+  const response = await api.delete(`/sales/${id}`);
   return response.data;
 }
