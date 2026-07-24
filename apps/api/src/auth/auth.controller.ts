@@ -18,12 +18,14 @@ import {
   ApiOkResponse,
   ApiUnauthorizedResponse,
   ApiConflictResponse,
+  ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
+import { AuthThrottleGuard } from '../common/guards/auth-throttle.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
 import { AuthService } from './auth.service';
@@ -36,37 +38,48 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Public()
+  @UseGuards(AuthThrottleGuard)
   @Post('register')
   @ApiBody({ type: RegisterDto })
   @ApiCreatedResponse({ description: 'User successfully registered' })
   @ApiConflictResponse({ description: 'Email already registered' })
+  @ApiTooManyRequestsResponse({ description: 'Too many registration attempts' })
   async register(
     @Body() dto: RegisterDto,
     @Res({ passthrough: true }) response: Response,
+    @Req() request: Request,
   ) {
-    const result = await this.authService.register(dto);
+    const ip = request.ip ?? '';
+    const userAgent = request.headers['user-agent'] ?? '';
+    const result = await this.authService.register(dto, ip, userAgent);
     this.setRefreshTokenCookie(response, result.refreshToken);
     this.setAccessTokenCookie(response, result.accessToken);
     return result;
   }
 
   @Public()
+  @UseGuards(AuthThrottleGuard)
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiBody({ type: LoginDto })
   @ApiOkResponse({ description: 'Login successful' })
   @ApiUnauthorizedResponse({ description: 'Invalid email or password' })
+  @ApiTooManyRequestsResponse({ description: 'Too many login attempts' })
   async login(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) response: Response,
+    @Req() request: Request,
   ) {
-    const result = await this.authService.login(dto);
+    const ip = request.ip ?? '';
+    const userAgent = request.headers['user-agent'] ?? '';
+    const result = await this.authService.login(dto, ip, userAgent);
     this.setRefreshTokenCookie(response, result.refreshToken);
     this.setAccessTokenCookie(response, result.accessToken);
     return result;
   }
 
   @Public()
+  @UseGuards(AuthThrottleGuard)
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiBody({
@@ -77,20 +90,45 @@ export class AuthController {
   })
   @ApiOkResponse({ description: 'Token refreshed successfully' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired refresh token' })
+  @ApiTooManyRequestsResponse({ description: 'Too many refresh attempts' })
   async refresh(
     @Req() request: Request,
     @Res({ passthrough: true }) response: Response,
   ) {
     const refreshToken = request.cookies?.refresh_token ?? request.body?.refreshToken;
+    const ip = request.ip ?? '';
+    const userAgent = request.headers['user-agent'] ?? '';
 
     if (!refreshToken) {
       throw new UnauthorizedException('Refresh token not provided');
     }
 
-    const result = await this.authService.refreshToken(refreshToken);
+    const result = await this.authService.refreshToken(refreshToken, ip, userAgent);
     this.setRefreshTokenCookie(response, result.refreshToken);
     this.setAccessTokenCookie(response, result.accessToken);
     return result;
+  }
+
+  @Public()
+  @UseGuards(AuthThrottleGuard)
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { email: { type: 'string', format: 'email' } },
+    },
+  })
+  @ApiOkResponse({ description: 'If the email exists, a reset link has been sent' })
+  @ApiTooManyRequestsResponse({ description: 'Too many forgot-password attempts' })
+  async forgotPassword(
+    @Body('email') email: string,
+    @Req() request: Request,
+  ) {
+    const ip = request.ip ?? '';
+    const userAgent = request.headers['user-agent'] ?? '';
+    await this.authService.forgotPassword(email, ip, userAgent);
+    return { message: 'If the email exists, a reset link has been sent' };
   }
 
   @UseGuards(JwtAuthGuard)
@@ -102,8 +140,11 @@ export class AuthController {
   async logout(
     @CurrentUser() user: CurrentUserPayload,
     @Res({ passthrough: true }) response: Response,
+    @Req() request: Request,
   ) {
-    await this.authService.logout(user.id);
+    const ip = request.ip ?? '';
+    const userAgent = request.headers['user-agent'] ?? '';
+    await this.authService.logout(user.id, ip, userAgent);
     const cookieOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

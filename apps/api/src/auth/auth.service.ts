@@ -13,6 +13,8 @@ import { ConfigService } from '../config/config.service';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 
+import { AuditService } from '../audit/audit.service';
+import { AuthRateLimiterService } from './auth-rate-limiter.service';
 import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
 
@@ -29,14 +31,26 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly rateLimiter: AuthRateLimiterService,
+    private readonly auditService: AuditService,
   ) {}
 
-  async register(dto: RegisterDto) {
+  async register(dto: RegisterDto, ip: string, userAgent?: string) {
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
 
     if (existingUser) {
+      await this.rateLimiter.recordAttempt(`email:${dto.email}`);
+      await this.rateLimiter.recordAttempt(`ip:${ip}`);
+      await this.auditService.record({
+        action: 'REGISTER',
+        status: 'FAILURE',
+        entity: 'User',
+        metadata: { email: dto.email, reason: 'Email already registered' },
+        ipAddress: ip,
+        userAgent,
+      });
       throw new ConflictException('Email already registered');
     }
 
@@ -129,6 +143,9 @@ export class AuthService {
         return { user: updatedUser, organization: org };
       });
 
+      await this.rateLimiter.clearAttempts(`email:${user.email}`);
+      await this.rateLimiter.clearAttempts(`ip:${ip}`);
+
       const tokens = await this.generateTokens({
         id: user.id,
         email: user.email,
@@ -136,25 +153,68 @@ export class AuthService {
         organizationId: user.organizationId ?? undefined,
       });
 
+      await this.auditService.record({
+        userId: user.id,
+        organizationId: user.organizationId ?? undefined,
+        action: 'REGISTER',
+        status: 'SUCCESS',
+        entity: 'User',
+        entityId: user.id,
+        ipAddress: ip,
+        userAgent,
+      });
+
       return { user, ...tokens };
     } catch (error) {
       if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
+        await this.rateLimiter.recordAttempt(`email:${dto.email}`);
+        await this.rateLimiter.recordAttempt(`ip:${ip}`);
+        await this.auditService.record({
+          action: 'REGISTER',
+          status: 'FAILURE',
+          entity: 'User',
+          metadata: { email: dto.email, reason: 'Unique constraint violation' },
+          ipAddress: ip,
+          userAgent,
+        });
         throw new ConflictException('Email already registered');
       }
       throw error;
     }
   }
 
-  async login(dto: LoginDto) {
+  async login(dto: LoginDto, ip: string, userAgent?: string) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
 
     if (!user) {
+      await this.rateLimiter.recordAttempt(`email:${dto.email}`);
+      await this.rateLimiter.recordAttempt(`ip:${ip}`);
+      await this.auditService.record({
+        action: 'FAILED_LOGIN',
+        status: 'FAILURE',
+        metadata: { email: dto.email, reason: 'User not found' },
+        ipAddress: ip,
+        userAgent,
+      });
       throw new UnauthorizedException('Invalid email or password');
     }
 
     if (!user.isActive) {
+      await this.rateLimiter.recordAttempt(`email:${dto.email}`);
+      await this.rateLimiter.recordAttempt(`user:${user.id}`);
+      await this.rateLimiter.recordAttempt(`ip:${ip}`);
+      await this.auditService.record({
+        userId: user.id,
+        action: 'FAILED_LOGIN',
+        status: 'FAILURE',
+        entity: 'User',
+        entityId: user.id,
+        metadata: { email: dto.email, reason: 'Account deactivated' },
+        ipAddress: ip,
+        userAgent,
+      });
       throw new UnauthorizedException('Account is deactivated. Contact your administrator.');
     }
 
@@ -166,8 +226,25 @@ export class AuthService {
     }
 
     if (!isPasswordValid) {
+      await this.rateLimiter.recordAttempt(`email:${dto.email}`);
+      await this.rateLimiter.recordAttempt(`user:${user.id}`);
+      await this.rateLimiter.recordAttempt(`ip:${ip}`);
+      await this.auditService.record({
+        userId: user.id,
+        action: 'FAILED_LOGIN',
+        status: 'FAILURE',
+        entity: 'User',
+        entityId: user.id,
+        metadata: { email: dto.email, reason: 'Invalid password' },
+        ipAddress: ip,
+        userAgent,
+      });
       throw new UnauthorizedException('Invalid email or password');
     }
+
+    await this.rateLimiter.clearAttempts(`email:${dto.email}`);
+    await this.rateLimiter.clearAttempts(`user:${user.id}`);
+    await this.rateLimiter.clearAttempts(`ip:${ip}`);
 
     const tokens = await this.generateTokens({
       id: user.id,
@@ -176,12 +253,23 @@ export class AuthService {
       organizationId: user.organizationId ?? undefined,
     });
 
+    await this.auditService.record({
+      userId: user.id,
+      organizationId: user.organizationId ?? undefined,
+      action: 'LOGIN',
+      status: 'SUCCESS',
+      entity: 'User',
+      entityId: user.id,
+      ipAddress: ip,
+      userAgent,
+    });
+
     const { password: _, ...userWithoutPassword } = user;
 
     return { user: userWithoutPassword, ...tokens };
   }
 
-  async refreshToken(refreshToken: string) {
+  async refreshToken(refreshToken: string, ip: string, userAgent?: string) {
     try {
       const payload = this.jwtService.verify<CurrentUserPayload>(refreshToken, {
         secret: this.configService.jwtRefreshSecret,
@@ -192,11 +280,31 @@ export class AuthService {
       });
 
       if (!storedToken) {
+        await this.rateLimiter.recordAttempt(`ip:${ip}`);
+        if (payload?.id) await this.rateLimiter.recordAttempt(`user:${payload.id}`);
+        await this.auditService.record({
+          userId: payload?.id,
+          action: 'REFRESH_TOKEN',
+          status: 'FAILURE',
+          metadata: { reason: 'Token not found in store' },
+          ipAddress: ip,
+          userAgent,
+        });
         throw new UnauthorizedException('Refresh token not found');
       }
 
       if (storedToken.expiresAt < new Date()) {
         await this.prisma.refreshToken.delete({ where: { id: storedToken.id } });
+        await this.rateLimiter.recordAttempt(`ip:${ip}`);
+        await this.rateLimiter.recordAttempt(`user:${payload.id}`);
+        await this.auditService.record({
+          userId: payload.id,
+          action: 'REFRESH_TOKEN',
+          status: 'FAILURE',
+          metadata: { reason: 'Token expired' },
+          ipAddress: ip,
+          userAgent,
+        });
         throw new UnauthorizedException('Refresh token expired');
       }
 
@@ -213,15 +321,38 @@ export class AuthService {
       });
 
       if (!user) {
+        await this.rateLimiter.recordAttempt(`ip:${ip}`);
+        await this.auditService.record({
+          action: 'REFRESH_TOKEN',
+          status: 'FAILURE',
+          metadata: { reason: 'User not found', userId: payload.id },
+          ipAddress: ip,
+          userAgent,
+        });
         throw new UnauthorizedException('User not found');
       }
 
       if (!user.isActive) {
         await this.prisma.refreshToken.delete({ where: { id: storedToken.id } });
+        await this.rateLimiter.recordAttempt(`ip:${ip}`);
+        await this.rateLimiter.recordAttempt(`user:${user.id}`);
+        await this.auditService.record({
+          userId: user.id,
+          action: 'REFRESH_TOKEN',
+          status: 'FAILURE',
+          entity: 'User',
+          entityId: user.id,
+          metadata: { reason: 'Account deactivated' },
+          ipAddress: ip,
+          userAgent,
+        });
         throw new UnauthorizedException('Account is deactivated. Contact your administrator.');
       }
 
       await this.prisma.refreshToken.delete({ where: { id: storedToken.id } });
+
+      await this.rateLimiter.clearAttempts(`ip:${ip}`);
+      await this.rateLimiter.clearAttempts(`user:${user.id}`);
 
       const tokens = await this.generateTokens({
         id: user.id,
@@ -230,19 +361,91 @@ export class AuthService {
         organizationId: user.organizationId ?? undefined,
       });
 
+      await this.auditService.record({
+        userId: user.id,
+        organizationId: user.organizationId ?? undefined,
+        action: 'REFRESH_TOKEN',
+        status: 'SUCCESS',
+        entity: 'User',
+        entityId: user.id,
+        ipAddress: ip,
+        userAgent,
+      });
+
       return {
         user,
         ...tokens,
       };
-    } catch {
+    } catch (error) {
+      if (error instanceof UnauthorizedException) throw error;
       this.logger.error('Refresh token failed');
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
   }
 
-  async logout(userId: string) {
+  async forgotPassword(email: string, ip: string, userAgent?: string): Promise<void> {
+    if (!email) {
+      await this.rateLimiter.recordAttempt(`ip:${ip}`);
+      await this.auditService.record({
+        action: 'FORGOT_PASSWORD',
+        status: 'FAILURE',
+        metadata: { reason: 'Email not provided' },
+        ipAddress: ip,
+        userAgent,
+      });
+      throw new UnauthorizedException('Email is required');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true, email: true, organizationId: true },
+    });
+
+    if (user) {
+      await this.rateLimiter.clearAttempts(`email:${email}`);
+      this.logger.log(`Password reset requested for ${email}`);
+      await this.auditService.record({
+        userId: user.id,
+        organizationId: user.organizationId ?? undefined,
+        action: 'FORGOT_PASSWORD',
+        status: 'SUCCESS',
+        entity: 'User',
+        entityId: user.id,
+        ipAddress: ip,
+        userAgent,
+      });
+    } else {
+      await this.rateLimiter.recordAttempt(`email:${email}`);
+      await this.rateLimiter.recordAttempt(`ip:${ip}`);
+      await this.auditService.record({
+        action: 'FORGOT_PASSWORD',
+        status: 'FAILURE',
+        metadata: { email, reason: 'Email not found' },
+        ipAddress: ip,
+        userAgent,
+      });
+    }
+  }
+
+  async logout(userId: string, ip?: string, userAgent?: string) {
     await this.prisma.refreshToken.deleteMany({
       where: { userId },
+    });
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, organizationId: true },
+    });
+
+    await this.auditService.record({
+      userId,
+      organizationId: user?.organizationId ?? undefined,
+      action: 'LOGOUT',
+      status: 'SUCCESS',
+      entity: 'User',
+      entityId: userId,
+      ipAddress: ip,
+      userAgent,
     });
   }
 

@@ -55,6 +55,7 @@ const SEED_PERMISSIONS = [
   { name: 'crm.update', module: 'crm', label: 'Update Leads' },
   { name: 'crm.delete', module: 'crm', label: 'Delete Leads' },
   { name: 'crm.activities', module: 'crm', label: 'Manage Activities' },
+  { name: 'audit.read', module: 'audit', label: 'View Audit Logs' },
 ];
 
 const ADMIN_PERMISSIONS = [
@@ -103,6 +104,7 @@ const ADMIN_PERMISSIONS = [
   'crm.update',
   'crm.delete',
   'crm.activities',
+  'audit.read',
 ];
 
 async function seedPermissions() {

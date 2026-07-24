@@ -45,6 +45,7 @@ import { AuthProvider } from '@/providers/auth-provider';
 import { QueryProvider } from '@/providers/query-provider';
 import { ThemeProvider } from '@/providers/theme-provider';
 import { useAuthStore } from '@/store/auth-store';
+import { History } from 'lucide-react';
 
 
 const sidebarItems = [
@@ -83,6 +84,7 @@ const sidebarItems = [
   { section: 'Administration', items: [
     { label: 'Users', href: '/users', icon: UsersRound },
     { label: 'Roles', href: '/roles', icon: Shield },
+    { label: 'Audit Log', href: '/audit', icon: History },
   ]},
   { section: 'Intelligence', items: [
     { label: 'Reports', href: '/reports', icon: BarChart3 },

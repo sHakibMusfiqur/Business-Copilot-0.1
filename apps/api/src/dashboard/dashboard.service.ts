@@ -27,10 +27,11 @@ export interface DashboardStatistics {
 export interface RecentActivityItem {
   id: string;
   action: string;
-  entity: string;
+  entity: string | null;
   entityId: string | null;
-  user: { id: string; name: string; email: string } | null;
   createdAt: Date;
+  userId: string | null;
+  user: { id: string; name: string; email: string } | null;
 }
 
 export interface DashboardOverview {

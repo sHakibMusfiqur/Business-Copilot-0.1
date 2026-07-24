@@ -3,7 +3,9 @@ import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 
 import { AccountingModule } from './accounting/accounting.module';
+import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
+import { SystemModule } from './system/system.module';
 import { CategoriesModule } from './categories/categories.module';
 import { ConfigModule } from './config/config.module';
 import { CrmModule } from './crm/crm.module';
@@ -28,10 +30,12 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
       { name: 'long', ttl: 60000, limit: 200 },
     ]),
     AccountingModule,
+    AuditModule,
     CrmModule,
     ConfigModule,
     PrismaModule,
     AuthModule,
+    SystemModule,
     CategoriesModule,
     CustomersModule,
     OrganizationModule,

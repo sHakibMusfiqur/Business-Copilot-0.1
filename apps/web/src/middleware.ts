@@ -21,6 +21,7 @@ const ORG_ROUTE_PREFIXES = [
   '/employees',
   '/users',
   '/roles',
+  '/audit',
   '/reports',
   '/copilot',
 ];

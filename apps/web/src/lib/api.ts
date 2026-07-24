@@ -948,3 +948,35 @@ export async function deleteActivity(id: string) {
   const response = await api.delete(`/crm/activities/${id}`);
   return response.data;
 }
+
+// ─── Audit Logs ──────────────────────────────────────────
+
+export async function getAuditLogs(params?: {
+  page?: number;
+  limit?: number;
+  search?: string;
+  action?: string;
+  entity?: string;
+  userId?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}) {
+  const response = await api.get('/audit', { params });
+  return response.data;
+}
+
+export async function getAuditActions() {
+  const response = await api.get('/audit/actions');
+  return response.data;
+}
+
+export function getAuditExportUrl(params?: {
+  action?: string;
+  entity?: string;
+}): string {
+  const searchParams = new URLSearchParams();
+  if (params?.action) searchParams.set('action', params.action);
+  if (params?.entity) searchParams.set('entity', params.entity);
+  const query = searchParams.toString();
+  return `${API_URL}/api/audit/export${query ? `?${query}` : ''}`;
+}

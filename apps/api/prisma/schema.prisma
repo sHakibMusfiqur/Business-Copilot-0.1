@@ -134,6 +134,7 @@ model Organization {
 
   users      User[]
   members    OrganizationMember[]
+  auditLogs  AuditLog[]
   customers  Customer[]
   suppliers  Supplier[]
   products   Product[]
@@ -889,20 +890,26 @@ model File {
 }
 
 model AuditLog {
-  id         String   @id @default(cuid())
-  userId     String?
-  user       User?    @relation(fields: [userId], references: [id])
-  action     String
-  entity     String
-  entityId   String?
-  metadata   Json?
-  ipAddress  String?
-  userAgent  String?
-  createdAt  DateTime @default(now())
+  id             String        @id @default(cuid())
+  userId         String?
+  user           User?         @relation(fields: [userId], references: [id])
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  action         String
+  entity         String?
+  entityId       String?
+  status         String        @default("SUCCESS")
+  metadata       Json?
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime      @default(now())
 
   @@index([userId])
+  @@index([organizationId])
+  @@index([action])
   @@index([entity, entityId])
   @@index([createdAt])
+  @@index([organizationId, action])
 }
 
 model TimelineEvent {
