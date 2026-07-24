@@ -27,6 +27,12 @@ import {
   ChevronDown,
   HelpCircle,
   Shield,
+  BookOpen,
+  FileText,
+  BookOpenCheck,
+  Scale,
+  CreditCard,
+  DollarSign,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -45,30 +51,37 @@ const sidebarItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   ]},
   { section: 'Management', items: [
-    { label: 'Customers', href: '/dashboard/customers', icon: UsersRound },
-    { label: 'Suppliers', href: '/dashboard/suppliers', icon: Building2 },
-    { label: 'Products', href: '/dashboard/products', icon: Package },
-    { label: 'Inventory', href: '/dashboard/inventory', icon: Warehouse },
+    { label: 'Customers', href: '/customers', icon: UsersRound },
+    { label: 'Suppliers', href: '/suppliers', icon: Building2 },
+    { label: 'Products', href: '/products', icon: Package },
+    { label: 'Inventory', href: '/inventory', icon: Warehouse },
   ]},
   { section: 'Sales', items: [
-    { label: 'Sales Orders', href: '/dashboard/sales', icon: ShoppingCart },
-    { label: 'Invoices', href: '/dashboard/invoices', icon: Receipt },
-    { label: 'Purchases', href: '/dashboard/purchases', icon: ShoppingBag },
+    { label: 'Sales Orders', href: '/sales', icon: ShoppingCart },
+    { label: 'Invoices', href: '/invoices', icon: Receipt },
+    { label: 'Purchases', href: '/purchases', icon: ShoppingBag },
   ]},
   { section: 'Finance', items: [
-    { label: 'Accounting', href: '/dashboard/accounting', icon: Calculator },
-    { label: 'Payroll', href: '/dashboard/payroll', icon: Wallet },
+    { label: 'Accounting', href: '/accounting', icon: Calculator },
+    { label: 'Chart of Accounts', href: '/accounting/accounts', icon: BookOpen },
+    { label: 'Journal Entries', href: '/accounting/journal', icon: FileText },
+    { label: 'General Ledger', href: '/accounting/ledger', icon: BookOpenCheck },
+    { label: 'Trial Balance', href: '/accounting/trial-balance', icon: Scale },
+    { label: 'Receivables', href: '/accounting/receivables', icon: Receipt },
+    { label: 'Payables', href: '/accounting/payables', icon: CreditCard },
+    { label: 'Payments', href: '/accounting/payments', icon: DollarSign },
+    { label: 'Payroll', href: '/payroll', icon: Wallet },
   ]},
   { section: 'People', items: [
-    { label: 'Employees', href: '/dashboard/employees', icon: Users2 },
+    { label: 'Employees', href: '/employees', icon: Users2 },
   ]},
   { section: 'Administration', items: [
-    { label: 'Users', href: '/dashboard/users', icon: UsersRound },
-    { label: 'Roles', href: '/dashboard/roles', icon: Shield },
+    { label: 'Users', href: '/users', icon: UsersRound },
+    { label: 'Roles', href: '/roles', icon: Shield },
   ]},
   { section: 'Intelligence', items: [
-    { label: 'Reports', href: '/dashboard/reports', icon: BarChart3 },
-    { label: 'AI Copilot', href: '/dashboard/copilot', icon: Bot },
+    { label: 'Reports', href: '/reports', icon: BarChart3 },
+    { label: 'AI Copilot', href: '/copilot', icon: Bot },
   ]},
 ];
 

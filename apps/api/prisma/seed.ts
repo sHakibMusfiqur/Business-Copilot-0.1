@@ -34,9 +34,22 @@ const SEED_PERMISSIONS = [
   { name: 'sales.deliver', module: 'sales', label: 'Deliver Sales Orders' },
   { name: 'sales.delete', module: 'sales', label: 'Delete Sales Orders' },
   { name: 'reports.read', module: 'reports', label: 'View Reports' },
+  { name: 'reports.finance', module: 'reports', label: 'View Financial Reports' },
   { name: 'dashboard.read', module: 'dashboard', label: 'View Dashboard' },
   { name: 'organization.manage', module: 'organization', label: 'Manage Organization' },
   { name: 'settings.manage', module: 'settings', label: 'Manage Settings' },
+  { name: 'accounting.accounts.read', module: 'accounting', label: 'View Chart of Accounts' },
+  { name: 'accounting.accounts.create', module: 'accounting', label: 'Create Accounts' },
+  { name: 'accounting.accounts.update', module: 'accounting', label: 'Update Accounts' },
+  { name: 'accounting.accounts.delete', module: 'accounting', label: 'Delete Accounts' },
+  { name: 'accounting.journal.read', module: 'accounting', label: 'View Journal Entries' },
+  { name: 'accounting.journal.create', module: 'accounting', label: 'Create Journal Entries' },
+  { name: 'accounting.journal.post', module: 'accounting', label: 'Post Journal Entries' },
+  { name: 'accounting.journal.delete', module: 'accounting', label: 'Delete Journal Entries' },
+  { name: 'accounting.receivables.read', module: 'accounting', label: 'View Receivables' },
+  { name: 'accounting.payables.read', module: 'accounting', label: 'View Payables' },
+  { name: 'payments.create', module: 'payments', label: 'Create Payments' },
+  { name: 'payments.read', module: 'payments', label: 'View Payments' },
 ];
 
 const ADMIN_PERMISSIONS = [
@@ -67,8 +80,19 @@ const ADMIN_PERMISSIONS = [
   'sales.deliver',
   'sales.delete',
   'reports.read',
+  'reports.finance',
   'dashboard.read',
   'settings.manage',
+  'accounting.accounts.read',
+  'accounting.accounts.create',
+  'accounting.accounts.update',
+  'accounting.journal.read',
+  'accounting.journal.create',
+  'accounting.journal.post',
+  'accounting.receivables.read',
+  'accounting.payables.read',
+  'payments.create',
+  'payments.read',
 ];
 
 async function seedPermissions() {
@@ -279,14 +303,30 @@ async function main() {
 
   // ─── Chart of Accounts ────────────────────────────────────────
 
-  await Promise.all([
-    prisma.chartOfAccount.upsert({ where: { code: '1000' }, update: {}, create: { code: '1000', name: 'Cash', type: 'ASSET' } }),
-    prisma.chartOfAccount.upsert({ where: { code: '2000' }, update: {}, create: { code: '2000', name: 'Accounts Receivable', type: 'ASSET' } }),
-    prisma.chartOfAccount.upsert({ where: { code: '3000' }, update: {}, create: { code: '3000', name: 'Inventory', type: 'ASSET' } }),
-    prisma.chartOfAccount.upsert({ where: { code: '4000' }, update: {}, create: { code: '4000', name: 'Revenue', type: 'REVENUE' } }),
-    prisma.chartOfAccount.upsert({ where: { code: '5000' }, update: {}, create: { code: '5000', name: 'Cost of Goods Sold', type: 'EXPENSE' } }),
-    prisma.chartOfAccount.upsert({ where: { code: '6000' }, update: {}, create: { code: '6000', name: 'Operating Expenses', type: 'EXPENSE' } }),
-  ]);
+  const accountUpserts = [
+    { code: '1000', name: 'Cash', type: 'ASSET' as const },
+    { code: '1100', name: 'Accounts Receivable', type: 'ASSET' as const },
+    { code: '1200', name: 'Inventory', type: 'ASSET' as const },
+    { code: '1300', name: 'Fixed Assets', type: 'ASSET' as const },
+    { code: '2000', name: 'Accounts Payable', type: 'LIABILITY' as const },
+    { code: '2100', name: 'Accrued Liabilities', type: 'LIABILITY' as const },
+    { code: '3000', name: 'Owner\'s Equity', type: 'EQUITY' as const },
+    { code: '4000', name: 'Revenue', type: 'REVENUE' as const },
+    { code: '4100', name: 'Sales Discounts', type: 'REVENUE' as const },
+    { code: '5000', name: 'Cost of Goods Sold', type: 'EXPENSE' as const },
+    { code: '6000', name: 'Operating Expenses', type: 'EXPENSE' as const },
+    { code: '7000', name: 'Other Income', type: 'REVENUE' as const },
+  ];
+
+  await Promise.all(
+    accountUpserts.map((a) =>
+      prisma.account.upsert({
+        where: { organizationId_code: { organizationId: org.id, code: a.code } },
+        update: {},
+        create: { ...a, organizationId: org.id },
+      }),
+    ),
+  );
 
   console.log('Chart of Accounts created');
 

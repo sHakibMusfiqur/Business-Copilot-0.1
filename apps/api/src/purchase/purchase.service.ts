@@ -9,6 +9,7 @@ import { PurchaseStatus } from '@prisma/client';
 import type { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { AccountingService } from '../accounting/accounting.service';
 
 import type { QueryPurchaseDto } from './dto/query-purchase.dto';
 import type { CreatePurchaseDto } from './dto/create-purchase.dto';
@@ -20,6 +21,7 @@ export class PurchaseService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly accountingService: AccountingService,
   ) {}
 
   async findAll(orgId: string, query: QueryPurchaseDto) {
@@ -369,6 +371,9 @@ export class PurchaseService {
           },
         });
       }
+
+      await this.accountingService.createPayableForPurchase(orgId, purchaseId, tx);
+      await this.accountingService.createJournalForPurchaseReceive(orgId, userId, purchaseId, tx);
 
       const updated = await tx.purchaseOrder.update({
         where: { id: purchaseId },

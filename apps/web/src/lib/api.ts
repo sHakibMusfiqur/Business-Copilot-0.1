@@ -663,3 +663,178 @@ export async function deleteSale(id: string): Promise<{ message: string }> {
   const response = await api.delete(`/sales/${id}`);
   return response.data;
 }
+
+// ─── Accounting & Finance ──────────────────────────────────────
+
+export interface AccountListParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  type?: string;
+  isActive?: boolean;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
+export async function getAccountSummary() {
+  const response = await api.get('/accounting/summary');
+  return response.data;
+}
+
+export async function getAccounts(params?: AccountListParams) {
+  const response = await api.get('/accounting/accounts', { params });
+  return response.data;
+}
+
+export async function getAccountById(id: string) {
+  const response = await api.get(`/accounting/accounts/${id}`);
+  return response.data;
+}
+
+export async function createAccount(data: {
+  code: string;
+  name: string;
+  type: string;
+  parentId?: string;
+  description?: string;
+}) {
+  const response = await api.post('/accounting/accounts', data);
+  return response.data;
+}
+
+export async function updateAccount(
+  id: string,
+  data: {
+    code?: string;
+    name?: string;
+    type?: string;
+    parentId?: string;
+    description?: string;
+    isActive?: boolean;
+  },
+) {
+  const response = await api.patch(`/accounting/accounts/${id}`, data);
+  return response.data;
+}
+
+export async function deleteAccount(id: string) {
+  const response = await api.delete(`/accounting/accounts/${id}`);
+  return response.data;
+}
+
+export interface JournalEntryListParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
+export async function getJournalEntries(params?: JournalEntryListParams) {
+  const response = await api.get('/accounting/journal', { params });
+  return response.data;
+}
+
+export async function getJournalEntryById(id: string) {
+  const response = await api.get(`/accounting/journal/${id}`);
+  return response.data;
+}
+
+export async function createJournalEntry(data: {
+  description: string;
+  referenceId?: string;
+  referenceType?: string;
+  lines: Array<{
+    accountId: string;
+    debit: number;
+    credit: number;
+    description?: string;
+  }>;
+}) {
+  const response = await api.post('/accounting/journal', data);
+  return response.data;
+}
+
+export async function updateJournalEntry(
+  id: string,
+  data: {
+    description?: string;
+    lines?: Array<{
+      accountId: string;
+      debit: number;
+      credit: number;
+      description?: string;
+    }>;
+  },
+) {
+  const response = await api.patch(`/accounting/journal/${id}`, data);
+  return response.data;
+}
+
+export async function postJournalEntry(id: string) {
+  const response = await api.post(`/accounting/journal/${id}/post`);
+  return response.data;
+}
+
+export async function deleteJournalEntry(id: string) {
+  const response = await api.delete(`/accounting/journal/${id}`);
+  return response.data;
+}
+
+export async function getReceivables(params?: {
+  page?: number;
+  limit?: number;
+  status?: string;
+  search?: string;
+}) {
+  const response = await api.get('/accounting/receivables', { params });
+  return response.data;
+}
+
+export async function getPayables(params?: {
+  page?: number;
+  limit?: number;
+  status?: string;
+  search?: string;
+}) {
+  const response = await api.get('/accounting/payables', { params });
+  return response.data;
+}
+
+export async function getPayments(params?: {
+  page?: number;
+  limit?: number;
+  type?: string;
+}) {
+  const response = await api.get('/accounting/payments', { params });
+  return response.data;
+}
+
+export async function createPayment(data: {
+  type: 'CUSTOMER_PAYMENT' | 'SUPPLIER_PAYMENT';
+  customerId?: string;
+  supplierId?: string;
+  amount: number;
+  reference?: string;
+  notes?: string;
+}) {
+  const response = await api.post('/accounting/payments', data);
+  return response.data;
+}
+
+export async function getGeneralLedger(params?: {
+  accountId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}) {
+  const response = await api.get('/accounting/ledger', { params });
+  return response.data;
+}
+
+export async function getTrialBalance() {
+  const response = await api.get('/accounting/trial-balance');
+  return response.data;
+}

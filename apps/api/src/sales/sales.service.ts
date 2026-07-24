@@ -10,6 +10,7 @@ import { Prisma } from '@prisma/client';
 import { SalesStatus } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { AccountingService } from '../accounting/accounting.service';
 
 import type { QuerySaleDto } from './dto/query-sale.dto';
 import type { CreateSaleDto } from './dto/create-sale.dto';
@@ -21,6 +22,7 @@ export class SalesService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly accountingService: AccountingService,
   ) {}
 
   async findAll(orgId: string, query: QuerySaleDto) {
@@ -397,6 +399,10 @@ export class SalesService {
           },
         });
       }
+
+      await this.accountingService.createReceivableForSales(orgId, saleId, tx);
+      await this.accountingService.createRevenueJournalEntry(orgId, userId, saleId, tx);
+      await this.accountingService.createCOGSJournalEntry(orgId, userId, saleId, tx);
 
       const updated = await tx.salesOrder.update({
         where: { id: saleId },

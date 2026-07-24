@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 
+import { AccountingModule } from './accounting/accounting.module';
 import { AuthModule } from './auth/auth.module';
 import { CategoriesModule } from './categories/categories.module';
 import { ConfigModule } from './config/config.module';
@@ -25,6 +26,7 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
       { name: 'medium', ttl: 10000, limit: 50 },
       { name: 'long', ttl: 60000, limit: 200 },
     ]),
+    AccountingModule,
     ConfigModule,
     PrismaModule,
     AuthModule,

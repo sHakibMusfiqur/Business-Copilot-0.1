@@ -144,6 +144,11 @@ model Organization {
   roles      Role[]
   inventoryTransactions InventoryTransaction[]
   salesOrders           SalesOrder[]
+  accounts              Account[]
+  journalEntries        JournalEntry[]
+  receivables           Receivable[]
+  payables              Payable[]
+  payments              Payment[]
 }
 
 model OrganizationMember {
@@ -186,9 +191,11 @@ model User {
   inventoryTransactions InventoryTransaction[] @relation("CreatedByUserTransactions")
   purchaseOrders         PurchaseOrder[] @relation("CreatedByPurchaseOrders")
   salesOrders            SalesOrder[] @relation("CreatedBySalesOrders")
-  files          File[]
-  memberOf       OrganizationMember[]
-  roleAssignments UserRoleAssignment[]
+  journalEntries       JournalEntry[]       @relation("CreatedByJournalEntries")
+  payments             Payment[]            @relation("CreatedByPayments")
+  files                File[]
+  memberOf             OrganizationMember[]
+  roleAssignments      UserRoleAssignment[]
 }
 
 model Permission {
@@ -279,6 +286,8 @@ model Customer {
   invoices    Invoice[]
   leads       Lead[]
   salesOrders SalesOrder[]
+  receivables Receivable[]
+  payments    Payment[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -308,6 +317,8 @@ model Supplier {
 
   purchaseOrders PurchaseOrder[]
   products       Product[]
+  payables       Payable[]
+  payments       Payment[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -476,7 +487,8 @@ model PurchaseOrder {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
-  items PurchaseOrderItem[]
+  items    PurchaseOrderItem[]
+  payables Payable[]
 
   @@index([organizationId])
   @@index([supplierId])
@@ -519,7 +531,8 @@ model SalesOrder {
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
-  items SalesOrderItem[]
+  items       SalesOrderItem[]
+  receivables Receivable[]
 
   @@index([organizationId])
   @@index([customerId])
@@ -541,35 +554,182 @@ model SalesOrderItem {
   @@index([salesOrderId])
 }
 
-model ChartOfAccount {
-  id          String   @id @default(cuid())
-  code        String
-  name        String
-  type        String   @default("EXPENSE")
-  description String?
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+enum AccountType {
+  ASSET
+  LIABILITY
+  EQUITY
+  REVENUE
+  EXPENSE
+}
 
-  journalEntries JournalEntry[]
+enum JournalEntryStatus {
+  DRAFT
+  POSTED
+}
 
-  @@unique([code])
+enum ReceivableStatus {
+  PENDING
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PayableStatus {
+  PENDING
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentType {
+  CUSTOMER_PAYMENT
+  SUPPLIER_PAYMENT
+}
+
+model Account {
+  id             String       @id @default(cuid())
+  code           String
+  name           String
+  type           AccountType
+  parentId       String?
+  parent         Account?     @relation("AccountHierarchy", fields: [parentId], references: [id])
+  childAccounts  Account[]    @relation("AccountHierarchy")
+  description    String?
+  isActive       Boolean      @default(true)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  journalEntryLines JournalEntryLine[]
+
+  @@unique([organizationId, code])
+  @@index([organizationId])
+  @@index([parentId])
 }
 
 model JournalEntry {
-  id              String   @id @default(cuid())
-  accountId       String
-  account         ChartOfAccount @relation(fields: [accountId], references: [id])
-  description     String?
-  debit           Decimal  @default(0)
-  credit          Decimal  @default(0)
+  id              String              @id @default(cuid())
+  entryNumber     String              @unique
+  organizationId  String
+  organization    Organization        @relation(fields: [organizationId], references: [id])
+  date            DateTime            @default(now())
+  description     String
+  status          JournalEntryStatus  @default(DRAFT)
   referenceId     String?
   referenceType   String?
-  entryDate       DateTime @default(now())
-  createdAt       DateTime @default(now())
+  createdById     String
+  createdBy       User                @relation("CreatedByJournalEntries", fields: [createdById], references: [id])
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  deletedAt       DateTime?
 
+  lines JournalEntryLine[]
+
+  @@index([organizationId])
+  @@index([date])
+}
+
+model JournalEntryLine {
+  id              String       @id @default(cuid())
+  journalEntryId  String
+  journalEntry    JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  accountId       String
+  account         Account      @relation(fields: [accountId], references: [id])
+  description     String?
+  debit           Decimal      @default(0)
+  credit          Decimal      @default(0)
+
+  @@index([journalEntryId])
   @@index([accountId])
-  @@index([entryDate])
+}
+
+model Receivable {
+  id              String           @id @default(cuid())
+  organizationId  String
+  organization    Organization     @relation(fields: [organizationId], references: [id])
+  customerId      String?
+  customer        Customer?        @relation(fields: [customerId], references: [id])
+  salesOrderId    String?
+  salesOrder      SalesOrder?      @relation(fields: [salesOrderId], references: [id])
+  invoiceNumber   String
+  dueDate         DateTime
+  totalAmount     Decimal          @default(0)
+  paidAmount      Decimal          @default(0)
+  status          ReceivableStatus @default(PENDING)
+  notes           String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  payments PaymentAllocation[]
+
+  @@index([organizationId])
+  @@index([customerId])
+}
+
+model Payable {
+  id               String        @id @default(cuid())
+  organizationId   String
+  organization     Organization  @relation(fields: [organizationId], references: [id])
+  supplierId       String?
+  supplier         Supplier?     @relation(fields: [supplierId], references: [id])
+  purchaseOrderId  String?
+  purchaseOrder    PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  billNumber       String
+  dueDate          DateTime
+  totalAmount      Decimal       @default(0)
+  paidAmount       Decimal       @default(0)
+  status           PayableStatus @default(PENDING)
+  notes            String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  payments PaymentAllocation[]
+
+  @@index([organizationId])
+  @@index([supplierId])
+}
+
+model Payment {
+  id             String      @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  type           PaymentType
+  customerId     String?
+  customer       Customer?   @relation(fields: [customerId], references: [id])
+  supplierId     String?
+  supplier       Supplier?   @relation(fields: [supplierId], references: [id])
+  amount         Decimal     @default(0)
+  paymentDate    DateTime    @default(now())
+  reference      String?
+  notes          String?
+  createdById    String
+  createdBy      User        @relation("CreatedByPayments", fields: [createdById], references: [id])
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  allocations PaymentAllocation[]
+
+  @@index([organizationId])
+  @@index([customerId])
+  @@index([supplierId])
+}
+
+model PaymentAllocation {
+  id            String     @id @default(cuid())
+  paymentId     String
+  payment       Payment    @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  receivableId  String?
+  receivable    Receivable? @relation(fields: [receivableId], references: [id])
+  payableId     String?
+  payable       Payable?   @relation(fields: [payableId], references: [id])
+  amount        Decimal    @default(0)
+
+  @@index([paymentId])
+  @@index([receivableId])
+  @@index([payableId])
 }
 
 model Department {
