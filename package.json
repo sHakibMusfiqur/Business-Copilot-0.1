@@ -13,6 +13,7 @@
     "format": "prettier --write \"**/*.{ts,tsx,js,json}\"",
     "clean": "turbo clean",
     "db:migrate": "npm run db:migrate --workspace=apps/api",
+    "db:deploy": "npm run db:deploy --workspace=apps/api",
     "db:seed": "npm run db:seed --workspace=apps/api",
     "db:generate": "npm run db:generate --workspace=apps/api",
     "docker:up": "docker compose up -d",

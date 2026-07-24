@@ -100,7 +100,7 @@ jobs:
           DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/business_copilot_test?schema=public"
 
       - name: Run migrations
-        run: npm run db:migrate
+        run: npm run db:deploy
         env:
           DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/business_copilot_test?schema=public"
 
