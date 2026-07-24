@@ -33,6 +33,14 @@ enum Gender {
   OTHER
 }
 
+enum PurchaseStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  RECEIVED
+  CANCELLED
+}
+
 enum OrderStatus {
   DRAFT
   PENDING
@@ -167,6 +175,7 @@ model User {
   activities     Activity[]
   createdInvoices Invoice[]   @relation("CreatedByUser")
   inventoryTransactions InventoryTransaction[] @relation("CreatedByUserTransactions")
+  purchaseOrders  PurchaseOrder[] @relation("CreatedByPurchaseOrders")
   files          File[]
   memberOf       OrganizationMember[]
   roleAssignments UserRoleAssignment[]
@@ -435,21 +444,25 @@ model InvoiceItem {
 }
 
 model PurchaseOrder {
-  id              String       @id @default(cuid())
-  orderNumber     String       @unique
+  id              String         @id @default(cuid())
+  orderNumber     String         @unique
   organizationId  String
-  organization    Organization @relation(fields: [organizationId], references: [id])
+  organization    Organization   @relation(fields: [organizationId], references: [id])
   supplierId      String?
-  supplier        Supplier?    @relation(fields: [supplierId], references: [id])
-  orderDate       DateTime     @default(now())
-  expectedDate    DateTime?
-  status          OrderStatus  @default(DRAFT)
-  subtotal        Decimal      @default(0)
-  taxTotal        Decimal      @default(0)
-  total           Decimal      @default(0)
+  supplier        Supplier?      @relation(fields: [supplierId], references: [id])
+  orderDate       DateTime       @default(now())
+  status          PurchaseStatus @default(DRAFT)
+  subtotal        Decimal        @default(0)
+  discount        Decimal        @default(0)
+  tax             Decimal        @default(0)
+  shippingCost    Decimal        @default(0)
+  total           Decimal        @default(0)
   notes           String?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  createdById     String
+  createdBy       User           @relation("CreatedByPurchaseOrders", fields: [createdById], references: [id])
+  deletedAt       DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
   items PurchaseOrderItem[]
 
@@ -465,10 +478,10 @@ model PurchaseOrderItem {
   product         Product?      @relation(fields: [productId], references: [id])
   description     String
   quantity        Decimal       @default(1)
-  unitPrice       Decimal       @default(0)
-  taxRate         Decimal       @default(0)
-  taxAmount       Decimal       @default(0)
-  total           Decimal       @default(0)
+  unitCost        Decimal       @default(0)
+  discount        Decimal       @default(0)
+  tax             Decimal       @default(0)
+  lineTotal       Decimal       @default(0)
 
   @@index([purchaseOrderId])
 }

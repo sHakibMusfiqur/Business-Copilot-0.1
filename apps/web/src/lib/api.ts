@@ -515,3 +515,75 @@ export async function getInventorySummary() {
   const response = await api.get('/inventory/summary');
   return response.data;
 }
+
+// ─── Purchase Management ────────────────────────────────────────
+
+export interface PurchaseListParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  supplierId?: string;
+  status?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
+
+export async function getPurchases(params?: PurchaseListParams) {
+  const response = await api.get('/purchase', { params });
+  return response.data;
+}
+
+export async function getPurchaseById(id: string) {
+  const response = await api.get(`/purchase/${id}`);
+  return response.data;
+}
+
+export async function createPurchase(data: {
+  supplierId: string;
+  notes?: string;
+  items: Array<{
+    productId: string;
+    quantity: number;
+    unitCost: number;
+    discount?: number;
+    tax?: number;
+  }>;
+}) {
+  const response = await api.post('/purchase', data);
+  return response.data;
+}
+
+export async function updatePurchase(
+  id: string,
+  data: {
+    supplierId?: string;
+    notes?: string;
+    items?: Array<{
+      productId: string;
+      quantity: number;
+      unitCost: number;
+      discount?: number;
+      tax?: number;
+    }>;
+  },
+) {
+  const response = await api.patch(`/purchase/${id}`, data);
+  return response.data;
+}
+
+export async function approvePurchase(id: string) {
+  const response = await api.post(`/purchase/${id}/approve`);
+  return response.data;
+}
+
+export async function receivePurchase(id: string, notes?: string) {
+  const response = await api.post(`/purchase/${id}/receive`, { notes });
+  return response.data;
+}
+
+export async function deletePurchase(id: string) {
+  const response = await api.delete(`/purchase/${id}`);
+  return response.data;
+}

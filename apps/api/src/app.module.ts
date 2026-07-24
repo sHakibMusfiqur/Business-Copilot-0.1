@@ -9,6 +9,7 @@ import { CustomersModule } from './customers/customers.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { OrganizationModule } from './organization/organization.module';
+import { PurchaseModule } from './purchase/purchase.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RbacModule } from './rbac/rbac.module';
 import { ProductsModule } from './products/products.module';
@@ -32,6 +33,7 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
     DashboardModule,
     InventoryModule,
     ProductsModule,
+    PurchaseModule,
     RbacModule,
     SuppliersModule,
     UsersModule,
