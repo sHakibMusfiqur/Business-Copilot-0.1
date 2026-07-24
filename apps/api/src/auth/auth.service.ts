@@ -42,44 +42,107 @@ export class AuthService {
 
     const hashedPassword = await argon2.hash(dto.password);
 
-    let user: {
-      id: string;
-      email: string;
-      name: string;
-      role: string;
-      createdAt: Date;
-    };
-
     try {
-      user = await this.prisma.user.create({
-        data: {
-          email: dto.email,
-          password: hashedPassword,
-          name: dto.name,
-          role: 'USER',
-        },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-          createdAt: true,
-        },
+      const { user } = await this.prisma.$transaction(async (tx) => {
+        const createdUser = await tx.user.create({
+          data: {
+            email: dto.email,
+            password: hashedPassword,
+            name: dto.name,
+            role: 'USER',
+          },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            role: true,
+            createdAt: true,
+          },
+        });
+
+        const baseSlug = dto.name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '') || `org-${createdUser.id.slice(0, 8)}`;
+
+        let slug = baseSlug;
+        let suffix = 2;
+        while (await tx.organization.findUnique({ where: { slug } })) {
+          slug = `${baseSlug}-${suffix}`;
+          suffix++;
+        }
+
+        const orgName = `${dto.name}'s Organization`;
+
+        const org = await tx.organization.create({
+          data: { name: orgName, slug },
+        });
+
+        await tx.organizationMember.create({
+          data: {
+            organizationId: org.id,
+            userId: createdUser.id,
+            role: 'OWNER',
+          },
+        });
+
+        const allPermissions = await tx.permission.findMany({ select: { id: true } });
+
+        const ownerRole = await tx.role.create({
+          data: {
+            name: 'Owner',
+            description: 'Full access to all organization features',
+            isSystem: true,
+            organizationId: org.id,
+          },
+        });
+
+        if (allPermissions.length > 0) {
+          await tx.rolePermission.createMany({
+            data: allPermissions.map((perm) => ({
+              roleId: ownerRole.id,
+              permissionId: perm.id,
+            })),
+          });
+        }
+
+        await tx.userRoleAssignment.create({
+          data: {
+            userId: createdUser.id,
+            roleId: ownerRole.id,
+          },
+        });
+
+        const updatedUser = await tx.user.update({
+          where: { id: createdUser.id },
+          data: { organizationId: org.id },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            role: true,
+            organizationId: true,
+            createdAt: true,
+          },
+        });
+
+        return { user: updatedUser, organization: org };
       });
+
+      const tokens = await this.generateTokens({
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        organizationId: user.organizationId ?? undefined,
+      });
+
+      return { user, ...tokens };
     } catch (error) {
       if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
         throw new ConflictException('Email already registered');
       }
       throw error;
     }
-
-    const tokens = await this.generateTokens({
-      id: user.id,
-      email: user.email,
-      role: user.role,
-    });
-
-    return { user, ...tokens };
   }
 
   async login(dto: LoginDto) {

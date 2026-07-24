@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
 
 import { getMe } from '@/lib/api';
+import { setupBroadcastListener, startRefreshTimer, stopRefreshTimer } from '@/lib/refresh-manager';
 import { useAuthStore } from '@/store/auth-store';
 
 interface AuthProviderProps {
@@ -13,6 +14,10 @@ interface AuthProviderProps {
 export function AuthProvider({ children }: AuthProviderProps) {
   const router = useRouter();
   const { user, setUser, setLoading, isLoading } = useAuthStore();
+
+  useEffect(() => {
+    setupBroadcastListener();
+  }, []);
 
   useEffect(() => {
     async function loadUser() {
@@ -25,6 +30,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }
     void loadUser();
   }, [setUser, setLoading]);
+
+  useEffect(() => {
+    if (user) {
+      startRefreshTimer();
+    } else if (!isLoading) {
+      stopRefreshTimer();
+    }
+  }, [user, isLoading]);
 
   useEffect(() => {
     if (!isLoading && !user) {
