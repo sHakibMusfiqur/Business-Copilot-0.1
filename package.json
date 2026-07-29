@@ -20,19 +20,20 @@
     "docker:down": "docker compose down"
   },
   "devDependencies": {
-    "turbo": "^2.3.0",
-    "prettier": "^3.4.0",
+    "@eslint/eslintrc": "^3.3.6",
+    "@eslint/js": "^9.0.0",
+    "@next/eslint-plugin-next": "^16.2.12",
     "@types/node": "^22.0.0",
-    "typescript": "^5.7.0",
-    "eslint": "^10.0.0",
-    "@eslint/js": "^10.0.0",
-    "typescript-eslint": "^8.0.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.2.12",
     "eslint-config-prettier": "^10.0.0",
-    "@next/eslint-plugin-next": "^15.0.0",
-    "eslint-plugin-react-hooks": "^7.0.0"
+    "prettier": "^3.4.0",
+    "turbo": "^2.3.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.0.0"
   },
   "engines": {
     "node": ">=20.0.0"
   },
-  "packageManager": "npm@10.8.0"
+  "packageManager": "npm@11.6.2"
 }

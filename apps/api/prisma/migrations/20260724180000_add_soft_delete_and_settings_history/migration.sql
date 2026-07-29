@@ -17,4 +17,4 @@ CREATE TABLE IF NOT EXISTS "SystemSettingVersion" (
 );
 CREATE INDEX IF NOT EXISTS "SystemSettingVersion_settingKey_idx" ON "SystemSettingVersion"("settingKey");
 CREATE INDEX IF NOT EXISTS "SystemSettingVersion_createdAt_idx" ON "SystemSettingVersion"("createdAt");
-ALTER TABLE "SystemSettingVersion" ADD CONSTRAINT IF NOT EXISTS "SystemSettingVersion_changedById_fkey" FOREIGN KEY ("changedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "SystemSettingVersion" ADD CONSTRAINT "SystemSettingVersion_changedById_fkey" FOREIGN KEY ("changedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;

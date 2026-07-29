@@ -6,7 +6,7 @@ import prettier from 'eslint-config-prettier';
 
 export default tseslint.config(
   // =========================================================
-  // Layer 1: Global ignores (applies to everything)
+  // Layer 1: Global ignores
   // =========================================================
   {
     ignores: [
@@ -14,9 +14,6 @@ export default tseslint.config(
       '**/dist/**',
       '**/.next/**',
       '**/coverage/**',
-      '**/*.js',
-      '**/*.mjs',
-      '**/*.cjs',
       '**/*.d.ts',
     ],
   },
@@ -50,39 +47,45 @@ export default tseslint.config(
   },
 
   // =========================================================
-  // Layer 6: NestJS overrides (apps/api)
+  // Layer 5: NestJS overrides (apps/api)
   // =========================================================
   {
     files: ['apps/api/**/*.ts'],
     rules: {
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/no-unsafe-declaration-merging': 'off',
-      /* Disabled because NestJS DI constructor parameter types
-         are value usages (needed for emitDecoratorMetadata), but
-         the linter sees them as type-only. */
       '@typescript-eslint/consistent-type-imports': 'off',
     },
   },
 
   // =========================================================
-  // Layer 7: React + Next.js overrides (apps/web)
+  // Layer 6: Next.js plugin registration (global — no files scope)
+  // =========================================================
+  {
+    plugins: {
+      '@next/next': nextPlugin,
+    },
+  },
+
+  // =========================================================
+  // Layer 7: React + Next.js rules (apps/web only)
   // =========================================================
   {
     files: ['apps/web/**/*.{ts,tsx}'],
     ...reactHooks.configs.flat.recommended,
     plugins: {
-      'react-hooks': reactHooks,
       '@next/next': nextPlugin,
+      'react-hooks': reactHooks,
     },
     rules: {
-      ...nextPlugin.flatConfig.recommended.rules,
-      ...nextPlugin.flatConfig.coreWebVitals.rules,
+      ...nextPlugin.configs.recommended.rules,
+      ...nextPlugin.configs['core-web-vitals'].rules,
       '@next/next/no-img-element': 'error',
     },
   },
 
   // =========================================================
-  // Layer 8: Prettier (must be last to disable conflicting rules)
+  // Layer 8: Prettier (must be last)
   // =========================================================
   prettier,
 );
