@@ -1,0 +1,3 @@
+ALTER TABLE "Organization" ADD COLUMN IF NOT EXISTS "archivedAt" TIMESTAMP(3);
+ALTER TABLE "Organization" ADD COLUMN IF NOT EXISTS "archivedBy" TEXT;
+ALTER TABLE "Organization" ADD COLUMN IF NOT EXISTS "archiveReason" TEXT;

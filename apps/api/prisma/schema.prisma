@@ -115,22 +115,29 @@ enum TaxType {
 }
 
 model Organization {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  slug      String   @unique
-  logo      String?
-  email     String?
-  phone     String?
-  address   String?
-  city      String?
-  state     String?
-  zipCode   String?
-  country   String?
-  timezone  String   @default("UTC")
-  locale    String   @default("en-US")
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String    @id @default(cuid())
+  name           String    @unique
+  slug           String    @unique
+  logo           String?
+  email          String?
+  phone          String?
+  address        String?
+  city           String?
+  state          String?
+  zipCode        String?
+  country        String?
+  timezone       String    @default("UTC")
+  locale         String    @default("en-US")
+  isActive       Boolean   @default(true)
+  suspendedAt    DateTime?
+  deletedAt      DateTime?
+  deletedBy      String?
+  deletedReason  String?
+  archivedAt     DateTime?
+  archivedBy     String?
+  archiveReason  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   users      User[]
   members    OrganizationMember[]
@@ -150,6 +157,8 @@ model Organization {
   receivables           Receivable[]
   payables              Payable[]
   payments              Payment[]
+  subscription          Subscription?
+  settings              OrganizationSettings?
 }
 
 model OrganizationMember {
@@ -198,6 +207,7 @@ model User {
   files                File[]
   memberOf             OrganizationMember[]
   roleAssignments      UserRoleAssignment[]
+  systemSettingChanges SystemSettingVersion[]
 }
 
 model Permission {
@@ -924,4 +934,92 @@ model TimelineEvent {
   createdAt   DateTime @default(now())
 
   @@index([leadId])
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+enum SubscriptionInterval {
+  MONTHLY
+  YEARLY
+}
+
+model SubscriptionPlan {
+  id              String                @id @default(cuid())
+  name            String
+  slug            String                @unique
+  description     String?
+  price           Decimal               @default(0)
+  currency        String                @default("USD")
+  interval        SubscriptionInterval  @default(MONTHLY)
+  features        Json?
+  maxUsers        Int                   @default(5)
+  maxStorage      Int                   @default(1024)
+  maxCustomers    Int                   @default(100)
+  maxProducts     Int                   @default(100)
+  isActive        Boolean               @default(true)
+  createdAt       DateTime              @default(now())
+  updatedAt       DateTime              @updatedAt
+
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id                  String             @id @default(cuid())
+  organizationId      String             @unique
+  organization        Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  planId              String
+  plan                SubscriptionPlan   @relation(fields: [planId], references: [id])
+  status              SubscriptionStatus @default(TRIALING)
+  currentPeriodStart  DateTime           @default(now())
+  currentPeriodEnd    DateTime
+  trialEndsAt         DateTime?
+  canceledAt          DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  @@index([organizationId])
+  @@index([planId])
+  @@index([status])
+}
+
+model OrganizationSettings {
+  id              String   @id @default(cuid())
+  organizationId  String   @unique
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  settings        Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([organizationId])
+}
+
+model SystemSettings {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+}
+
+model SystemSettingVersion {
+  id          String   @id @default(cuid())
+  settingKey  String
+  oldValue    Json?
+  newValue    Json?
+  changedById String?
+  changedBy   User?    @relation(fields: [changedById], references: [id], onDelete: SetNull)
+  reason      String?
+  version     Int
+  createdAt   DateTime @default(now())
+
+  @@index([settingKey])
+  @@index([createdAt])
 }

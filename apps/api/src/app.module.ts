@@ -13,6 +13,7 @@ import { CustomersModule } from './customers/customers.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { OrganizationModule } from './organization/organization.module';
+import { PlatformAdminModule } from './platform-admin/platform-admin.module';
 import { PurchaseModule } from './purchase/purchase.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RbacModule } from './rbac/rbac.module';
@@ -39,6 +40,7 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
     CategoriesModule,
     CustomersModule,
     OrganizationModule,
+    PlatformAdminModule,
     DashboardModule,
     InventoryModule,
     ProductsModule,

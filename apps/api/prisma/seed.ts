@@ -352,6 +352,91 @@ async function main() {
   ]);
 
   console.log('Departments created');
+
+  // ─── Platform Admin ────────────────────────────────────────────
+
+  const superAdminPassword = await argon2.hash('SuperAdmin123!');
+  await prisma.user.upsert({
+    where: { email: 'superadmin@business-copilot.com' },
+    update: {},
+    create: {
+      email: 'superadmin@business-copilot.com',
+      name: 'Super Admin',
+      password: superAdminPassword,
+      role: 'SUPER_ADMIN',
+    },
+  });
+  console.log('  Super Admin: superadmin@business-copilot.com / SuperAdmin123!');
+
+  // ─── Subscription Plans ────────────────────────────────────────
+
+  await prisma.subscriptionPlan.upsert({
+    where: { slug: 'free' },
+    update: {},
+    create: {
+      name: 'Free',
+      slug: 'free',
+      description: 'For small teams getting started',
+      price: 0,
+      maxUsers: 5,
+      maxCustomers: 50,
+      maxProducts: 50,
+      maxStorage: 512,
+      features: { invoicing: true, expenses: true, basicReports: true },
+    },
+  });
+
+  await prisma.subscriptionPlan.upsert({
+    where: { slug: 'starter' },
+    update: {},
+    create: {
+      name: 'Starter',
+      slug: 'starter',
+      description: 'For growing businesses',
+      price: 29,
+      maxUsers: 15,
+      maxCustomers: 500,
+      maxProducts: 500,
+      maxStorage: 2048,
+      features: { invoicing: true, expenses: true, reports: true, inventory: true, crm: true },
+    },
+  });
+
+  await prisma.subscriptionPlan.upsert({
+    where: { slug: 'professional' },
+    update: {},
+    create: {
+      name: 'Professional',
+      slug: 'professional',
+      description: 'For established companies',
+      price: 99,
+      interval: 'MONTHLY',
+      maxUsers: 50,
+      maxCustomers: 5000,
+      maxProducts: 5000,
+      maxStorage: 10240,
+      features: { all: true, api: true, advancedReports: true, multipleWarehouses: true },
+    },
+  });
+
+  await prisma.subscriptionPlan.upsert({
+    where: { slug: 'enterprise' },
+    update: {},
+    create: {
+      name: 'Enterprise',
+      slug: 'enterprise',
+      description: 'For large organizations',
+      price: 299,
+      interval: 'YEARLY',
+      maxUsers: 999,
+      maxCustomers: 999999,
+      maxProducts: 999999,
+      maxStorage: 102400,
+      features: { all: true, api: true, dedicatedSupport: true, customIntegrations: true, sso: true },
+    },
+  });
+
+  console.log('Subscription Plans created');
   console.log('Seed completed successfully!');
 }
 

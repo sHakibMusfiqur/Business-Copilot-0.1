@@ -36,7 +36,11 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (user) {
-      router.replace('/dashboard');
+      if (user.role === 'SUPER_ADMIN') {
+        router.replace('/admin');
+      } else {
+        router.replace('/dashboard');
+      }
     }
   }, [user, router]);
 
@@ -51,12 +55,13 @@ export default function LoginPage() {
     try {
       const result = await login(data.email, data.password);
       setUser(result.user, result.accessToken);
-      router.push('/dashboard');
+      if (result.user.role === 'SUPER_ADMIN') {
+        router.replace('/admin');
+      } else {
+        router.replace('/dashboard');
+      }
     } catch (err: unknown) {
-      const message =
-        err instanceof Error
-          ? err.message
-          : 'Invalid email or password';
+      const message = err instanceof Error ? err.message : 'Invalid email or password';
       setError(message);
     } finally {
       setIsSubmitting(false);

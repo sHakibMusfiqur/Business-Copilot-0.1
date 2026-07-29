@@ -15,6 +15,153 @@ interface TokenResponse {
   refreshToken: string;
 }
 
+export interface PaginatedResponse<T> {
+  data: T[];
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export interface OrganizationListResponse {
+  id: string;
+  name: string;
+  slug: string;
+  email: string | null;
+  logo: string | null;
+  isActive: boolean;
+  suspendedAt: string | null;
+  deletedAt: string | null;
+  deletedBy: string | null;
+  deletedReason: string | null;
+  archivedAt: string | null;
+  archivedBy: string | null;
+  archiveReason: string | null;
+  createdAt: string;
+  updatedAt: string;
+  userCount: number;
+  memberCount: number;
+  owner: { id: string; name: string; email: string } | null;
+  plan: { name: string; slug: string } | null;
+  subscriptionStatus: string | null;
+}
+
+export interface UserListResponse {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  isActive: boolean;
+  avatar: string | null;
+  organizationId: string | null;
+  lastLoginAt: string | null;
+  createdAt: string;
+  organization: { id: string; name: string } | null;
+  memberOf: { role: string }[];
+}
+
+export interface AuditLogResponse {
+  id: string;
+  action: string;
+  entity: string | null;
+  entityId: string | null;
+  status: string;
+  createdAt: string;
+  user: { id: string; name: string; email: string } | null;
+  organization: { id: string; name: string } | null;
+}
+
+export interface SubscriptionPlanResponse {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  price: number;
+  currency: string;
+  interval: string;
+  maxUsers: number;
+  maxCustomers: number;
+  maxProducts: number;
+  maxStorage: number;
+  isActive: boolean;
+  features: Record<string, boolean> | null;
+}
+
+export interface DashboardResponse {
+  organizations: {
+    total: number;
+    active: number;
+    suspended: number;
+    archived: number;
+    deleted: number;
+    newToday: number;
+    newThisWeek: number;
+    newThisMonth: number;
+  };
+  users: {
+    total: number;
+    dailyActive: number;
+    monthlyActive: number;
+    growthRate: number;
+  };
+  subscriptions: {
+    trialing: number;
+    active: number;
+    expired: number;
+    cancelled: number;
+    topPlans: { name: string; count: number }[];
+  };
+  revenue: {
+    today: number;
+    thisMonth: number;
+    lifetime: number;
+  };
+  topOrganizations: { id: string; name: string; userCount: number; revenue: number }[];
+  platform: {
+    version: string;
+    uptimeMs: number;
+  };
+  recentActivities: { id: string; action: string; createdAt: string; user: { name: string; email: string } | null }[];
+  recentErrors: { id: string; action: string; createdAt: string; user: { name: string; email: string } | null }[];
+}
+
+export class ApiError extends Error {
+  status: number;
+  code: string;
+
+  constructor(message: string, status: number, code = 'UNKNOWN_ERROR') {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+  }
+}
+
+function normalizeError(error: unknown): ApiError {
+  if (error instanceof ApiError) return error;
+  if (axios.isAxiosError(error)) {
+    const status = error.response?.status ?? 500;
+    const data = error.response?.data as Record<string, unknown> | undefined;
+    const message =
+      (data?.message as string) ??
+      (data?.error as string) ??
+      error.message ??
+      'An unexpected error occurred';
+    const code = (data?.code as string) ?? 'UNKNOWN_ERROR';
+    return new ApiError(
+      typeof message === 'string' ? message : Array.isArray(message) ? message[0] : 'An unexpected error occurred',
+      status,
+      code,
+    );
+  }
+  if (error instanceof Error) {
+    return new ApiError(error.message, 500);
+  }
+  return new ApiError('An unexpected error occurred', 500);
+}
+
 let accessToken: string | null = null;
 let refreshPromise: Promise<string | null> | null = null;
 
@@ -45,27 +192,31 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & {
-      _retry?: boolean;
-    };
+    const normalized = normalizeError(error);
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      originalRequest._retry = true;
+    if (normalized.status === 401) {
+      const originalRequest = error.config as InternalAxiosRequestConfig & {
+        _retry?: boolean;
+      };
 
-      try {
-        const newToken = await refreshAccessToken();
-        if (newToken && originalRequest.headers) {
-          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+      if (!originalRequest._retry) {
+        originalRequest._retry = true;
+
+        try {
+          const newToken = await refreshAccessToken();
+          if (newToken && originalRequest.headers) {
+            originalRequest.headers.Authorization = `Bearer ${newToken}`;
+          }
+          return api(originalRequest);
+        } catch {
+          setAccessToken(null);
+          useAuthStore.getState().logout();
+          return Promise.reject(normalized);
         }
-        return api(originalRequest);
-      } catch {
-        setAccessToken(null);
-        useAuthStore.getState().logout();
-        return Promise.reject(error);
       }
     }
 
-    return Promise.reject(error);
+    return Promise.reject(normalized);
   },
 );
 
@@ -112,6 +263,8 @@ export async function register(name: string, email: string, password: string) {
 export async function logout() {
   try {
     await api.post('/auth/logout');
+  } catch {
+    // ignore server errors during logout
   } finally {
     setAccessToken(null);
   }
@@ -134,6 +287,99 @@ export async function createOrganization(name: string) {
 
 export async function getDashboardOverview() {
   const response = await api.get('/dashboard/overview');
+  return response.data;
+}
+
+// ─── Platform Admin ──────────────────────────────────────────────
+
+export async function getAdminDashboard() {
+  const response = await api.get('/admin/dashboard');
+  return response.data;
+}
+
+export async function getAdminOrganizations(page = 1, limit = 20, search?: string, status?: string) {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (search) params.set('search', search);
+  if (status) params.set('status', status);
+  const response = await api.get(`/admin/organizations?${params}`);
+  return response.data;
+}
+
+export async function getAdminOrganization(id: string) {
+  const response = await api.get(`/admin/organizations/${id}`);
+  return response.data;
+}
+
+export async function createAdminOrganization(data: {
+  name: string;
+  ownerEmail: string;
+  ownerName: string;
+  ownerPassword: string;
+  planSlug?: string;
+}) {
+  const response = await api.post('/admin/organizations', data);
+  return response.data;
+}
+
+export async function updateAdminOrganization(id: string, data: Record<string, unknown>) {
+  const response = await api.patch(`/admin/organizations/${id}`, data);
+  return response.data;
+}
+
+export async function suspendOrganization(id: string) {
+  const response = await api.patch(`/admin/organizations/${id}/suspend`);
+  return response.data;
+}
+
+export async function activateOrganization(id: string) {
+  const response = await api.patch(`/admin/organizations/${id}/activate`);
+  return response.data;
+}
+
+export async function deleteAdminOrganization(id: string) {
+  const response = await api.delete(`/admin/organizations/${id}`);
+  return response.data;
+}
+
+export async function transferOwnership(id: string, newOwnerUserId: string) {
+  const response = await api.patch(`/admin/organizations/${id}/transfer`, { newOwnerUserId });
+  return response.data;
+}
+
+export async function getAdminUsers(page = 1, limit = 20, search?: string, organizationId?: string, role?: string) {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (search) params.set('search', search);
+  if (organizationId) params.set('organizationId', organizationId);
+  if (role) params.set('role', role);
+  const response = await api.get(`/admin/users?${params}`);
+  return response.data;
+}
+
+export async function getAdminAuditLogs(page = 1, limit = 20, search?: string, action?: string) {
+  const params = new URLSearchParams({ page: String(page), limit: String(limit) });
+  if (search) params.set('search', search);
+  if (action) params.set('action', action);
+  const response = await api.get(`/admin/audit?${params}`);
+  return response.data;
+}
+
+export async function getAdminAuditActions() {
+  const response = await api.get('/admin/audit/actions');
+  return response.data;
+}
+
+export async function getAdminSettings() {
+  const response = await api.get('/admin/settings');
+  return response.data;
+}
+
+export async function updateAdminSetting(key: string, value: unknown) {
+  const response = await api.patch('/admin/settings', { key, value });
+  return response.data;
+}
+
+export async function getAdminPlans() {
+  const response = await api.get('/admin/plans');
   return response.data;
 }
 
