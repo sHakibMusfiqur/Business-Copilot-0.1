@@ -30,7 +30,9 @@
     "prettier": "^3.4.0",
     "turbo": "^2.3.0",
     "typescript": "^5.7.0",
-    "typescript-eslint": "^8.0.0"
+    "typescript-eslint": "^8.0.0",
+    "@emnapi/core": "^2.0.0-alpha.3",
+    "@emnapi/runtime": "^2.0.0-alpha.3"
   },
   "engines": {
     "node": ">=20.0.0"
