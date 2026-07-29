@@ -11,6 +11,10 @@
       "persistent": true
     },
     "lint": {},
+    "test": {
+      "dependsOn": ["build"],
+      "inputs": ["src/**/*.ts", "src/**/*.tsx"]
+    },
     "clean": {
       "cache": false
     }

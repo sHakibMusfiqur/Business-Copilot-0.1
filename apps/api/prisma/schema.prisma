@@ -1023,3 +1023,68 @@ model SystemSettingVersion {
   @@index([settingKey])
   @@index([createdAt])
 }
+
+model IdempotencyRecord {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  response  Json
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+model ChecklistItem {
+  id          String    @id @default(cuid())
+  sessionId   String
+  itemId      String
+  label       String
+  icon        String?
+  href        String?
+  completed   Boolean   @default(false)
+  skippable   Boolean   @default(true)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  @@index([sessionId])
+}
+
+model OnboardingSession {
+  id               String    @id @default(cuid())
+  userId           String?
+  email            String
+  name             String
+  version          Int       @default(1)
+  currentStep      Int       @default(0)
+  completedSteps   Json?     @default("[]")
+  selectedIndustry String?
+  selectedCategory String?
+  orgName          String?
+  orgEmail         String?
+  orgPhone         String?
+  orgWebsite       String?
+  orgCountry       String?
+  orgState         String?
+  orgCity          String?
+  orgAddress       String?
+  orgTimezone      String?
+  orgCurrency      String?
+  orgLanguage      String?
+  businessProfile  Json?
+  selectedModules  Json?     @default("[]")
+  aiEnabled        Boolean   @default(false)
+  aiLanguage       String?
+  aiPersonality    String?
+  selectedPlanId   String?
+  subscriptionId   String?
+  provisionStatus  String    @default("PENDING")
+  provisionData    Json?
+  organizationId   String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([email])
+  @@index([userId])
+  @@index([organizationId])
+}

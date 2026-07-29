@@ -21,6 +21,7 @@ import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 import { OrganizationCard } from '@/components/dashboard/organization-card';
 import { QuickActions } from '@/components/dashboard/quick-actions';
 import { StatCard } from '@/components/dashboard/stat-card';
+import { OnboardingWidget } from '@/components/dashboard/onboarding-widget';
 import type { DashboardOverview } from '@/components/dashboard/types';
 import { getDashboardOverview } from '@/lib/api';
 
@@ -64,6 +65,8 @@ export default function DashboardPage() {
       <DashboardHeader organizationName={organization.name} />
 
       <OrganizationCard organization={organization} />
+
+      <OnboardingWidget />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {statCards.slice(0, 8).map((stat, index) => (

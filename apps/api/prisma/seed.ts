@@ -278,7 +278,9 @@ async function main() {
   const permissions = await seedPermissions();
   const permissionMap = new Map(permissions.map((p) => [p.name, p.id]));
   const allPermissionIds = permissions.map((p) => p.id);
-  const adminPermissionIds = ADMIN_PERMISSIONS.map((name) => permissionMap.get(name)!).filter(Boolean);
+  const adminPermissionIds = ADMIN_PERMISSIONS
+    .map((name) => permissionMap.get(name))
+    .filter((id): id is string => id !== undefined);
 
   const { ownerRole, adminRole } = await seedRoles(org.id, allPermissionIds, adminPermissionIds);
 

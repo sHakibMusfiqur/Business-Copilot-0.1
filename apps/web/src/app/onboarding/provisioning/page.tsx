@@ -1,0 +1,197 @@
+'use client';
+
+import { motion } from 'framer-motion';
+import { Check, Loader2, AlertCircle, ArrowRight, PartyPopper } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { useOnboarding } from '../_hooks/onboarding-context';
+import {
+  provisionOrganization, createProvisioningEventSource,
+  type ProvisioningProgress,
+} from '@/lib/onboarding-api';
+
+export default function ProvisioningPage() {
+  const { wizard, session, completeStep } = useOnboarding();
+  const [progress, setProgress] = useState<ProvisioningProgress | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const esRef = useRef<EventSource | null>(null);
+
+  useEffect(() => {
+    if (!session) return;
+
+    if (session.provisionStatus === 'COMPLETED') {
+      setDone(true);
+      return;
+    }
+
+    if (session.provisionStatus === 'FAILED') {
+      setError('Previous provisioning failed. Retry to resume.');
+      return;
+    }
+
+    const startProvision = async () => {
+      setStarting(true);
+      try {
+        await provisionOrganization(session.id);
+      } catch (e) {
+        setError((e as Error).message ?? 'Provisioning failed to start');
+        setStarting(false);
+        return;
+      }
+      setStarting(false);
+
+      const es = createProvisioningEventSource(session.id);
+      esRef.current = es;
+
+      es.addEventListener('provisioning', (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          setProgress((prev) => ({
+            sessionId: session.id,
+            status: 'PROVISIONING',
+            progress: data.progress ?? prev?.progress ?? 0,
+            currentTask: data.currentTask ?? prev?.currentTask ?? null,
+            completedTasks: data.completedTasks ?? prev?.completedTasks ?? [],
+            failedTask: data.failedTask ?? null,
+            error: null,
+          }));
+        } catch { /* ignore parse errors */ }
+      });
+
+      es.onerror = () => {
+        es.close();
+      };
+    };
+
+    startProvision();
+
+    return () => {
+      if (esRef.current) {
+        esRef.current.close();
+        esRef.current = null;
+      }
+    };
+  }, [session]);
+
+  useEffect(() => {
+    if (!done && progress?.status === 'COMPLETED') {
+      setDone(true);
+      completeStep(9);
+    }
+  }, [progress?.status]);
+
+  if (!session) {
+    return <div className="flex items-center justify-center pt-20"><p className="text-slate-400">No session found.</p></div>;
+  }
+
+  if (done) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="mx-auto max-w-md pt-8 text-center"
+      >
+        <div className="rounded-2xl border border-green-500/30 bg-green-500/10 p-8 backdrop-blur-xl">
+          <div className="mb-4 flex justify-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500/20">
+              <PartyPopper className="h-8 w-8 text-green-400" />
+            </div>
+          </div>
+          <h2 className="mb-2 text-2xl font-bold text-white">Provisioning Complete!</h2>
+          <p className="mb-6 text-sm text-slate-400">Your organization is ready. Let&apos;s finish setup.</p>
+          <button
+            onClick={() => wizard.goNext()}
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-green-600 to-emerald-600 px-6 py-3 font-semibold text-white shadow-lg transition-all hover:from-green-500 hover:to-emerald-500"
+          >
+            Continue <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
+      </motion.div>
+    );
+  }
+
+  if (error) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="mx-auto max-w-md pt-8 text-center"
+      >
+        <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-8 backdrop-blur-xl">
+          <div className="mb-4 flex justify-center">
+            <AlertCircle className="h-12 w-12 text-red-400" />
+          </div>
+          <h2 className="mb-2 text-xl font-bold text-white">Something went wrong</h2>
+          <p className="mb-6 text-sm text-red-400">{error}</p>
+          <button
+            onClick={() => { setError(null); setStarting(true); }}
+            className="rounded-xl bg-gradient-to-r from-red-600 to-rose-600 px-6 py-3 font-semibold text-white shadow-lg transition-all hover:from-red-500 hover:to-rose-500"
+          >
+            Retry
+          </button>
+        </div>
+      </motion.div>
+    );
+  }
+
+  const tasks = progress?.completedTasks ?? [];
+  const pct = progress?.progress ?? 0;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="mx-auto max-w-md pt-8 text-center"
+    >
+      <div className="rounded-2xl border border-slate-700/50 bg-slate-800/40 p-8 backdrop-blur-xl">
+        <div className="mb-6 flex justify-center">
+          {starting ? (
+            <Loader2 className="h-12 w-12 animate-spin text-blue-400" />
+          ) : (
+            <div className="relative">
+              <svg className="h-20 w-20 -rotate-90" viewBox="0 0 72 72">
+                <circle cx="36" cy="36" r="30" fill="none" stroke="rgb(51 65 85)" strokeWidth="6" />
+                <circle
+                  cx="36" cy="36" r="30" fill="none" stroke="rgb(59 130 246)" strokeWidth="6"
+                  strokeDasharray={188.5}
+                  strokeDashoffset={188.5 - (188.5 * pct) / 100}
+                  strokeLinecap="round"
+                  className="transition-all duration-500"
+                />
+              </svg>
+              <span className="absolute inset-0 flex items-center justify-center text-lg font-bold text-white">
+                {pct}%
+              </span>
+            </div>
+          )}
+        </div>
+
+        <h2 className="mb-2 text-xl font-bold text-white">
+          {starting ? 'Starting Provisioning...' : 'Setting Up Your Organization'}
+        </h2>
+        <p className="mb-6 text-sm text-slate-400">
+          {progress?.currentTask ?? 'Preparing your workspace...'}
+        </p>
+
+        <div className="space-y-2">
+          {['Organization', 'Owner', 'Roles', 'Departments', 'Subscription', 'Settings'].map((label) => {
+            const isDone = tasks.some((t) => t.toLowerCase().includes(label.toLowerCase()));
+            return (
+              <div key={label} className="flex items-center gap-3 rounded-lg bg-slate-800/30 px-4 py-2.5">
+                <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
+                  isDone ? 'bg-green-500/20 text-green-400' : 'bg-slate-700 text-slate-500'
+                }`}>
+                  {isDone ? <Check className="h-3 w-3" /> : <div className="h-2 w-2 rounded-full bg-slate-600" />}
+                </div>
+                <span className={`text-sm ${isDone ? 'text-green-300' : 'text-slate-400'}`}>
+                  {label}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </motion.div>
+  );
+}

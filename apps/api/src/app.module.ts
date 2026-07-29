@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { ScheduleModule } from '@nestjs/schedule';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 
@@ -12,6 +13,7 @@ import { CrmModule } from './crm/crm.module';
 import { CustomersModule } from './customers/customers.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { OnboardingModule } from './onboarding/onboarding.module';
 import { OrganizationModule } from './organization/organization.module';
 import { PlatformAdminModule } from './platform-admin/platform-admin.module';
 import { PurchaseModule } from './purchase/purchase.module';
@@ -25,6 +27,7 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 
 @Module({
   imports: [
+    ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([
       { name: 'short', ttl: 1000, limit: 10 },
       { name: 'medium', ttl: 10000, limit: 50 },
@@ -39,6 +42,7 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
     SystemModule,
     CategoriesModule,
     CustomersModule,
+    OnboardingModule,
     OrganizationModule,
     PlatformAdminModule,
     DashboardModule,
