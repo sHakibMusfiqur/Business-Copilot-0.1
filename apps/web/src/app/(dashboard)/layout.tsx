@@ -21,7 +21,6 @@ import {
   ChevronRight,
   LogOut,
   Search,
-  Sun,
   Menu,
   X,
   ChevronDown,
@@ -135,15 +134,15 @@ export default function DashboardLayout({
             >
               <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
                 <Link href="/dashboard" className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary">
-                    <span className="text-sm font-bold text-primary-foreground">BC</span>
-                  </div>
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500">
+                      <span className="text-sm font-bold text-white">BC</span>
+                    </div>
                   {!collapsed && (
                     <motion.span
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className="text-sm font-semibold text-sidebar-foreground"
+                      className="text-sm font-bold text-slate-900"
                     >
                       Business Copilot
                     </motion.span>
@@ -154,7 +153,7 @@ export default function DashboardLayout({
                     setCollapsed(!collapsed);
                     setMobileOpen(false);
                   }}
-                  className="hidden rounded-lg p-1.5 text-sidebar-muted hover:bg-sidebar-accent lg:block"
+                  className="hidden rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 lg:block"
                 >
                   {collapsed ? (
                     <ChevronRight className="h-4 w-4" />
@@ -164,7 +163,7 @@ export default function DashboardLayout({
                 </button>
                 <button
                   onClick={() => setMobileOpen(false)}
-                  className="rounded-lg p-1.5 text-sidebar-muted hover:bg-sidebar-accent lg:hidden"
+                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 lg:hidden"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -174,7 +173,7 @@ export default function DashboardLayout({
                 {sidebarItems.map((section) => (
                   <div key={section.section} className="mb-4">
                     {!collapsed && (
-                      <p className="mb-2 px-3 text-xs font-medium text-sidebar-muted">
+                      <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
                         {section.section}
                       </p>
                     )}
@@ -185,10 +184,10 @@ export default function DashboardLayout({
                           key={item.href}
                           href={item.href}
                           onClick={() => setMobileOpen(false)}
-                          className={`group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all ${
+                          className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
                             isActive
-                              ? 'bg-primary/10 text-primary font-medium'
-                              : 'text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground'
+                              ? 'bg-red-50 text-red-600 font-semibold'
+                              : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
                           }`}
                         >
                           <item.icon className="h-4 w-4 shrink-0" />
@@ -207,42 +206,42 @@ export default function DashboardLayout({
                 ))}
               </nav>
 
-              <div className="border-t border-sidebar-border p-3">
+              <div className="border-t border-slate-100 p-3">
                 <div className="relative">
                   <button
                     onClick={() => setUserMenuOpen(!userMenuOpen)}
-                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
+                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-slate-500 hover:bg-slate-50 hover:text-slate-800 transition-colors"
                   >
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-50 text-xs font-semibold text-red-600">
                       {user?.name ? generateInitials(user.name) : 'U'}
                     </div>
                     {!collapsed && (
                       <>
                         <div className="flex-1 text-left">
-                          <p className="text-sm font-medium text-sidebar-foreground truncate">
+                          <p className="text-sm font-semibold text-slate-900 truncate">
                             {user?.name ?? 'User'}
                           </p>
-                          <p className="text-xs text-sidebar-muted truncate">
+                          <p className="text-xs text-slate-400 truncate">
                             {user?.email ?? ''}
                           </p>
                         </div>
-                        <ChevronDown className={`h-3 w-3 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
+                        <ChevronDown className={`h-3 w-3 text-slate-400 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
                       </>
                     )}
                   </button>
 
                   {userMenuOpen && !collapsed && (
-                    <div className="absolute bottom-full left-0 right-0 mb-2 rounded-lg border bg-popover p-1 shadow-lg">
+                    <div className="absolute bottom-full left-0 right-0 mb-2 rounded-2xl border border-slate-100 bg-white p-1.5 shadow-lg shadow-slate-200/50">
                       <Link
                         href="/dashboard/settings"
-                        className="flex items-center gap-2 rounded-md px-3 py-2 text-sm text-popover-foreground hover:bg-accent"
+                        className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
                       >
                         <Settings className="h-4 w-4" />
                         Settings
                       </Link>
                       <button
                         onClick={handleLogout}
-                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-destructive hover:bg-destructive/10"
+                        className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
                       >
                         <LogOut className="h-4 w-4" />
                         Sign out
@@ -254,34 +253,32 @@ export default function DashboardLayout({
             </aside>
 
             <main className={`flex-1 transition-all duration-300 ${collapsed ? 'lg:ml-[72px]' : 'lg:ml-[260px]'}`}>
-              <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b bg-background/80 backdrop-blur-xl px-4 lg:px-8">
+              <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-slate-100 bg-white/80 backdrop-blur-xl px-4 lg:px-8">
                 <button
                   onClick={() => setMobileOpen(true)}
-                  className="rounded-lg p-2 text-muted-foreground hover:bg-accent lg:hidden"
+                  className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 lg:hidden"
                 >
                   <Menu className="h-5 w-5" />
                 </button>
 
                 <button
                   onClick={() => setSearchOpen(!searchOpen)}
-                  className="flex flex-1 items-center gap-2 rounded-lg border bg-muted/50 px-3 py-2 text-sm text-muted-foreground lg:max-w-md"
+                  className="flex flex-1 items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/50 px-3 py-2 text-sm text-slate-400 hover:border-slate-200 transition-colors lg:max-w-md"
                 >
                   <Search className="h-4 w-4" />
-                  <span>Search...</span>
-                  <kbd className="ml-auto hidden rounded border bg-background px-1.5 text-xs lg:inline">
+                  <span>Search anything...</span>
+                  <kbd className="ml-auto hidden rounded-lg border border-slate-100 bg-white px-1.5 py-0.5 text-[11px] font-medium text-slate-400 lg:inline">
                     Ctrl+K
                   </kbd>
                 </button>
 
-                <div className="flex items-center gap-2 ml-auto">
-                  <button className="rounded-lg p-2 text-muted-foreground hover:bg-accent">
+                <div className="flex items-center gap-1 ml-auto">
+                  <button className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
                     <HelpCircle className="h-4 w-4" />
                   </button>
-                  <button className="rounded-lg p-2 text-muted-foreground hover:bg-accent">
+                  <button className="relative rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
                     <Bell className="h-4 w-4" />
-                  </button>
-                  <button className="rounded-lg p-2 text-muted-foreground hover:bg-accent">
-                    <Sun className="h-4 w-4" />
+                    <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
                   </button>
                 </div>
               </header>

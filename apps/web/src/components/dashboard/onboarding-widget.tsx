@@ -1,12 +1,10 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { ClipboardCheck, ArrowRight, Loader2 } from 'lucide-react';
+import { ClipboardCheck, ArrowRight, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/auth-store';
 import { getSessionByEmail, getChecklistProgress } from '@/lib/onboarding-api';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 
 export function OnboardingWidget() {
   const user = useAuthStore((s) => s.user);
@@ -30,75 +28,71 @@ export function OnboardingWidget() {
     staleTime: 30000,
   });
 
-  if (sessionQuery.isLoading) {
-    return (
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Onboarding
-          </CardTitle>
-        </CardHeader>
-      </Card>
-    );
-  }
+  if (sessionQuery.isLoading) return null;
 
   if (!session) return null;
 
   if (session.provisionStatus === 'PENDING' || session.provisionStatus === 'PROVISIONING') {
     return (
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <ClipboardCheck className="h-4 w-4 text-amber-500" />
-            Onboarding In Progress
-          </CardTitle>
-          <CardDescription>Complete your setup to get started</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="mb-3 text-sm text-muted-foreground">
-            Step {session.currentStep} of 11
+      <div className="rounded-2xl border border-red-100/50 shadow-sm hover:shadow-md transition-all duration-200 p-4 sm:p-5 flex items-start gap-4 bg-gradient-to-r from-red-50/50 to-amber-50/50">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-100">
+          <Sparkles className="h-5 w-5 text-red-500" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-slate-900">Complete Your Onboarding</h3>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Step {session.currentStep} of 11 — Set up your organization to unlock all features
           </p>
-          <Button asChild size="sm" className="w-full">
-            <Link href="/onboarding">
+          <div className="mt-3">
+            <Link
+              href="/onboarding"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-red-500 px-4 py-2 text-xs font-medium text-white hover:bg-red-600 transition-colors"
+            >
               Resume Onboarding
-              <ArrowRight className="ml-2 h-3 w-3" />
+              <ArrowRight className="h-3 w-3" />
             </Link>
-          </Button>
-        </CardContent>
-      </Card>
+          </div>
+        </div>
+      </div>
     );
   }
 
   if (session.provisionStatus === 'COMPLETED' && checklistQuery.data) {
     const { total, completed, percentage } = checklistQuery.data;
-
     if (total === 0) return null;
 
     return (
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <ClipboardCheck className="h-4 w-4 text-emerald-500" />
-            Getting Started Checklist
-          </CardTitle>
-          <CardDescription>{completed}/{total} tasks complete</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="h-2 w-full rounded-full bg-muted">
-            <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${percentage}%` }} />
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all duration-200 p-4 sm:p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50">
+              <ClipboardCheck className="h-5 w-5 text-emerald-500" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-sm font-semibold text-slate-900">Getting Started Checklist</h3>
+              <p className="text-xs text-slate-500 mt-0.5">{completed}/{total} tasks complete</p>
+            </div>
           </div>
-          <p className="text-xs text-muted-foreground">{percentage}% complete</p>
-          {percentage < 100 && (
-            <Button asChild variant="outline" size="sm" className="w-full">
-              <Link href={`/onboarding/success?sessionId=${session.id}`}>
-                View Checklist
-                <ArrowRight className="ml-2 h-3 w-3" />
-              </Link>
-            </Button>
-          )}
-        </CardContent>
-      </Card>
+          <span className="shrink-0 text-xs font-bold text-emerald-600">{percentage}%</span>
+        </div>
+        <div className="mt-3 h-1.5 w-full rounded-full bg-slate-100">
+          <div
+            className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+            style={{ width: `${percentage}%` }}
+          />
+        </div>
+        {percentage < 100 && (
+          <div className="mt-3">
+            <Link
+              href={`/onboarding/success?sessionId=${session.id}`}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 hover:text-emerald-700 transition-colors"
+            >
+              View Checklist
+              <ArrowRight className="h-3 w-3" />
+            </Link>
+          </div>
+        )}
+      </div>
     );
   }
 

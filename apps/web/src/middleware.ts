@@ -6,6 +6,8 @@ import { decodeJWT, isTokenExpired } from '@/lib/jwt';
 
 const PUBLIC_ROUTES = ['/', '/login', '/register', '/forgot-password', '/reset-password'];
 
+const ONBOARDING_ROUTES = ['/onboarding'];
+
 const ORG_ROUTE_PREFIXES = [
   '/dashboard',
   '/customers',
@@ -58,6 +60,11 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // ── Onboarding routes (allow unauthenticated access for steps 0-1) ──
+  if (ONBOARDING_ROUTES.some((prefix) => pathname === prefix || pathname.startsWith(prefix + '/'))) {
+    return NextResponse.next();
+  }
+
   // ── Protected routes (require authentication) ──────────────────
   if (!isLoggedIn) {
     const loginUrl = new URL('/login', request.url);
@@ -82,7 +89,7 @@ export function middleware(request: NextRequest) {
       if (role === 'SUPER_ADMIN') {
         return NextResponse.redirect(new URL('/admin', request.url));
       }
-      return NextResponse.redirect(new URL('/organization/create', request.url));
+      return NextResponse.redirect(new URL('/onboarding', request.url));
     }
     return NextResponse.next();
   }

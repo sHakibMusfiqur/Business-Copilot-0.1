@@ -47,7 +47,7 @@ export default function RegisterPage() {
 
   useEffect(() => {
     if (user) {
-      router.replace('/dashboard');
+      router.replace('/onboarding');
     }
   }, [user, router]);
 
@@ -62,7 +62,7 @@ export default function RegisterPage() {
     try {
       const result = await registerUser(data.name, data.email, data.password);
       setUser(result.user, result.accessToken);
-      router.push('/dashboard');
+      router.push('/onboarding');
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : 'Registration failed';

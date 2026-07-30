@@ -38,8 +38,10 @@ export default function LoginPage() {
     if (user) {
       if (user.role === 'SUPER_ADMIN') {
         router.replace('/admin');
-      } else {
+      } else if (user.organizationId) {
         router.replace('/dashboard');
+      } else {
+        router.replace('/onboarding');
       }
     }
   }, [user, router]);
@@ -57,8 +59,10 @@ export default function LoginPage() {
       setUser(result.user, result.accessToken);
       if (result.user.role === 'SUPER_ADMIN') {
         router.replace('/admin');
-      } else {
+      } else if (result.user.organizationId) {
         router.replace('/dashboard');
+      } else {
+        router.replace('/onboarding');
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Invalid email or password';
