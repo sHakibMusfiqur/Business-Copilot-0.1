@@ -1,7 +1,7 @@
 import type { User } from '@bc/types';
 import { create } from 'zustand';
 
-import { setAccessToken } from '@/lib/api';
+import { setAccessToken, clearAuthCookie } from '@/lib/api';
 
 interface AuthState {
   user: User | null;
@@ -29,6 +29,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   setLoading: (isLoading) => set({ isLoading }),
   logout: () => {
     setAccessToken(null);
+    clearAuthCookie();
     set({
       user: null,
       isAuthenticated: false,

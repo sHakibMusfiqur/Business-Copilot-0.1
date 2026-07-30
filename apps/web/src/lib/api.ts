@@ -234,6 +234,7 @@ export async function refreshAccessToken(): Promise<string | null> {
       );
       const token = response.data.accessToken;
       setAccessToken(token);
+      setAuthCookie(token);
       return token;
     } catch {
       setAccessToken(null);
@@ -246,10 +247,21 @@ export async function refreshAccessToken(): Promise<string | null> {
   return refreshPromise;
 }
 
+function setAuthCookie(token: string): void {
+  if (typeof document === 'undefined') return;
+  document.cookie = `access_token=${token}; path=/; max-age=900; samesite=lax`;
+}
+
+export function clearAuthCookie(): void {
+  if (typeof document === 'undefined') return;
+  document.cookie = 'access_token=; path=/; max-age=0';
+}
+
 export async function login(email: string, password: string) {
   const response = await api.post('/auth/login', { email, password });
   const { accessToken: token, user } = response.data;
   setAccessToken(token);
+  setAuthCookie(token);
   return { user, accessToken: token };
 }
 
@@ -257,6 +269,7 @@ export async function register(name: string, email: string, password: string) {
   const response = await api.post('/auth/register', { name, email, password });
   const { accessToken: token, user } = response.data;
   setAccessToken(token);
+  setAuthCookie(token);
   return { user, accessToken: token };
 }
 
@@ -267,6 +280,7 @@ export async function logout() {
     // ignore server errors during logout
   } finally {
     setAccessToken(null);
+    clearAuthCookie();
   }
 }
 
