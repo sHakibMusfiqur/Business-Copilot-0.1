@@ -2,9 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bell, Shield, Loader2 } from 'lucide-react';
+import { Bell, Shield } from 'lucide-react';
 
-import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/components/ui/use-toast';
 import { api } from '@/lib/api';

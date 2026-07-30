@@ -5,9 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Database, Upload, FileText } from 'lucide-react';
+import { Database, FileText } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
@@ -73,7 +72,7 @@ export default function ImportPage() {
     },
   });
 
-  const { register, handleSubmit, watch, setValue } = form;
+  const { register, watch, setValue } = form;
 
   const handleSave = async () => {
     if (!selectedType) {

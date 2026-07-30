@@ -2,12 +2,12 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Upload } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
@@ -46,7 +46,7 @@ export default function BrandingPage() {
     },
   });
 
-  const { register, handleSubmit, watch, setValue } = form;
+  const { register, watch, setValue } = form;
   const primaryColor = watch('primaryColor');
 
   const handleSave = async () => {
@@ -102,7 +102,7 @@ export default function BrandingPage() {
             logoPreview ? "border-primary/30" : "border-muted-foreground/25"
           )}>
             {logoPreview ? (
-              <img src={logoPreview} alt="Logo preview" className="h-16 w-16 rounded-lg object-contain" />
+              <Image src={logoPreview} alt="Logo preview" width={64} height={64} className="h-16 w-16 rounded-lg object-contain" />
             ) : (
               <Upload className="h-6 w-6 text-muted-foreground" />
             )}

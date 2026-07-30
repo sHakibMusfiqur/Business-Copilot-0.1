@@ -5,9 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Mail, Loader2 } from 'lucide-react';
+import { Mail } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
@@ -29,8 +28,6 @@ const schema = z.object({
 
 type FormData = z.infer<typeof schema>;
 
-const inputClass = 'flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
-
 export default function EmailPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -50,7 +47,7 @@ export default function EmailPage() {
     },
   });
 
-  const { register, handleSubmit, watch, setValue } = form;
+  const { register, watch, setValue } = form;
 
   const handleSave = async () => {
     setSaving(true);
