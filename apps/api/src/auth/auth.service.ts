@@ -167,6 +167,20 @@ export class AuthService {
       return { user, ...tokens };
     } catch (error) {
       if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
+        const meta = error.meta as Record<string, unknown> | undefined;
+        const modelName = meta?.modelName as string | undefined;
+        const target = meta?.target as string | string[] | undefined;
+        const fields = Array.isArray(target) ? target : target ? [target] : [];
+
+        if (modelName === 'Organization') {
+          if (fields.includes('name')) {
+            throw new ConflictException('Organization name already exists');
+          }
+          if (fields.includes('slug')) {
+            throw new ConflictException('Organization slug already exists');
+          }
+        }
+
         await this.rateLimiter.recordAttempt(`email:${dto.email}`);
         await this.rateLimiter.recordAttempt(`ip:${ip}`);
         await this.auditService.record({
