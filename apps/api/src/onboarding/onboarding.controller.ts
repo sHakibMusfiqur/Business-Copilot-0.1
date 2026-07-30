@@ -68,7 +68,7 @@ export class OnboardingController {
   @ApiBody({ type: UpdateSessionDto })
   @ApiOkResponse({ type: SessionResponseDto })
   async updateSession(@Param('id') id: string, @Body() dto: UpdateSessionDto) {
-    console.log('[BACKEND PATCH RECEIVED]', { id, selectedIndustry: (dto as any).selectedIndustry, orgName: (dto as any).orgName, version: (dto as any).version });
+    console.log('[BACKEND PATCH RECEIVED]', { id, selectedIndustry: dto.selectedIndustry, orgName: dto.orgName, version: dto.version });
     const result = await this.onboardingService.updateSession(id, dto);
     console.log('[BACKEND PATCH RESPONSE]', { selectedIndustry: result?.selectedIndustry, orgName: result?.orgName, version: result?.version, currentStep: result?.currentStep });
     return result;
