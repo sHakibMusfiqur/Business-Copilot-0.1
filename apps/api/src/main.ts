@@ -3,23 +3,49 @@ import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
+import type { Request, Response, NextFunction } from 'express';
 
 import { AppModule } from './app.module';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
+  const requestLogger = new Logger('HTTP');
   const app = await NestFactory.create(AppModule);
 
   app.setGlobalPrefix('api');
 
   app.enableCors({
-    origin: [process.env.WEB_URL ?? 'http://localhost:3000'],
+    origin(origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
+      const allowed = [
+        process.env.WEB_URL ?? 'http://localhost:3000',
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'http://localhost:3001',
+        'http://127.0.0.1:3001',
+      ].filter(Boolean) as string[];
+      if (!origin || allowed.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Origin ${origin} not allowed by CORS`));
+      }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id'],
   });
 
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    requestLogger.log(`>>> INCOMING ${req.method} ${req.originalUrl} from=${req.ip} origin=${req.headers.origin ?? '(none)'}`);
+    const originalEnd = res.end.bind(res) as (...args: unknown[]) => ReturnType<Response['end']>;
+    res.end = function (this: Response, ...args: unknown[]) {
+      requestLogger.log(`<<< RESPONSE ${req.method} ${req.originalUrl} status=${res.statusCode}`);
+      return originalEnd(...args);
+    } as Response['end'];
+    next();
+  });
+
   app.use(cookieParser());
 
   app.useGlobalPipes(

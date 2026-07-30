@@ -9,6 +9,7 @@ import {
   Res,
   UnauthorizedException,
   UseGuards,
+  Logger,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -35,6 +36,8 @@ import { RegisterDto } from './dto/register.dto';
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(private readonly authService: AuthService) {}
 
   @Public()
@@ -49,12 +52,24 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
     @Req() request: Request,
   ) {
+    this.logger.log(`=== REGISTER CONTROLLER ENTERED: email=${dto.email} name=${dto.name} ip=${request.ip} ===`);
     const ip = request.ip ?? '';
     const userAgent = request.headers['user-agent'] ?? '';
-    const result = await this.authService.register(dto, ip, userAgent);
-    this.setRefreshTokenCookie(response, result.refreshToken);
-    this.setAccessTokenCookie(response, result.accessToken);
-    return result;
+    try {
+      const result = await this.authService.register(dto, ip, userAgent);
+      this.logger.log(`=== REGISTER CONTROLLER SERVICE RETURNED SUCCESSFULLY ===`);
+      this.setRefreshTokenCookie(response, result.refreshToken);
+      this.setAccessTokenCookie(response, result.accessToken);
+      this.logger.log(`=== REGISTER CONTROLLER COOKIES SET, RETURNING RESPONSE ===`);
+      return result;
+    } catch (err: unknown) {
+      this.logger.error(`=== REGISTER CONTROLLER CAUGHT EXCEPTION ===`);
+      this.logger.error(`error=${err instanceof Error ? err.message : String(err)}`);
+      if (err instanceof Error) {
+        this.logger.error(`stack=${err.stack}`);
+      }
+      throw err;
+    }
   }
 
   @Public()

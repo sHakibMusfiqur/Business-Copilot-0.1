@@ -36,6 +36,7 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto, ip: string, userAgent?: string) {
+    this.logger.log(`=== AUTH SERVICE register() ENTERED: email=${dto.email} ip=${ip} ===`);
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -54,10 +55,14 @@ export class AuthService {
       throw new ConflictException('Email already registered');
     }
 
+    this.logger.log(`=== AUTH SERVICE about to hash password ===`);
     const hashedPassword = await argon2.hash(dto.password);
+    this.logger.log(`=== AUTH SERVICE password hashed successfully ===`);
 
     try {
+      this.logger.log(`=== AUTH SERVICE entering Prisma $transaction ===`);
       const { user } = await this.prisma.$transaction(async (tx) => {
+        this.logger.log(`=== TRANSACTION: creating user ===`);
         const createdUser = await tx.user.create({
           data: {
             email: dto.email,
@@ -142,10 +147,12 @@ export class AuthService {
 
         return { user: updatedUser, organization: org };
       });
+      this.logger.log(`=== AUTH SERVICE Prisma $transaction completed successfully ===`);
 
       await this.rateLimiter.clearAttempts(`email:${user.email}`);
       await this.rateLimiter.clearAttempts(`ip:${ip}`);
 
+      this.logger.log(`=== AUTH SERVICE generating tokens ===`);
       const tokens = await this.generateTokens({
         id: user.id,
         email: user.email,
@@ -164,8 +171,15 @@ export class AuthService {
         userAgent,
       });
 
+      this.logger.log(`=== AUTH SERVICE register() returning successfully ===`);
       return { user, ...tokens };
     } catch (error) {
+      this.logger.error(`=== AUTH SERVICE register() CAUGHT EXCEPTION ===`);
+      this.logger.error(`error type=${typeof error} ${error instanceof Error ? error.constructor.name : 'unknown'}`);
+      this.logger.error(`error message=${error instanceof Error ? error.message : String(error)}`);
+      if (error instanceof Error) {
+        this.logger.error(`error stack=${error.stack}`);
+      }
       if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
         const meta = error.meta as Record<string, unknown> | undefined;
         const modelName = meta?.modelName as string | undefined;

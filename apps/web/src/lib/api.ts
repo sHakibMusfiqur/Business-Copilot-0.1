@@ -142,24 +142,55 @@ export class ApiError extends Error {
 function normalizeError(error: unknown): ApiError {
   if (error instanceof ApiError) return error;
   if (axios.isAxiosError(error)) {
-    const status = error.response?.status ?? 500;
     const data = error.response?.data as Record<string, unknown> | undefined;
-    const message =
-      (data?.message as string) ??
-      (data?.error as string) ??
-      error.message ??
-      'An unexpected error occurred';
-    const code = (data?.code as string) ?? 'UNKNOWN_ERROR';
-    return new ApiError(
-      typeof message === 'string' ? message : Array.isArray(message) ? message[0] : 'An unexpected error occurred',
-      status,
-      code,
-    );
+    const baseURL = error.config?.baseURL ?? '(none)';
+    const url = error.config?.url ?? '(none)';
+    const method = error.config?.method ?? '(none)';
+    const fullURL = baseURL + url;
+    const reqHeaders = JSON.stringify(error.config?.headers ?? {});
+    const reqData = error.config?.data ?? '(none)';
+    const hasResponse = error.response ? 'YES' : 'NO';
+    const respStatus = error.response?.status ?? '(none)';
+    const respData = error.response?.data ? JSON.stringify(error.response.data).substring(0,200) : '(none)';
+    const errCode = error.code ?? '(none)';
+    const errMsg = error.message ?? '(none)';
+    const isAxios = (error as { isAxiosError?: unknown }).isAxiosError ? 'YES' : 'NO';
+    const hasRequest = error.request ? 'YES' : 'NO';
+    const reqReadyState = typeof error.request === 'object' && error.request !== null
+      ? ((error.request as { readyState?: unknown }).readyState?.toString() ?? '(no readyState)')
+      : '(no request object)';
+    const toJSON = typeof error.toJSON === 'function' ? JSON.stringify(error.toJSON(), null, 2) : '(no toJSON)';
+    const errStack = error.stack ?? '(no stack)';
+    const errCause = error.cause?.toString() ?? '(no cause)';
+
+    const debugInfo =
+      `[AXIOS_DEBUG] ` +
+      `url=${fullURL} | ` +
+      `method=${method} | ` +
+      `errMsg=${errMsg} | ` +
+      `errCode=${errCode} | ` +
+      `isAxios=${isAxios} | ` +
+      `hasResponse=${hasResponse} | ` +
+      `respStatus=${respStatus} | ` +
+      `hasRequest=${hasRequest} | ` +
+      `reqReadyState=${reqReadyState} | ` +
+      `reqData=${reqData} | ` +
+      `reqHeaders=${reqHeaders} | ` +
+      `respData=${respData} | ` +
+      `errStack=${errStack} | ` +
+      `errCause=${errCause} | ` +
+      `toJSON=${toJSON}`;
+
+    const status = error.response?.status ?? 0;
+    const message = debugInfo;
+    const code = (data?.code as string) ?? error.code ?? 'UNKNOWN_ERROR';
+    return new ApiError(message, status, code);
   }
   if (error instanceof Error) {
-    return new ApiError(error.message, 500);
+    const debugInfo = `[ERROR_DEBUG] name=${error.name} msg=${error.message} cause=${error.cause} stack=${error.stack}`;
+    return new ApiError(debugInfo, 0);
   }
-  return new ApiError('An unexpected error occurred', 500);
+  return new ApiError('An unexpected error occurred', 0);
 }
 
 let accessToken: string | null = null;
@@ -186,12 +217,47 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   if (token && config.headers) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  console.log('[DEBUG request]', config.method?.toUpperCase(), config.baseURL + config.url);
+  console.log('[DEBUG request] headers:', JSON.stringify(config.headers));
+  console.log('[DEBUG request] withCredentials:', config.withCredentials);
   return config;
 });
 
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
+    console.log('========== RAW AXIOS ERROR (interceptor) ==========');
+    console.log('error:', error);
+    console.log('error.name:', error.name);
+    console.log('error.message:', error.message);
+    console.log('error.code:', error.code);
+    console.log('error.stack:', error.stack);
+    console.log('error.cause:', error.cause);
+    console.log('error.isAxiosError:', (error as { isAxiosError?: unknown }).isAxiosError);
+    console.log('error.status:', (error as { status?: unknown }).status);
+    console.log('error.config:', error.config);
+    if (error.config) {
+      console.log('  config.url:', error.config.url);
+      console.log('  config.baseURL:', error.config.baseURL);
+      console.log('  config.method:', error.config.method);
+      console.log('  config.headers:', JSON.stringify(error.config.headers));
+      console.log('  config.data:', error.config.data);
+      console.log('  config.withCredentials:', error.config.withCredentials);
+      console.log('  config.timeout:', error.config.timeout);
+    }
+    console.log('error.request:', error.request);
+    console.log('error.response:', error.response);
+    if (error.response) {
+      console.log('  response.status:', error.response.status);
+      console.log('  response.statusText:', error.response.statusText);
+      console.log('  response.headers:', JSON.stringify(error.response.headers));
+      console.log('  response.data:', error.response.data);
+    }
+    if (typeof error.toJSON === 'function') {
+      console.log('error.toJSON():', JSON.stringify(error.toJSON(), null, 2));
+    }
+    console.log('===================================================');
+
     const normalized = normalizeError(error);
 
     if (normalized.status === 401) {
@@ -208,7 +274,8 @@ api.interceptors.response.use(
             originalRequest.headers.Authorization = `Bearer ${newToken}`;
           }
           return api(originalRequest);
-        } catch {
+        } catch (retryErr: unknown) {
+          console.log('[DEBUG 401-retry] token refresh failed:', retryErr);
           setAccessToken(null);
           useAuthStore.getState().logout();
           return Promise.reject(normalized);
@@ -236,7 +303,12 @@ export async function refreshAccessToken(): Promise<string | null> {
       setAccessToken(token);
       setAuthCookie(token);
       return token;
-    } catch {
+    } catch (refreshErr: unknown) {
+      console.log('[DEBUG refreshAccessToken] error:', refreshErr);
+      if (refreshErr instanceof Error) {
+        console.log('[DEBUG refreshAccessToken] message:', refreshErr.message);
+        console.log('[DEBUG refreshAccessToken] stack:', refreshErr.stack);
+      }
       setAccessToken(null);
       return null;
     } finally {
@@ -258,19 +330,111 @@ export function clearAuthCookie(): void {
 }
 
 export async function login(email: string, password: string) {
-  const response = await api.post('/auth/login', { email, password });
-  const { accessToken: token, user } = response.data;
-  setAccessToken(token);
-  setAuthCookie(token);
-  return { user, accessToken: token };
+  console.log('[DEBUG login] api.defaults.baseURL:', api.defaults.baseURL);
+  console.log('[DEBUG login] will POST to:', api.defaults.baseURL + '/auth/login');
+  console.log('[DEBUG login] withCredentials:', api.defaults.withCredentials);
+  try {
+    const response = await api.post('/auth/login', { email, password });
+    const { accessToken: token, user } = response.data;
+    setAccessToken(token);
+    setAuthCookie(token);
+    return { user, accessToken: token };
+  } catch (error: unknown) {
+    console.log('========== LOGIN ERROR DEBUG ==========');
+    console.log('error:', error);
+    if (error instanceof Error) {
+      console.log('error.name:', error.name);
+      console.log('error.message:', error.message);
+      console.log('error.stack:', error.stack);
+      console.log('error.cause:', error.cause);
+    }
+    if (typeof error === 'object' && error !== null) {
+      const err = error as Record<string, unknown>;
+      console.log('error.code:', err.code);
+      console.log('error.status:', err.status);
+      console.log('error.isAxiosError:', (err as { isAxiosError?: unknown }).isAxiosError);
+      console.log('error.config:', err.config);
+      if (err.config) {
+        const cfg = err.config as Record<string, unknown>;
+        console.log('  config.url:', cfg.url);
+        console.log('  config.baseURL:', cfg.baseURL);
+        console.log('  config.method:', cfg.method);
+        console.log('  config.headers:', JSON.stringify(cfg.headers));
+        console.log('  config.data:', cfg.data);
+        console.log('  config.withCredentials:', cfg.withCredentials);
+        console.log('  config.timeout:', cfg.timeout);
+      }
+      console.log('error.request:', err.request);
+      console.log('error.response:', err.response);
+      if (err.response) {
+        const res = err.response as Record<string, unknown>;
+        console.log('  response.status:', res.status);
+        console.log('  response.statusText:', res.statusText);
+        console.log('  response.headers:', JSON.stringify(res.headers));
+        console.log('  response.data:', res.data);
+      }
+      if (typeof (err as { toJSON?: () => unknown }).toJSON === 'function') {
+        console.log('error.toJSON():', JSON.stringify((err as { toJSON: () => unknown }).toJSON(), null, 2));
+      }
+    }
+    console.log('=========================================');
+    throw error;
+  }
 }
 
 export async function register(name: string, email: string, password: string) {
-  const response = await api.post('/auth/register', { name, email, password });
-  const { accessToken: token, user } = response.data;
-  setAccessToken(token);
-  setAuthCookie(token);
-  return { user, accessToken: token };
+  console.log('[DEBUG register] api.defaults.baseURL:', api.defaults.baseURL);
+  console.log('[DEBUG register] api.defaults.headers:', JSON.stringify(api.defaults.headers));
+  console.log('[DEBUG register] withCredentials:', api.defaults.withCredentials);
+  const requestConfig = { url: '/auth/register', method: 'POST', baseURL: api.defaults.baseURL, withCredentials: api.defaults.withCredentials };
+  console.log('[DEBUG register] will POST to:', api.defaults.baseURL + '/auth/register');
+  try {
+    const response = await api.post('/auth/register', { name, email, password });
+    const { accessToken: token, user } = response.data;
+    setAccessToken(token);
+    setAuthCookie(token);
+    return { user, accessToken: token };
+  } catch (error: unknown) {
+    console.log('========== NETWORK ERROR DEBUG ==========');
+    console.log('error:', error);
+    if (error instanceof Error) {
+      console.log('error.name:', error.name);
+      console.log('error.message:', error.message);
+      console.log('error.stack:', error.stack);
+      console.log('error.cause:', error.cause);
+    }
+    if (typeof error === 'object' && error !== null) {
+      const err = error as Record<string, unknown>;
+      console.log('error.code:', err.code);
+      console.log('error.status:', err.status);
+      console.log('error.isAxiosError:', (err as { isAxiosError?: unknown }).isAxiosError);
+      console.log('error.config:', err.config);
+      if (err.config) {
+        const cfg = err.config as Record<string, unknown>;
+        console.log('  config.url:', cfg.url);
+        console.log('  config.baseURL:', cfg.baseURL);
+        console.log('  config.method:', cfg.method);
+        console.log('  config.headers:', JSON.stringify(cfg.headers));
+        console.log('  config.data:', cfg.data);
+        console.log('  config.withCredentials:', cfg.withCredentials);
+        console.log('  config.timeout:', cfg.timeout);
+      }
+      console.log('error.request:', err.request);
+      console.log('error.response:', err.response);
+      if (err.response) {
+        const res = err.response as Record<string, unknown>;
+        console.log('  response.status:', res.status);
+        console.log('  response.statusText:', res.statusText);
+        console.log('  response.headers:', JSON.stringify(res.headers));
+        console.log('  response.data:', res.data);
+      }
+      if (typeof (err as { toJSON?: () => unknown }).toJSON === 'function') {
+        console.log('error.toJSON():', JSON.stringify((err as { toJSON: () => unknown }).toJSON(), null, 2));
+      }
+    }
+    console.log('=========================================');
+    throw error;
+  }
 }
 
 export async function logout() {
