@@ -87,6 +87,14 @@ export function useOnboardingSession() {
     }
   }, []);
 
+  /* TRACE POINT 1 — after saveField/saveFields */
+  const trace1 = (label: string) => {
+    console.log(`[TRACE 1 ${label}]`, {
+      session: session ? { selectedIndustry: session.selectedIndustry, orgName: session.orgName, version: session.version, currentStep: session.currentStep } : null,
+      sessionRef: sessionRef.current ? { selectedIndustry: sessionRef.current.selectedIndustry, orgName: sessionRef.current.orgName, version: sessionRef.current.version, currentStep: sessionRef.current.currentStep } : null,
+    });
+  };
+
   const saveField = useCallback(<K extends keyof OnboardingSession>(
     key: K,
     value: OnboardingSession[K],
@@ -96,6 +104,7 @@ export function useOnboardingSession() {
     sessionRef.current = next;
     setSession(next);
     dirtyRef.current = true;
+    trace1(`saveField(${String(key)})`);
   }, []);
 
   const saveFields = useCallback((data: Partial<OnboardingSession>) => {
@@ -104,9 +113,19 @@ export function useOnboardingSession() {
     sessionRef.current = next;
     setSession(next);
     dirtyRef.current = true;
+    trace1(`saveFields(${Object.keys(data).join(',')})`);
   }, []);
 
+  /* TRACE POINT 3 — before persistSession */
+  const trace3 = () => {
+    console.log('[TRACE 3 before persistSession]', {
+      session: session ? { selectedIndustry: session.selectedIndustry, orgName: session.orgName, version: session.version, currentStep: session.currentStep } : null,
+      sessionRef: sessionRef.current ? { selectedIndustry: sessionRef.current.selectedIndustry, orgName: sessionRef.current.orgName, version: sessionRef.current.version, currentStep: sessionRef.current.currentStep } : null,
+    });
+  };
+
   const persistSession = useCallback(async (): Promise<OnboardingSession | null> => {
+    trace3();
     const s = sessionRef.current;
     if (!s || !dirtyRef.current) return s;
     setSaving(true);
@@ -124,7 +143,16 @@ export function useOnboardingSession() {
     }
   }, []);
 
+  /* TRACE POINT 2 — before completeStep */
+  const trace2 = () => {
+    console.log('[TRACE 2 before completeStep]', {
+      session: session ? { selectedIndustry: session.selectedIndustry, orgName: session.orgName, version: session.version, currentStep: session.currentStep } : null,
+      sessionRef: sessionRef.current ? { selectedIndustry: sessionRef.current.selectedIndustry, orgName: sessionRef.current.orgName, version: sessionRef.current.version, currentStep: sessionRef.current.currentStep } : null,
+    });
+  };
+
   const completeStep = useCallback(async (step: number) => {
+    trace2();
     const s = sessionRef.current;
     if (!s) return;
     try {

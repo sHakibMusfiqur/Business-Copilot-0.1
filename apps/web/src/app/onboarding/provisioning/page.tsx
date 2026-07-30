@@ -50,6 +50,12 @@ export default function ProvisioningPage() {
           wizard.goTo(!sessionData.selectedIndustry ? 1 : 2);
           return;
         }
+        /* TRACE POINT 4 — before POST /provision */
+        console.log('[TRACE 4 before POST /provision]', {
+          session: { selectedIndustry: session.selectedIndustry, orgName: session.orgName, version: session.version, currentStep: session.currentStep },
+          sessionRef: null, /* no sessionRef in provisioning page */
+          resolvedSessionData: { selectedIndustry: sessionData.selectedIndustry, orgName: sessionData.orgName },
+        });
         await provisionOrganization(session.id, {
           selectedIndustry: sessionData.selectedIndustry,
           orgName: sessionData.orgName,
