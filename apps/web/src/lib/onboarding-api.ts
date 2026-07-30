@@ -88,7 +88,9 @@ export async function createSession(email: string, name: string): Promise<Onboar
 }
 
 export async function getSession(id: string): Promise<OnboardingSession> {
+  console.log('[API GET]', { url: `/onboarding/sessions/${id}` });
   const response = await api.get(`/onboarding/sessions/${id}`);
+  console.log('[API GET response]', { selectedIndustry: response.data?.selectedIndustry, orgName: response.data?.orgName, version: response.data?.version, currentStep: response.data?.currentStep });
   return response.data;
 }
 
@@ -101,12 +103,16 @@ export async function updateSession(
   id: string,
   data: Record<string, unknown>,
 ): Promise<OnboardingSession> {
+  console.log('[API PATCH]', { url: `/onboarding/sessions/${id}`, data: { selectedIndustry: data?.selectedIndustry, orgName: data?.orgName, version: data?.version, currentStep: data?.currentStep } });
   const response = await api.patch(`/onboarding/sessions/${id}`, data);
+  console.log('[API PATCH response]', { selectedIndustry: response.data?.selectedIndustry, orgName: response.data?.orgName, version: response.data?.version, currentStep: response.data?.currentStep });
   return response.data;
 }
 
 export async function completeStep(id: string, step: number): Promise<OnboardingSession> {
+  console.log('[API completeStep POST]', { url: `/onboarding/sessions/${id}/complete-step`, step });
   const response = await api.post(`/onboarding/sessions/${id}/complete-step`, { step });
+  console.log('[API completeStep response]', { selectedIndustry: response.data?.selectedIndustry, orgName: response.data?.orgName, version: response.data?.version, currentStep: response.data?.currentStep, completedSteps: response.data?.completedSteps });
   return response.data;
 }
 
@@ -124,7 +130,9 @@ export async function provisionOrganization(
   id: string,
   data?: { selectedIndustry?: string | null; orgName?: string | null },
 ): Promise<OnboardingSession> {
+  console.log('[API provision POST]', { url: `/onboarding/sessions/${id}/provision`, data: { selectedIndustry: data?.selectedIndustry, orgName: data?.orgName } });
   const response = await api.post(`/onboarding/sessions/${id}/provision`, data ?? {});
+  console.log('[API provision response]', { selectedIndustry: response.data?.selectedIndustry, orgName: response.data?.orgName, version: response.data?.version, currentStep: response.data?.currentStep });
   return response.data;
 }
 

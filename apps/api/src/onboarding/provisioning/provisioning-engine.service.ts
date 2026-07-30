@@ -32,8 +32,13 @@ export class ProvisioningEngineService {
     });
     if (!session) throw new BadRequestException('Session not found');
 
+    console.log('[ENGINE] Raw Prisma session:', { selectedIndustry: session.selectedIndustry, orgName: session.orgName, version: session.version, currentStep: session.currentStep, id: session.id });
+    console.log('[ENGINE] Input fallback:', { selectedIndustry: input?.selectedIndustry, orgName: input?.orgName });
+
     const selectedIndustry = (session.selectedIndustry as string | null) ?? input?.selectedIndustry ?? null;
     const orgName = (session.orgName as string | null) ?? input?.orgName ?? null;
+
+    console.log('[ENGINE] Resolved values:', { selectedIndustry, orgName });
 
     if (
       (input?.selectedIndustry && !session.selectedIndustry) ||

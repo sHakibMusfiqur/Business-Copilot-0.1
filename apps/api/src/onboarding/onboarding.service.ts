@@ -118,7 +118,6 @@ export class OnboardingService {
       'orgPhone', 'orgWebsite', 'orgCountry', 'orgState', 'orgCity', 'orgAddress',
       'orgTimezone', 'orgCurrency', 'orgLanguage', 'businessProfile', 'selectedModules',
       'aiEnabled', 'aiLanguage', 'aiPersonality', 'selectedPlanId', 'userId',
-      'selectedCategories',
     ];
     if (dto.selectedCategories && dto.selectedCategories.length > 0) {
       data.selectedCategory = dto.selectedCategories[0];

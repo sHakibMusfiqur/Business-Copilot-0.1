@@ -37,6 +37,24 @@ export function useOnboardingSession() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  /* WATCH: log every React session state change */
+  const prevSessionRef = useRef<OnboardingSession | null>(null);
+  useEffect(() => {
+    const prev = prevSessionRef.current;
+    if (prev !== session) {
+      const prevSI = prev?.selectedIndustry ?? '<null>';
+      const currSI = session?.selectedIndustry ?? '<null>';
+      const prevON = prev?.orgName ?? '<null>';
+      const currON = session?.orgName ?? '<null>';
+      const prevV = prev?.version ?? '<null>';
+      const currV = session?.version ?? '<null>';
+      const prevCS = prev?.currentStep ?? '<null>';
+      const currCS = session?.currentStep ?? '<null>';
+      console.log(`[SESSION CHANGE] selectedIndustry: ${prevSI} → ${currSI} | orgName: ${prevON} → ${currON} | version: ${prevV} → ${currV} | currentStep: ${prevCS} → ${currCS}`);
+      prevSessionRef.current = session;
+    }
+  });
+
   useEffect(() => {
     const sessionId = searchParams.get('session');
     if (sessionId && !session) {
@@ -116,26 +134,30 @@ export function useOnboardingSession() {
     trace1(`saveFields(${Object.keys(data).join(',')})`);
   }, []);
 
-  /* TRACE POINT 3 — before persistSession */
-  const trace3 = () => {
-    console.log('[TRACE 3 before persistSession]', {
-      session: session ? { selectedIndustry: session.selectedIndustry, orgName: session.orgName, version: session.version, currentStep: session.currentStep } : null,
+  const persistSession = useCallback(async (): Promise<OnboardingSession | null> => {
+    const s = sessionRef.current;
+    const hasDirty = dirtyRef.current;
+    console.log('[PERSIST ENTER]', {
+      dirtyRef: hasDirty,
+      s: s ? { selectedIndustry: s.selectedIndustry, orgName: s.orgName, version: s.version, currentStep: s.currentStep } : null,
       sessionRef: sessionRef.current ? { selectedIndustry: sessionRef.current.selectedIndustry, orgName: sessionRef.current.orgName, version: sessionRef.current.version, currentStep: sessionRef.current.currentStep } : null,
     });
-  };
-
-  const persistSession = useCallback(async (): Promise<OnboardingSession | null> => {
-    trace3();
-    const s = sessionRef.current;
-    if (!s || !dirtyRef.current) return s;
+    if (!s || !hasDirty) {
+      console.log('[PERSIST SKIP] dirtyRef=false or s=null, returning s as-is');
+      return s;
+    }
     setSaving(true);
     try {
-      const updated = await updateSession(s.id, pickPersistFields(s));
+      const payload = pickPersistFields(s);
+      console.log('[PERSIST PATCH] payload:', payload);
+      const updated = await updateSession(s.id, payload);
+      console.log('[PERSIST RESPONSE] updated:', { selectedIndustry: updated.selectedIndustry, orgName: updated.orgName, version: updated.version, currentStep: updated.currentStep });
       sessionRef.current = updated;
       setSession(updated);
       dirtyRef.current = false;
       return updated;
     } catch (e) {
+      console.log('[PERSIST ERROR]', (e as Error).message);
       setError((e as Error).message);
       return null;
     } finally {
@@ -143,30 +165,49 @@ export function useOnboardingSession() {
     }
   }, []);
 
-  /* TRACE POINT 2 — before completeStep */
-  const trace2 = () => {
-    console.log('[TRACE 2 before completeStep]', {
-      session: session ? { selectedIndustry: session.selectedIndustry, orgName: session.orgName, version: session.version, currentStep: session.currentStep } : null,
+  const completeStep = useCallback(async (step: number) => {
+    const s = sessionRef.current;
+    console.log('[COMPLETE STEP ENTER]', {
+      step,
+      s: s ? { selectedIndustry: s.selectedIndustry, orgName: s.orgName, version: s.version, currentStep: s.currentStep } : null,
       sessionRef: sessionRef.current ? { selectedIndustry: sessionRef.current.selectedIndustry, orgName: sessionRef.current.orgName, version: sessionRef.current.version, currentStep: sessionRef.current.currentStep } : null,
     });
-  };
-
-  const completeStep = useCallback(async (step: number) => {
-    trace2();
-    const s = sessionRef.current;
     if (!s) return;
     try {
       const updated = await apiCompleteStep(s.id, step);
-      sessionRef.current = updated;
-      setSession((prev) => prev ? {
-        ...prev,
+      console.log('[COMPLETE STEP RESPONSE]', {
+        selectedIndustry: updated.selectedIndustry,
+        orgName: updated.orgName,
+        version: updated.version,
         currentStep: updated.currentStep,
         completedSteps: updated.completedSteps,
-        version: updated.version,
-        provisionStatus: updated.provisionStatus,
-        organizationId: updated.organizationId,
-        provisionData: updated.provisionData,
-      } : prev);
+      });
+      console.log('[COMPLETE STEP] About to overwrite sessionRef.current with backend response');
+      sessionRef.current = updated;
+      console.log('[COMPLETE STEP] sessionRef.current now:', {
+        selectedIndustry: sessionRef.current.selectedIndustry,
+        orgName: sessionRef.current.orgName,
+        version: sessionRef.current.version,
+        currentStep: sessionRef.current.currentStep,
+      });
+      setSession((prev) => {
+        const result = prev ? {
+          ...prev,
+          currentStep: updated.currentStep,
+          completedSteps: updated.completedSteps,
+          version: updated.version,
+          provisionStatus: updated.provisionStatus,
+          organizationId: updated.organizationId,
+          provisionData: updated.provisionData,
+        } : prev;
+        console.log('[COMPLETE STEP] setSession merge result:', {
+          selectedIndustry: result?.selectedIndustry ?? '<null>',
+          orgName: result?.orgName ?? '<null>',
+          version: result?.version ?? '<null>',
+          currentStep: result?.currentStep ?? '<null>',
+        });
+        return result;
+      });
       return updated;
     } catch {
       const completed = [...((s).completedSteps ?? []), step];

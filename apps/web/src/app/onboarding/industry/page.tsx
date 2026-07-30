@@ -53,10 +53,14 @@ export default function IndustryPage() {
     if (!selectedId) { setLocalError('Please select an industry'); return; }
     if (selectedCategories.length === 0) { setLocalError('Please select at least one category.'); return; }
     setLocalError(null);
+    console.log('[PAGE industry handleContinue BEFORE saveField]', { selectedId, selectedCategories, session: { selectedIndustry: session?.selectedIndustry, orgName: session?.orgName, version: session?.version, currentStep: session?.currentStep } });
     saveField('selectedIndustry', selectedId);
     saveField('selectedCategories', selectedCategories);
+    console.log('[PAGE industry handleContinue AFTER saveField]', { session: { selectedIndustry: session?.selectedIndustry, orgName: session?.orgName, version: session?.version, currentStep: session?.currentStep } });
     await persistSession();
+    console.log('[PAGE industry handleContinue AFTER persistSession]', { session: { selectedIndustry: session?.selectedIndustry, orgName: session?.orgName, version: session?.version, currentStep: session?.currentStep } });
     await completeStep(1);
+    console.log('[PAGE industry handleContinue AFTER completeStep]', { session: { selectedIndustry: session?.selectedIndustry, orgName: session?.orgName, version: session?.version, currentStep: session?.currentStep } });
     wizard.goNext();
   };
 

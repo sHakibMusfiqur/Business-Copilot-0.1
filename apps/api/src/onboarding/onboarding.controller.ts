@@ -51,7 +51,9 @@ export class OnboardingController {
   @ApiOperation({ summary: 'Get onboarding session by ID' })
   @ApiOkResponse({ type: SessionResponseDto })
   async getSession(@Param('id') id: string) {
-    return this.onboardingService.getSession(id);
+    const result = await this.onboardingService.getSession(id);
+    console.log('[BACKEND GET] session:', { selectedIndustry: result?.selectedIndustry, orgName: result?.orgName, version: result?.version, currentStep: result?.currentStep, id });
+    return result;
   }
 
   @Get('by-email/:email')
@@ -66,7 +68,10 @@ export class OnboardingController {
   @ApiBody({ type: UpdateSessionDto })
   @ApiOkResponse({ type: SessionResponseDto })
   async updateSession(@Param('id') id: string, @Body() dto: UpdateSessionDto) {
-    return this.onboardingService.updateSession(id, dto);
+    console.log('[BACKEND PATCH RECEIVED]', { id, selectedIndustry: (dto as any).selectedIndustry, orgName: (dto as any).orgName, version: (dto as any).version });
+    const result = await this.onboardingService.updateSession(id, dto);
+    console.log('[BACKEND PATCH RESPONSE]', { selectedIndustry: result?.selectedIndustry, orgName: result?.orgName, version: result?.version, currentStep: result?.currentStep });
+    return result;
   }
 
   @Post('sessions/:id/complete-step')
@@ -75,7 +80,10 @@ export class OnboardingController {
   @ApiBody({ type: CompleteStepDto })
   @ApiOkResponse({ type: SessionResponseDto })
   async completeStep(@Param('id') id: string, @Body() dto: CompleteStepDto) {
-    return this.onboardingService.completeStep(id, dto.step);
+    console.log('[BACKEND COMPLETE-STEP RECEIVED]', { id, step: dto.step });
+    const result = await this.onboardingService.completeStep(id, dto.step);
+    console.log('[BACKEND COMPLETE-STEP RESPONSE]', { selectedIndustry: result?.selectedIndustry, orgName: result?.orgName, version: result?.version, currentStep: result?.currentStep, completedSteps: result?.completedSteps });
+    return result;
   }
 
   @Get('sessions/:id/preview')
@@ -96,7 +104,9 @@ export class OnboardingController {
     @Body() body: { selectedIndustry?: string | null; orgName?: string | null },
     @Res({ passthrough: true }) res: Response,
   ) {
+    console.log('[BACKEND PROVISION RECEIVED]', { id, body: { selectedIndustry: body?.selectedIndustry, orgName: body?.orgName } });
     const result = await this.provisioningEngine.provision(id, body);
+    console.log('[BACKEND PROVISION RESULT]', { selectedIndustry: result?.selectedIndustry, orgName: result?.orgName, version: result?.version });
     const request = res.req as { idempotencyKey?: string };
     if (request?.idempotencyKey) {
       await this.idempotencyService.cacheResponse(request.idempotencyKey, result);

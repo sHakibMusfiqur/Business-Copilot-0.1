@@ -20,7 +20,15 @@ export default function ProvisioningPage() {
   const provisionStartedRef = useRef(false);
   const [retryCount, setRetryCount] = useState(0);
 
+  const traceRef = useRef(0);
+
   useEffect(() => {
+    const traceId = ++traceRef.current;
+    console.log(`[PROVISION EFFECT ${traceId}] FIRED`, {
+      session: session ? { selectedIndustry: session.selectedIndustry, orgName: session.orgName, version: session.version, currentStep: session.currentStep, completedSteps: session.completedSteps, provisionStatus: session.provisionStatus } : null,
+      retryCount,
+      provisionStartedRef: provisionStartedRef.current,
+    });
     if (!session) return;
     if (provisionStartedRef.current) return;
 
@@ -40,22 +48,23 @@ export default function ProvisioningPage() {
     const startProvision = async () => {
       setStarting(true);
       try {
+        console.log(`[PROVISION ${traceId}] about to call persistSession, session values:`, { selectedIndustry: session.selectedIndustry, orgName: session.orgName, version: session.version });
         const persisted = await persistSession();
+        console.log(`[PROVISION ${traceId}] after persistSession, persisted =`, { selectedIndustry: persisted?.selectedIndustry, orgName: persisted?.orgName, version: persisted?.version });
         const latestSession = await getSession(session.id).catch(() => persisted ?? session);
+        console.log(`[PROVISION ${traceId}] after getSession, latestSession =`, { selectedIndustry: latestSession?.selectedIndustry, orgName: latestSession?.orgName, version: latestSession?.version });
         const sessionData = latestSession ?? persisted ?? session;
+        console.log(`[PROVISION ${traceId}] resolved sessionData =`, { selectedIndustry: sessionData?.selectedIndustry, orgName: sessionData?.orgName, version: sessionData?.version });
+        console.log(`[PROVISION ${traceId}] validation check: selectedIndustry=${sessionData?.selectedIndustry}, orgName=${sessionData?.orgName}`);
         if (!sessionData.selectedIndustry || !sessionData.orgName) {
           provisionStartedRef.current = false;
           setStarting(false);
+          console.log(`[PROVISION ${traceId}] VALIDATION FAILED: selectedIndustry=${sessionData.selectedIndustry}, orgName=${sessionData.orgName}`);
           setError('Missing required onboarding data. Redirecting to the step that still needs input.');
           wizard.goTo(!sessionData.selectedIndustry ? 1 : 2);
           return;
         }
-        /* TRACE POINT 4 — before POST /provision */
-        console.log('[TRACE 4 before POST /provision]', {
-          session: { selectedIndustry: session.selectedIndustry, orgName: session.orgName, version: session.version, currentStep: session.currentStep },
-          sessionRef: null, /* no sessionRef in provisioning page */
-          resolvedSessionData: { selectedIndustry: sessionData.selectedIndustry, orgName: sessionData.orgName },
-        });
+        console.log(`[PROVISION ${traceId}] VALIDATION PASSED, calling provisionOrganization`, { selectedIndustry: sessionData.selectedIndustry, orgName: sessionData.orgName });
         await provisionOrganization(session.id, {
           selectedIndustry: sessionData.selectedIndustry,
           orgName: sessionData.orgName,

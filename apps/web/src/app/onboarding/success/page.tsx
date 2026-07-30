@@ -5,10 +5,10 @@ import {
   PartyPopper, ArrowRight, Check, X, Loader2,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useOnboarding } from '../_hooks/onboarding-context';
 import {
-  getChecklist, markChecklistComplete, markChecklistIncomplete, skipChecklistItem, getChecklistProgress,
+  getChecklist, skipChecklistItem, getChecklistProgress,
   type ChecklistItem, type ChecklistProgress,
 } from '@/lib/onboarding-api';
 
@@ -18,43 +18,51 @@ export default function SuccessPage() {
   const [items, setItems] = useState<ChecklistItem[]>([]);
   const [progress, setProgress] = useState<ChecklistProgress | null>(null);
   const [loading, setLoading] = useState(true);
-  const [toggling, setToggling] = useState<string | null>(null);
+  const [skipping, setSkipping] = useState<string | null>(null);
+  const loadingRef = useRef(loading);
+  loadingRef.current = loading;
+
+  const fetchData = useCallback(async () => {
+    if (!session) return;
+    setLoading(true);
+    try {
+      const [checklist, p] = await Promise.all([
+        getChecklist(session.id),
+        getChecklistProgress(session.id),
+      ]);
+      setItems(checklist);
+      setProgress(p);
+    } catch {
+      /* intentional */
+    } finally {
+      setLoading(false);
+    }
+  }, [session]);
 
   useEffect(() => {
     if (!session) return;
-    setLoading(true);
-    Promise.all([
-      getChecklist(session.id),
-      getChecklistProgress(session.id),
-    ]).then(([checklist, p]) => {
-      setItems(checklist);
-      setProgress(p);
-    }).catch(() => {/* intentional */}).finally(() => setLoading(false));
-  }, [session]);
+    fetchData();
+  }, [session, fetchData]);
 
-  const handleToggle = async (item: ChecklistItem) => {
-    if (!session || toggling) return;
-    setToggling(item.itemId);
-    try {
-      if (item.completed) {
-        const updated = await markChecklistIncomplete(session.id, item.itemId);
-        setItems((prev) => prev.map((i) => i.itemId === updated.itemId ? updated : i));
-      } else {
-        const updated = await markChecklistComplete(session.id, item.itemId);
-        setItems((prev) => prev.map((i) => i.itemId === updated.itemId ? updated : i));
-      }
-      const p = await getChecklistProgress(session.id);
-      setProgress(p);
-    } catch {
-      /* empty - network errors ignored */
-    } finally {
-      setToggling(null);
-    }
-  };
+  useEffect(() => {
+    const handleRefresh = () => {
+      if (loadingRef.current) return;
+      fetchData();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') handleRefresh();
+    };
+    window.addEventListener('focus', handleRefresh);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', handleRefresh);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [fetchData]);
 
   const handleSkip = async (item: ChecklistItem) => {
-    if (!session || toggling || !item.skippable) return;
-    setToggling(item.itemId);
+    if (!session || skipping || !item.skippable) return;
+    setSkipping(item.itemId);
     try {
       const updated = await skipChecklistItem(session.id, item.itemId);
       setItems((prev) => prev.map((i) => i.itemId === updated.itemId ? updated : i));
@@ -63,7 +71,7 @@ export default function SuccessPage() {
     } catch {
       /* empty - network errors ignored */
     } finally {
-      setToggling(null);
+      setSkipping(null);
     }
   };
 
@@ -136,21 +144,17 @@ export default function SuccessPage() {
                     : 'border-slate-700/50 bg-slate-800/20 hover:border-blue-500/50 hover:bg-blue-500/5'
                 }`}
               >
-                <button
-                  onClick={() => handleToggle(item)}
-                  disabled={toggling === item.itemId}
-                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 transition-all ${
+                <div
+                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 ${
                     item.completed
                       ? 'border-green-500 bg-green-500'
-                      : 'border-slate-600 hover:border-blue-400'
+                      : 'border-slate-600'
                   }`}
                 >
-                  {toggling === item.itemId ? (
-                    <Loader2 className="h-3 w-3 animate-spin text-white" />
-                  ) : item.completed ? (
+                  {item.completed ? (
                     <Check className="h-3.5 w-3.5 text-white" />
                   ) : null}
-                </button>
+                </div>
                 <div className="flex-1 min-w-0">
                   <p className={`text-sm truncate ${item.completed ? 'text-green-300 line-through' : 'text-white'}`}>
                     {item.label}
@@ -168,11 +172,15 @@ export default function SuccessPage() {
                   {item.skippable && !item.completed && (
                     <button
                       onClick={() => handleSkip(item)}
-                      disabled={toggling === item.itemId}
+                      disabled={skipping === item.itemId}
                       className="rounded-lg p-1 text-slate-500 transition-colors hover:text-slate-300"
                       title="Skip"
                     >
-                      <X className="h-3.5 w-3.5" />
+                      {skipping === item.itemId ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <X className="h-3.5 w-3.5" />
+                      )}
                     </button>
                   )}
                 </div>
