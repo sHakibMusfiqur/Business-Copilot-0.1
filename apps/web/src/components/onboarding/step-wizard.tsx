@@ -9,17 +9,15 @@ interface Step {
 }
 
 const STEPS: Step[] = [
-  { id: 0, label: 'Welcome' },
-  { id: 1, label: 'Account' },
-  { id: 2, label: 'Verify' },
-  { id: 3, label: 'Industry' },
-  { id: 4, label: 'Organization' },
-  { id: 5, label: 'Profile' },
-  { id: 6, label: 'Modules' },
-  { id: 7, label: 'AI' },
-  { id: 8, label: 'Plan' },
-  { id: 9, label: 'Provision' },
-  { id: 10, label: 'Done' },
+  { id: 0, label: 'Verify' },
+  { id: 1, label: 'Industry' },
+  { id: 2, label: 'Organization' },
+  { id: 3, label: 'Profile' },
+  { id: 4, label: 'Modules' },
+  { id: 5, label: 'AI' },
+  { id: 6, label: 'Plan' },
+  { id: 7, label: 'Provision' },
+  { id: 8, label: 'Done' },
 ];
 
 interface StepWizardProps {

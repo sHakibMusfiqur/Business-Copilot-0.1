@@ -19,7 +19,7 @@ export default function ProfilePage() {
     if (!jobTitle.trim()) { setLocalError('Please enter your job title'); return; }
     setLocalError(null);
     saveField('businessProfile', { ...((session.businessProfile as Record<string, unknown>) ?? {}), jobTitle, department });
-    await completeStep(5);
+    await completeStep(3);
     wizard.goNext();
   };
 

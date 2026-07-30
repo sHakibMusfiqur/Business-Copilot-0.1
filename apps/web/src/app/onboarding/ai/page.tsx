@@ -37,7 +37,7 @@ export default function AiPage() {
     saveField('aiEnabled', enabled);
     saveField('aiLanguage', language);
     saveField('aiPersonality', personality);
-    await completeStep(7);
+    await completeStep(5);
     wizard.goNext();
   };
 

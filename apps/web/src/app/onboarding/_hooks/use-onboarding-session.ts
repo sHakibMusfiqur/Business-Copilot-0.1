@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   getSession, getSessionByEmail, createSession, updateSession,
   completeStep as apiCompleteStep,
@@ -17,6 +18,15 @@ export function useOnboardingSession() {
 
   const dirtyRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const sessionId = searchParams.get('session');
+    if (sessionId && !session) {
+      getSession(sessionId).then(setSession).catch(() => {});
+    }
+  }, [searchParams]);
 
   const loadSession = useCallback(async (id: string) => {
     setLoading(true);
@@ -50,9 +60,7 @@ export function useOnboardingSession() {
     try {
       const s = await createSession(email, name);
       setSession(s);
-      if (typeof window !== 'undefined') {
-        window.history.replaceState(null, '', `/onboarding?session=${s.id}`);
-      }
+      router.replace(`/onboarding?session=${s.id}`);
       return s;
     } catch (e) {
       setError((e as Error).message);

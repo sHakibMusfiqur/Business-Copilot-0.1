@@ -44,7 +44,7 @@ export default function IndustryPage() {
     setLocalError(null);
     saveField('selectedIndustry', selectedId);
     saveField('selectedCategory', selectedCategory);
-    await completeStep(3);
+    await completeStep(1);
     wizard.goNext();
   };
 

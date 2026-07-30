@@ -51,7 +51,7 @@ export default function PlanPage() {
 
   const handleContinue = async () => {
     saveField('selectedPlanId', selected);
-    await completeStep(8);
+    await completeStep(6);
     wizard.goNext();
   };
 

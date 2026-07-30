@@ -32,7 +32,7 @@ export default function ModulesPage() {
 
   const handleContinue = async () => {
     saveField('selectedModules', selected);
-    await completeStep(6);
+    await completeStep(4);
     wizard.goNext();
   };
 

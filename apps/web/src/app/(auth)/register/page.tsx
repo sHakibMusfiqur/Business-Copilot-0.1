@@ -10,6 +10,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import { register as registerUser } from '@/lib/api';
+import { createSession, updateSession } from '@/lib/onboarding-api';
 import { useAuthStore } from '@/store/auth-store';
 
 const registerSchema = z.object({
@@ -62,7 +63,9 @@ export default function RegisterPage() {
     try {
       const result = await registerUser(data.name, data.email, data.password);
       setUser(result.user, result.accessToken);
-      router.push('/onboarding');
+      const session = await createSession(data.name, data.email);
+      await updateSession(session.id, { userId: result.user.id });
+      router.push(`/onboarding/verify?session=${session.id}`);
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : 'Registration failed';

@@ -4,8 +4,6 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { useCallback, useMemo, useRef } from 'react';
 
 export const STEP_PATHS = [
-  '/onboarding',
-  '/onboarding/account',
   '/onboarding/verify',
   '/onboarding/industry',
   '/onboarding/org-info',
@@ -18,7 +16,7 @@ export const STEP_PATHS = [
 ] as const;
 
 export const STEP_LABELS = [
-  'Welcome', 'Account', 'Verify', 'Industry', 'Organization',
+  'Verify', 'Industry', 'Organization',
   'Profile', 'Modules', 'AI', 'Plan', 'Provision', 'Done',
 ] as const;
 

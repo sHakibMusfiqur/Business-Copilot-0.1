@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { Check, Loader2, AlertCircle, ArrowRight, PartyPopper } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import { useOnboarding } from '../_hooks/onboarding-context';
+import { refreshAccessToken } from '@/lib/api';
 import {
   provisionOrganization, createProvisioningEventSource,
   type ProvisioningProgress,
@@ -21,6 +22,7 @@ export default function ProvisioningPage() {
     if (!session) return;
 
     if (session.provisionStatus === 'COMPLETED') {
+      refreshAccessToken();
       setDone(true);
       return;
     }
@@ -76,8 +78,11 @@ export default function ProvisioningPage() {
 
   useEffect(() => {
     if (!done && progress?.status === 'COMPLETED') {
-      setDone(true);
-      completeStep(9);
+      (async () => {
+        await completeStep(7);
+        await refreshAccessToken();
+        setDone(true);
+      })();
     }
   }, [progress?.status]);
 

@@ -54,7 +54,7 @@ export default function OrgInfoPage() {
     saveField('orgAddress', address.trim());
     saveField('orgTimezone', timezone);
     saveField('orgCurrency', currency);
-    await completeStep(4);
+    await completeStep(2);
     wizard.goNext();
   };
 

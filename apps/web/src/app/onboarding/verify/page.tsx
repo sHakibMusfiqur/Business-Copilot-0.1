@@ -54,7 +54,7 @@ export default function VerifyPage() {
     }
     setLocalError(null);
     setIsSubmitting(true);
-    await completeStep(2).then(() => {
+    await completeStep(0).then(() => {
       wizard.goNext();
     }).catch((e) => {
       setLocalError((e as Error).message ?? 'Verification failed');
