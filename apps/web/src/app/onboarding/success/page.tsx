@@ -11,6 +11,7 @@ import {
   getChecklist, skipChecklistItem, getChecklistProgress,
   type ChecklistItem, type ChecklistProgress,
 } from '@/lib/onboarding-api';
+import { setOnboardingSession } from '@/lib/session-storage';
 
 export default function SuccessPage() {
   const { session } = useOnboarding();
@@ -41,6 +42,7 @@ export default function SuccessPage() {
 
   useEffect(() => {
     if (!session) return;
+    setOnboardingSession({ id: session.id, organizationId: session.organizationId });
     fetchData();
   }, [session, fetchData]);
 
