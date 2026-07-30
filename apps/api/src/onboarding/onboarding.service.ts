@@ -118,7 +118,13 @@ export class OnboardingService {
       'orgPhone', 'orgWebsite', 'orgCountry', 'orgState', 'orgCity', 'orgAddress',
       'orgTimezone', 'orgCurrency', 'orgLanguage', 'businessProfile', 'selectedModules',
       'aiEnabled', 'aiLanguage', 'aiPersonality', 'selectedPlanId', 'userId',
+      'selectedCategories',
     ];
+    if (dto.selectedCategories && dto.selectedCategories.length > 0) {
+      data.selectedCategory = dto.selectedCategories[0];
+    } else if (dto.selectedCategories && dto.selectedCategories.length === 0) {
+      data.selectedCategory = null;
+    }
     const changedFields: string[] = [];
     for (const field of fields) {
       if (dto[field] !== undefined) {
@@ -224,6 +230,7 @@ export class OnboardingService {
       completedSteps: (session.completedSteps as number[]) ?? [],
       selectedIndustry: session.selectedIndustry as string ?? null,
       selectedCategory: session.selectedCategory as string ?? null,
+      selectedCategories: (session.selectedCategories as string[]) ?? [],
       orgName: session.orgName as string ?? null,
       orgEmail: session.orgEmail as string ?? null,
       orgPhone: session.orgPhone as string ?? null,

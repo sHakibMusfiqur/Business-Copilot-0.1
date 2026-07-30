@@ -23,6 +23,12 @@ export class UpdateSessionDto {
   selectedCategory?: string;
 
   @ApiPropertyOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  selectedCategories?: string[];
+
+  @ApiPropertyOptional()
   @IsString()
   @MinLength(2)
   @MaxLength(100)

@@ -1,0 +1,251 @@
+export interface CountryInfo {
+  code: string;
+  name: string;
+  dial: string;
+  timezone: string;
+}
+
+const COUNTRY_DATA: CountryInfo[] = [
+  { code: 'AF', name: 'Afghanistan', dial: '+93', timezone: 'Asia/Kabul' },
+  { code: 'AL', name: 'Albania', dial: '+355', timezone: 'Europe/Tirane' },
+  { code: 'DZ', name: 'Algeria', dial: '+213', timezone: 'Africa/Algiers' },
+  { code: 'AD', name: 'Andorra', dial: '+376', timezone: 'Europe/Andorra' },
+  { code: 'AO', name: 'Angola', dial: '+244', timezone: 'Africa/Luanda' },
+  { code: 'AG', name: 'Antigua & Barbuda', dial: '+1-268', timezone: 'America/Antigua' },
+  { code: 'AR', name: 'Argentina', dial: '+54', timezone: 'America/Argentina/Buenos_Aires' },
+  { code: 'AM', name: 'Armenia', dial: '+374', timezone: 'Asia/Yerevan' },
+  { code: 'AU', name: 'Australia', dial: '+61', timezone: 'Australia/Sydney' },
+  { code: 'AT', name: 'Austria', dial: '+43', timezone: 'Europe/Vienna' },
+  { code: 'AZ', name: 'Azerbaijan', dial: '+994', timezone: 'Asia/Baku' },
+  { code: 'BS', name: 'Bahamas', dial: '+1-242', timezone: 'America/Nassau' },
+  { code: 'BH', name: 'Bahrain', dial: '+973', timezone: 'Asia/Bahrain' },
+  { code: 'BD', name: 'Bangladesh', dial: '+880', timezone: 'Asia/Dhaka' },
+  { code: 'BB', name: 'Barbados', dial: '+1-246', timezone: 'America/Barbados' },
+  { code: 'BY', name: 'Belarus', dial: '+375', timezone: 'Europe/Minsk' },
+  { code: 'BE', name: 'Belgium', dial: '+32', timezone: 'Europe/Brussels' },
+  { code: 'BZ', name: 'Belize', dial: '+501', timezone: 'America/Belize' },
+  { code: 'BJ', name: 'Benin', dial: '+229', timezone: 'Africa/Porto-Novo' },
+  { code: 'BT', name: 'Bhutan', dial: '+975', timezone: 'Asia/Thimphu' },
+  { code: 'BO', name: 'Bolivia', dial: '+591', timezone: 'America/La_Paz' },
+  { code: 'BA', name: 'Bosnia & Herzegovina', dial: '+387', timezone: 'Europe/Sarajevo' },
+  { code: 'BW', name: 'Botswana', dial: '+267', timezone: 'Africa/Gaborone' },
+  { code: 'BR', name: 'Brazil', dial: '+55', timezone: 'America/Sao_Paulo' },
+  { code: 'BN', name: 'Brunei', dial: '+673', timezone: 'Asia/Brunei' },
+  { code: 'BG', name: 'Bulgaria', dial: '+359', timezone: 'Europe/Sofia' },
+  { code: 'BF', name: 'Burkina Faso', dial: '+226', timezone: 'Africa/Ouagadougou' },
+  { code: 'BI', name: 'Burundi', dial: '+257', timezone: 'Africa/Bujumbura' },
+  { code: 'KH', name: 'Cambodia', dial: '+855', timezone: 'Asia/Phnom_Penh' },
+  { code: 'CM', name: 'Cameroon', dial: '+237', timezone: 'Africa/Douala' },
+  { code: 'CA', name: 'Canada', dial: '+1', timezone: 'America/Toronto' },
+  { code: 'CV', name: 'Cape Verde', dial: '+238', timezone: 'Atlantic/Cape_Verde' },
+  { code: 'CF', name: 'Central African Republic', dial: '+236', timezone: 'Africa/Bangui' },
+  { code: 'TD', name: 'Chad', dial: '+235', timezone: 'Africa/Ndjamena' },
+  { code: 'CL', name: 'Chile', dial: '+56', timezone: 'America/Santiago' },
+  { code: 'CN', name: 'China', dial: '+86', timezone: 'Asia/Shanghai' },
+  { code: 'CO', name: 'Colombia', dial: '+57', timezone: 'America/Bogota' },
+  { code: 'KM', name: 'Comoros', dial: '+269', timezone: 'Indian/Comoro' },
+  { code: 'CG', name: 'Congo', dial: '+242', timezone: 'Africa/Brazzaville' },
+  { code: 'CD', name: 'Congo (DRC)', dial: '+243', timezone: 'Africa/Kinshasa' },
+  { code: 'CR', name: 'Costa Rica', dial: '+506', timezone: 'America/Costa_Rica' },
+  { code: 'CI', name: 'Côte d\'Ivoire', dial: '+225', timezone: 'Africa/Abidjan' },
+  { code: 'HR', name: 'Croatia', dial: '+385', timezone: 'Europe/Zagreb' },
+  { code: 'CU', name: 'Cuba', dial: '+53', timezone: 'America/Havana' },
+  { code: 'CY', name: 'Cyprus', dial: '+357', timezone: 'Asia/Nicosia' },
+  { code: 'CZ', name: 'Czech Republic', dial: '+420', timezone: 'Europe/Prague' },
+  { code: 'DK', name: 'Denmark', dial: '+45', timezone: 'Europe/Copenhagen' },
+  { code: 'DJ', name: 'Djibouti', dial: '+253', timezone: 'Africa/Djibouti' },
+  { code: 'DM', name: 'Dominica', dial: '+1-767', timezone: 'America/Dominica' },
+  { code: 'DO', name: 'Dominican Republic', dial: '+1-809', timezone: 'America/Santo_Domingo' },
+  { code: 'EC', name: 'Ecuador', dial: '+593', timezone: 'America/Guayaquil' },
+  { code: 'EG', name: 'Egypt', dial: '+20', timezone: 'Africa/Cairo' },
+  { code: 'SV', name: 'El Salvador', dial: '+503', timezone: 'America/El_Salvador' },
+  { code: 'GQ', name: 'Equatorial Guinea', dial: '+240', timezone: 'Africa/Malabo' },
+  { code: 'ER', name: 'Eritrea', dial: '+291', timezone: 'Africa/Asmara' },
+  { code: 'EE', name: 'Estonia', dial: '+372', timezone: 'Europe/Tallinn' },
+  { code: 'SZ', name: 'Eswatini', dial: '+268', timezone: 'Africa/Mbabane' },
+  { code: 'ET', name: 'Ethiopia', dial: '+251', timezone: 'Africa/Addis_Ababa' },
+  { code: 'FJ', name: 'Fiji', dial: '+679', timezone: 'Pacific/Fiji' },
+  { code: 'FI', name: 'Finland', dial: '+358', timezone: 'Europe/Helsinki' },
+  { code: 'FR', name: 'France', dial: '+33', timezone: 'Europe/Paris' },
+  { code: 'GA', name: 'Gabon', dial: '+241', timezone: 'Africa/Libreville' },
+  { code: 'GM', name: 'Gambia', dial: '+220', timezone: 'Africa/Banjul' },
+  { code: 'GE', name: 'Georgia', dial: '+995', timezone: 'Asia/Tbilisi' },
+  { code: 'DE', name: 'Germany', dial: '+49', timezone: 'Europe/Berlin' },
+  { code: 'GH', name: 'Ghana', dial: '+233', timezone: 'Africa/Accra' },
+  { code: 'GR', name: 'Greece', dial: '+30', timezone: 'Europe/Athens' },
+  { code: 'GD', name: 'Grenada', dial: '+1-473', timezone: 'America/Grenada' },
+  { code: 'GT', name: 'Guatemala', dial: '+502', timezone: 'America/Guatemala' },
+  { code: 'GN', name: 'Guinea', dial: '+224', timezone: 'Africa/Conakry' },
+  { code: 'GW', name: 'Guinea-Bissau', dial: '+245', timezone: 'Africa/Bissau' },
+  { code: 'GY', name: 'Guyana', dial: '+592', timezone: 'America/Guyana' },
+  { code: 'HT', name: 'Haiti', dial: '+509', timezone: 'America/Port-au-Prince' },
+  { code: 'HN', name: 'Honduras', dial: '+504', timezone: 'America/Tegucigalpa' },
+  { code: 'HK', name: 'Hong Kong', dial: '+852', timezone: 'Asia/Hong_Kong' },
+  { code: 'HU', name: 'Hungary', dial: '+36', timezone: 'Europe/Budapest' },
+  { code: 'IS', name: 'Iceland', dial: '+354', timezone: 'Atlantic/Reykjavik' },
+  { code: 'IN', name: 'India', dial: '+91', timezone: 'Asia/Kolkata' },
+  { code: 'ID', name: 'Indonesia', dial: '+62', timezone: 'Asia/Jakarta' },
+  { code: 'IR', name: 'Iran', dial: '+98', timezone: 'Asia/Tehran' },
+  { code: 'IQ', name: 'Iraq', dial: '+964', timezone: 'Asia/Baghdad' },
+  { code: 'IE', name: 'Ireland', dial: '+353', timezone: 'Europe/Dublin' },
+  { code: 'IL', name: 'Israel', dial: '+972', timezone: 'Asia/Jerusalem' },
+  { code: 'IT', name: 'Italy', dial: '+39', timezone: 'Europe/Rome' },
+  { code: 'JM', name: 'Jamaica', dial: '+1-876', timezone: 'America/Jamaica' },
+  { code: 'JP', name: 'Japan', dial: '+81', timezone: 'Asia/Tokyo' },
+  { code: 'JO', name: 'Jordan', dial: '+962', timezone: 'Asia/Amman' },
+  { code: 'KZ', name: 'Kazakhstan', dial: '+7', timezone: 'Asia/Almaty' },
+  { code: 'KE', name: 'Kenya', dial: '+254', timezone: 'Africa/Nairobi' },
+  { code: 'KI', name: 'Kiribati', dial: '+686', timezone: 'Pacific/Tarawa' },
+  { code: 'KW', name: 'Kuwait', dial: '+965', timezone: 'Asia/Kuwait' },
+  { code: 'KG', name: 'Kyrgyzstan', dial: '+996', timezone: 'Asia/Bishkek' },
+  { code: 'LA', name: 'Laos', dial: '+856', timezone: 'Asia/Vientiane' },
+  { code: 'LV', name: 'Latvia', dial: '+371', timezone: 'Europe/Riga' },
+  { code: 'LB', name: 'Lebanon', dial: '+961', timezone: 'Asia/Beirut' },
+  { code: 'LS', name: 'Lesotho', dial: '+266', timezone: 'Africa/Maseru' },
+  { code: 'LR', name: 'Liberia', dial: '+231', timezone: 'Africa/Monrovia' },
+  { code: 'LY', name: 'Libya', dial: '+218', timezone: 'Africa/Tripoli' },
+  { code: 'LI', name: 'Liechtenstein', dial: '+423', timezone: 'Europe/Vaduz' },
+  { code: 'LT', name: 'Lithuania', dial: '+370', timezone: 'Europe/Vilnius' },
+  { code: 'LU', name: 'Luxembourg', dial: '+352', timezone: 'Europe/Luxembourg' },
+  { code: 'MO', name: 'Macau', dial: '+853', timezone: 'Asia/Macau' },
+  { code: 'MG', name: 'Madagascar', dial: '+261', timezone: 'Indian/Antananarivo' },
+  { code: 'MW', name: 'Malawi', dial: '+265', timezone: 'Africa/Blantyre' },
+  { code: 'MY', name: 'Malaysia', dial: '+60', timezone: 'Asia/Kuala_Lumpur' },
+  { code: 'MV', name: 'Maldives', dial: '+960', timezone: 'Indian/Maldives' },
+  { code: 'ML', name: 'Mali', dial: '+223', timezone: 'Africa/Bamako' },
+  { code: 'MT', name: 'Malta', dial: '+356', timezone: 'Europe/Malta' },
+  { code: 'MH', name: 'Marshall Islands', dial: '+692', timezone: 'Pacific/Majuro' },
+  { code: 'MR', name: 'Mauritania', dial: '+222', timezone: 'Africa/Nouakchott' },
+  { code: 'MU', name: 'Mauritius', dial: '+230', timezone: 'Indian/Mauritius' },
+  { code: 'MX', name: 'Mexico', dial: '+52', timezone: 'America/Mexico_City' },
+  { code: 'FM', name: 'Micronesia', dial: '+691', timezone: 'Pacific/Chuuk' },
+  { code: 'MD', name: 'Moldova', dial: '+373', timezone: 'Europe/Chisinau' },
+  { code: 'MC', name: 'Monaco', dial: '+377', timezone: 'Europe/Monaco' },
+  { code: 'MN', name: 'Mongolia', dial: '+976', timezone: 'Asia/Ulaanbaatar' },
+  { code: 'ME', name: 'Montenegro', dial: '+382', timezone: 'Europe/Podgorica' },
+  { code: 'MA', name: 'Morocco', dial: '+212', timezone: 'Africa/Casablanca' },
+  { code: 'MZ', name: 'Mozambique', dial: '+258', timezone: 'Africa/Maputo' },
+  { code: 'MM', name: 'Myanmar', dial: '+95', timezone: 'Asia/Yangon' },
+  { code: 'NA', name: 'Namibia', dial: '+264', timezone: 'Africa/Windhoek' },
+  { code: 'NR', name: 'Nauru', dial: '+674', timezone: 'Pacific/Nauru' },
+  { code: 'NP', name: 'Nepal', dial: '+977', timezone: 'Asia/Kathmandu' },
+  { code: 'NL', name: 'Netherlands', dial: '+31', timezone: 'Europe/Amsterdam' },
+  { code: 'NZ', name: 'New Zealand', dial: '+64', timezone: 'Pacific/Auckland' },
+  { code: 'NI', name: 'Nicaragua', dial: '+505', timezone: 'America/Managua' },
+  { code: 'NE', name: 'Niger', dial: '+227', timezone: 'Africa/Niamey' },
+  { code: 'NG', name: 'Nigeria', dial: '+234', timezone: 'Africa/Lagos' },
+  { code: 'KP', name: 'North Korea', dial: '+850', timezone: 'Asia/Pyongyang' },
+  { code: 'MK', name: 'North Macedonia', dial: '+389', timezone: 'Europe/Skopje' },
+  { code: 'NO', name: 'Norway', dial: '+47', timezone: 'Europe/Oslo' },
+  { code: 'OM', name: 'Oman', dial: '+968', timezone: 'Asia/Muscat' },
+  { code: 'PK', name: 'Pakistan', dial: '+92', timezone: 'Asia/Karachi' },
+  { code: 'PW', name: 'Palau', dial: '+680', timezone: 'Pacific/Palau' },
+  { code: 'PS', name: 'Palestine', dial: '+970', timezone: 'Asia/Gaza' },
+  { code: 'PA', name: 'Panama', dial: '+507', timezone: 'America/Panama' },
+  { code: 'PG', name: 'Papua New Guinea', dial: '+675', timezone: 'Pacific/Port_Moresby' },
+  { code: 'PY', name: 'Paraguay', dial: '+595', timezone: 'America/Asuncion' },
+  { code: 'PE', name: 'Peru', dial: '+51', timezone: 'America/Lima' },
+  { code: 'PH', name: 'Philippines', dial: '+63', timezone: 'Asia/Manila' },
+  { code: 'PL', name: 'Poland', dial: '+48', timezone: 'Europe/Warsaw' },
+  { code: 'PT', name: 'Portugal', dial: '+351', timezone: 'Europe/Lisbon' },
+  { code: 'QA', name: 'Qatar', dial: '+974', timezone: 'Asia/Qatar' },
+  { code: 'RO', name: 'Romania', dial: '+40', timezone: 'Europe/Bucharest' },
+  { code: 'RU', name: 'Russia', dial: '+7', timezone: 'Europe/Moscow' },
+  { code: 'RW', name: 'Rwanda', dial: '+250', timezone: 'Africa/Kigali' },
+  { code: 'KN', name: 'Saint Kitts & Nevis', dial: '+1-869', timezone: 'America/St_Kitts' },
+  { code: 'LC', name: 'Saint Lucia', dial: '+1-758', timezone: 'America/St_Lucia' },
+  { code: 'VC', name: 'Saint Vincent & Grenadines', dial: '+1-784', timezone: 'America/St_Vincent' },
+  { code: 'WS', name: 'Samoa', dial: '+685', timezone: 'Pacific/Apia' },
+  { code: 'SM', name: 'San Marino', dial: '+378', timezone: 'Europe/San_Marino' },
+  { code: 'ST', name: 'Sao Tome & Principe', dial: '+239', timezone: 'Africa/Sao_Tome' },
+  { code: 'SA', name: 'Saudi Arabia', dial: '+966', timezone: 'Asia/Riyadh' },
+  { code: 'SN', name: 'Senegal', dial: '+221', timezone: 'Africa/Dakar' },
+  { code: 'RS', name: 'Serbia', dial: '+381', timezone: 'Europe/Belgrade' },
+  { code: 'SC', name: 'Seychelles', dial: '+248', timezone: 'Indian/Mahe' },
+  { code: 'SL', name: 'Sierra Leone', dial: '+232', timezone: 'Africa/Freetown' },
+  { code: 'SG', name: 'Singapore', dial: '+65', timezone: 'Asia/Singapore' },
+  { code: 'SK', name: 'Slovakia', dial: '+421', timezone: 'Europe/Bratislava' },
+  { code: 'SI', name: 'Slovenia', dial: '+386', timezone: 'Europe/Ljubljana' },
+  { code: 'SB', name: 'Solomon Islands', dial: '+677', timezone: 'Pacific/Guadalcanal' },
+  { code: 'SO', name: 'Somalia', dial: '+252', timezone: 'Africa/Mogadishu' },
+  { code: 'ZA', name: 'South Africa', dial: '+27', timezone: 'Africa/Johannesburg' },
+  { code: 'KR', name: 'South Korea', dial: '+82', timezone: 'Asia/Seoul' },
+  { code: 'SS', name: 'South Sudan', dial: '+211', timezone: 'Africa/Juba' },
+  { code: 'ES', name: 'Spain', dial: '+34', timezone: 'Europe/Madrid' },
+  { code: 'LK', name: 'Sri Lanka', dial: '+94', timezone: 'Asia/Colombo' },
+  { code: 'SD', name: 'Sudan', dial: '+249', timezone: 'Africa/Khartoum' },
+  { code: 'SR', name: 'Suriname', dial: '+597', timezone: 'America/Paramaribo' },
+  { code: 'SE', name: 'Sweden', dial: '+46', timezone: 'Europe/Stockholm' },
+  { code: 'CH', name: 'Switzerland', dial: '+41', timezone: 'Europe/Zurich' },
+  { code: 'SY', name: 'Syria', dial: '+963', timezone: 'Asia/Damascus' },
+  { code: 'TW', name: 'Taiwan', dial: '+886', timezone: 'Asia/Taipei' },
+  { code: 'TJ', name: 'Tajikistan', dial: '+992', timezone: 'Asia/Dushanbe' },
+  { code: 'TZ', name: 'Tanzania', dial: '+255', timezone: 'Africa/Dar_es_Salaam' },
+  { code: 'TH', name: 'Thailand', dial: '+66', timezone: 'Asia/Bangkok' },
+  { code: 'TL', name: 'Timor-Leste', dial: '+670', timezone: 'Asia/Dili' },
+  { code: 'TG', name: 'Togo', dial: '+228', timezone: 'Africa/Lome' },
+  { code: 'TO', name: 'Tonga', dial: '+676', timezone: 'Pacific/Tongatapu' },
+  { code: 'TT', name: 'Trinidad & Tobago', dial: '+1-868', timezone: 'America/Port_of_Spain' },
+  { code: 'TN', name: 'Tunisia', dial: '+216', timezone: 'Africa/Tunis' },
+  { code: 'TR', name: 'Turkey', dial: '+90', timezone: 'Europe/Istanbul' },
+  { code: 'TM', name: 'Turkmenistan', dial: '+993', timezone: 'Asia/Ashgabat' },
+  { code: 'TV', name: 'Tuvalu', dial: '+688', timezone: 'Pacific/Funafuti' },
+  { code: 'UG', name: 'Uganda', dial: '+256', timezone: 'Africa/Kampala' },
+  { code: 'UA', name: 'Ukraine', dial: '+380', timezone: 'Europe/Kyiv' },
+  { code: 'AE', name: 'United Arab Emirates', dial: '+971', timezone: 'Asia/Dubai' },
+  { code: 'GB', name: 'United Kingdom', dial: '+44', timezone: 'Europe/London' },
+  { code: 'US', name: 'United States', dial: '+1', timezone: 'America/New_York' },
+  { code: 'UY', name: 'Uruguay', dial: '+598', timezone: 'America/Montevideo' },
+  { code: 'UZ', name: 'Uzbekistan', dial: '+998', timezone: 'Asia/Tashkent' },
+  { code: 'VU', name: 'Vanuatu', dial: '+678', timezone: 'Pacific/Efate' },
+  { code: 'VA', name: 'Vatican City', dial: '+379', timezone: 'Europe/Vatican' },
+  { code: 'VE', name: 'Venezuela', dial: '+58', timezone: 'America/Caracas' },
+  { code: 'VN', name: 'Vietnam', dial: '+84', timezone: 'Asia/Ho_Chi_Minh' },
+  { code: 'YE', name: 'Yemen', dial: '+967', timezone: 'Asia/Aden' },
+  { code: 'ZM', name: 'Zambia', dial: '+260', timezone: 'Africa/Lusaka' },
+  { code: 'ZW', name: 'Zimbabwe', dial: '+263', timezone: 'Africa/Harare' },
+];
+
+export function getFlagEmoji(code: string): string {
+  const points = code.toUpperCase().split('').map(c => 0x1F1E6 + c.charCodeAt(0) - 65);
+  return String.fromCodePoint(...points);
+}
+
+export function findCountryByName(name: string): CountryInfo | undefined {
+  if (!name.trim()) return undefined;
+  const q = name.trim().toLowerCase();
+  return COUNTRY_DATA.find(c => c.name.toLowerCase() === q);
+}
+
+export function findCountryByCode(code: string): CountryInfo | undefined {
+  return COUNTRY_DATA.find(c => c.code === code.toUpperCase());
+}
+
+export function getCountryForDial(dial: string): CountryInfo | undefined {
+  const sorted = [...COUNTRY_DATA].sort((a, b) => b.dial.length - a.dial.length);
+  return sorted.find(c => dial.startsWith(c.dial));
+}
+
+export function getTimezoneForCountry(name: string): string | undefined {
+  const country = findCountryByName(name);
+  return country?.timezone;
+}
+
+export function formatE164(dial: string, localNumber: string): string {
+  const digits = localNumber.replace(/\D/g, '');
+  return `${dial}${digits}`;
+}
+
+export function parseE164(value: string): { dial: string; localNumber: string } | null {
+  if (!value.startsWith('+')) return null;
+  const sorted = [...COUNTRY_DATA].sort((a, b) => b.dial.length - a.dial.length);
+  for (const c of sorted) {
+    if (value.startsWith(c.dial)) {
+      const local = value.slice(c.dial.length);
+      return { dial: c.dial, localNumber: local };
+    }
+  }
+  return null;
+}
+
+export const COUNTRIES = COUNTRY_DATA;

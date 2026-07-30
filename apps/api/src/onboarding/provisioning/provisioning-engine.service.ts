@@ -23,11 +23,30 @@ export class ProvisioningEngineService {
     private readonly industryFactory: IndustryTemplateFactory,
   ) {}
 
-  async provision(sessionId: string) {
+  async provision(
+    sessionId: string,
+    input?: { selectedIndustry?: string | null; orgName?: string | null },
+  ) {
     const session = await this.prisma.onboardingSession.findUnique({
       where: { id: sessionId },
     });
     if (!session) throw new BadRequestException('Session not found');
+
+    const selectedIndustry = (session.selectedIndustry as string | null) ?? input?.selectedIndustry ?? null;
+    const orgName = (session.orgName as string | null) ?? input?.orgName ?? null;
+
+    if (
+      (input?.selectedIndustry && !session.selectedIndustry) ||
+      (input?.orgName && !session.orgName)
+    ) {
+      await this.prisma.onboardingSession.update({
+        where: { id: sessionId },
+        data: {
+          ...(input?.selectedIndustry && !session.selectedIndustry ? { selectedIndustry: input.selectedIndustry } : {}),
+          ...(input?.orgName && !session.orgName ? { orgName: input.orgName } : {}),
+        },
+      });
+    }
 
     if (session.provisionStatus === 'COMPLETED') {
       return this.mapSession(session);
@@ -41,11 +60,11 @@ export class ProvisioningEngineService {
       this.logger.log(`Resuming provisioning from checkpoint: ${progress.failedTask}`);
     }
 
-    if (!session.selectedIndustry || !session.orgName) {
+    if (!selectedIndustry || !orgName) {
       throw new BadRequestException('Missing required fields: industry and org name');
     }
 
-    const config = this.industryFactory.getProvisioningConfig(session.selectedIndustry as string);
+    const config = this.industryFactory.getProvisioningConfig(selectedIndustry as string);
     if (!config) throw new BadRequestException('Invalid industry selected');
 
     await this.prisma.onboardingSession.update({
@@ -75,7 +94,7 @@ export class ProvisioningEngineService {
         status: 'SUCCESS',
         entity: 'OnboardingSession',
         entityId: sessionId,
-        metadata: { email: session.email as string, industry: session.selectedIndustry as string },
+        metadata: { email: session.email as string, industry: selectedIndustry as string },
       });
 
       this.compensationManager.clear();
@@ -110,9 +129,10 @@ export class ProvisioningEngineService {
       version: (session.version as number) ?? 1,
       currentStep: session.currentStep as number,
       completedSteps: (session.completedSteps as number[]) ?? [],
-      selectedIndustry: session.selectedIndustry as string ?? null,
+      selectedIndustry: selectedIndustry as string ?? null,
       selectedCategory: session.selectedCategory as string ?? null,
-      orgName: session.orgName as string ?? null, orgEmail: session.orgEmail as string ?? null,
+      selectedCategories: (session.selectedCategories as string[]) ?? [],
+      orgName: orgName as string ?? null, orgEmail: session.orgEmail as string ?? null,
       orgPhone: session.orgPhone as string ?? null, orgWebsite: session.orgWebsite as string ?? null,
       orgCountry: session.orgCountry as string ?? null, orgState: session.orgState as string ?? null,
       orgCity: session.orgCity as string ?? null, orgAddress: session.orgAddress as string ?? null,

@@ -4,27 +4,10 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Bot, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { useOnboarding } from '../_hooks/onboarding-context';
-
-const AI_PERSONALITIES = [
-  { id: 'professional', label: 'Professional', description: 'Formal and business-appropriate tone' },
-  { id: 'friendly', label: 'Friendly', description: 'Warm and approachable communication' },
-  { id: 'concise', label: 'Concise', description: 'Short, direct, and to the point' },
-  { id: 'analytical', label: 'Analytical', description: 'Data-driven with detailed insights' },
-];
-
-const LANGUAGES = [
-  { code: 'en', label: 'English' },
-  { code: 'es', label: 'Spanish' },
-  { code: 'fr', label: 'French' },
-  { code: 'de', label: 'German' },
-  { code: 'ar', label: 'Arabic' },
-  { code: 'bn', label: 'Bengali' },
-  { code: 'hi', label: 'Hindi' },
-  { code: 'zh', label: 'Chinese' },
-];
+import { LANGUAGES, AI_PERSONALITIES } from '@/lib/onboarding-constants';
 
 export default function AiPage() {
-  const { wizard, session, saveField, completeStep } = useOnboarding();
+  const { wizard, session, saveFields, completeStep, persistSession } = useOnboarding();
   const [enabled, setEnabled] = useState(session?.aiEnabled ?? true);
   const [language, setLanguage] = useState(session?.aiLanguage ?? 'en');
   const [personality, setPersonality] = useState(session?.aiPersonality ?? 'professional');
@@ -34,10 +17,9 @@ export default function AiPage() {
   }
 
   const handleContinue = async () => {
-    saveField('aiEnabled', enabled);
-    saveField('aiLanguage', language);
-    saveField('aiPersonality', personality);
-    await completeStep(5);
+    saveFields({ aiEnabled: enabled, aiLanguage: language, aiPersonality: personality });
+    await persistSession();
+    await completeStep(4);
     wizard.goNext();
   };
 

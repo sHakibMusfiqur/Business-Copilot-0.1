@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { User, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -33,7 +33,7 @@ type RegisterFormData = z.infer<typeof registerSchema>;
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { user, setUser } = useAuthStore();
+  const { setUser } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -46,16 +46,6 @@ export default function RegisterPage() {
     resolver: zodResolver(registerSchema),
   });
 
-  useEffect(() => {
-    if (user) {
-      router.replace('/onboarding');
-    }
-  }, [user, router]);
-
-  if (user) {
-    return null;
-  }
-
   async function onSubmit(data: RegisterFormData) {
     setIsSubmitting(true);
     setError(null);
@@ -63,7 +53,7 @@ export default function RegisterPage() {
     try {
       const result = await registerUser(data.name, data.email, data.password);
       setUser(result.user, result.accessToken);
-      const session = await createSession(data.name, data.email);
+      const session = await createSession(data.email, data.name);
       await updateSession(session.id, { userId: result.user.id });
       router.push(`/onboarding/verify?session=${session.id}`);
     } catch (err: unknown) {

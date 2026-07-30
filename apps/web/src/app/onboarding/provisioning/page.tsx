@@ -6,20 +6,23 @@ import { useState, useEffect, useRef } from 'react';
 import { useOnboarding } from '../_hooks/onboarding-context';
 import { refreshAccessToken } from '@/lib/api';
 import {
-  provisionOrganization, createProvisioningEventSource,
+  getSession, provisionOrganization, createProvisioningEventSource,
   type ProvisioningProgress,
 } from '@/lib/onboarding-api';
 
 export default function ProvisioningPage() {
-  const { wizard, session, completeStep } = useOnboarding();
+  const { wizard, session, completeStep, persistSession } = useOnboarding();
   const [progress, setProgress] = useState<ProvisioningProgress | null>(null);
   const [starting, setStarting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const esRef = useRef<EventSource | null>(null);
+  const provisionStartedRef = useRef(false);
+  const [retryCount, setRetryCount] = useState(0);
 
   useEffect(() => {
     if (!session) return;
+    if (provisionStartedRef.current) return;
 
     if (session.provisionStatus === 'COMPLETED') {
       refreshAccessToken();
@@ -27,16 +30,32 @@ export default function ProvisioningPage() {
       return;
     }
 
-    if (session.provisionStatus === 'FAILED') {
+    if (session.provisionStatus === 'FAILED' && retryCount === 0) {
       setError('Previous provisioning failed. Retry to resume.');
       return;
     }
 
+    provisionStartedRef.current = true;
+
     const startProvision = async () => {
       setStarting(true);
       try {
-        await provisionOrganization(session.id);
+        const persisted = await persistSession();
+        const latestSession = await getSession(session.id).catch(() => persisted ?? session);
+        const sessionData = latestSession ?? persisted ?? session;
+        if (!sessionData.selectedIndustry || !sessionData.orgName) {
+          provisionStartedRef.current = false;
+          setStarting(false);
+          setError('Missing required onboarding data. Redirecting to the step that still needs input.');
+          wizard.goTo(!sessionData.selectedIndustry ? 1 : 2);
+          return;
+        }
+        await provisionOrganization(session.id, {
+          selectedIndustry: sessionData.selectedIndustry,
+          orgName: sessionData.orgName,
+        });
       } catch (e) {
+        provisionStartedRef.current = false;
         setError((e as Error).message ?? 'Provisioning failed to start');
         setStarting(false);
         return;
@@ -74,12 +93,12 @@ export default function ProvisioningPage() {
         esRef.current = null;
       }
     };
-  }, [session]);
+  }, [session, retryCount]);
 
   useEffect(() => {
     if (!done && progress?.status === 'COMPLETED') {
       (async () => {
-        await completeStep(7);
+        await completeStep(6);
         await refreshAccessToken();
         setDone(true);
       })();
@@ -130,7 +149,11 @@ export default function ProvisioningPage() {
           <h2 className="mb-2 text-xl font-bold text-white">Something went wrong</h2>
           <p className="mb-6 text-sm text-red-400">{error}</p>
           <button
-            onClick={() => { setError(null); setStarting(true); }}
+            onClick={() => {
+              provisionStartedRef.current = false;
+              setError(null);
+              setRetryCount((c) => c + 1);
+            }}
             className="rounded-xl bg-gradient-to-r from-red-600 to-rose-600 px-6 py-3 font-semibold text-white shadow-lg transition-all hover:from-red-500 hover:to-rose-500"
           >
             Retry

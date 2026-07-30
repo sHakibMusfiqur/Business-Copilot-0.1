@@ -10,6 +10,20 @@ import {
 
 const SAVE_DEBOUNCE_MS = 2000;
 
+const PERSIST_FIELDS: (keyof OnboardingSession)[] = [
+  'currentStep', 'selectedIndustry', 'selectedCategory', 'selectedCategories',
+  'orgName', 'orgEmail', 'orgPhone', 'orgWebsite', 'orgCountry', 'orgState',
+  'orgCity', 'orgAddress', 'orgTimezone', 'orgCurrency', 'orgLanguage',
+  'businessProfile', 'selectedModules', 'aiEnabled', 'aiLanguage',
+  'aiPersonality', 'selectedPlanId',
+];
+
+function pickPersistFields(s: OnboardingSession): Record<string, unknown> {
+  const data: Record<string, unknown> = { version: s.version };
+  for (const f of PERSIST_FIELDS) data[f] = s[f];
+  return data;
+}
+
 export function useOnboardingSession() {
   const [session, setSession] = useState<OnboardingSession | null>(null);
   const [loading, setLoading] = useState(false);
@@ -18,6 +32,8 @@ export function useOnboardingSession() {
 
   const dirtyRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -59,6 +75,7 @@ export function useOnboardingSession() {
     setError(null);
     try {
       const s = await createSession(email, name);
+      sessionRef.current = s;
       setSession(s);
       router.replace(`/onboarding?session=${s.id}`);
       return s;
@@ -74,43 +91,28 @@ export function useOnboardingSession() {
     key: K,
     value: OnboardingSession[K],
   ) => {
-    if (!session) return;
-    setSession((prev) => (prev ? { ...prev, [key]: value } : prev));
+    if (!sessionRef.current) return;
+    const next = { ...sessionRef.current, [key]: value };
+    sessionRef.current = next;
+    setSession(next);
     dirtyRef.current = true;
-  }, [session]);
+  }, []);
 
-  const saveBatch = useCallback((data: Partial<OnboardingSession>) => {
-    if (!session) return;
-    setSession((prev) => (prev ? { ...prev, ...data } : prev));
+  const saveFields = useCallback((data: Partial<OnboardingSession>) => {
+    if (!sessionRef.current) return;
+    const next = { ...sessionRef.current, ...data };
+    sessionRef.current = next;
+    setSession(next);
     dirtyRef.current = true;
-  }, [session]);
+  }, []);
 
   const persistSession = useCallback(async (): Promise<OnboardingSession | null> => {
-    if (!session || !dirtyRef.current) return session;
+    const s = sessionRef.current;
+    if (!s || !dirtyRef.current) return s;
     setSaving(true);
     try {
-      const updated = await updateSession(session.id, {
-        currentStep: session.currentStep,
-        selectedIndustry: session.selectedIndustry,
-        selectedCategory: session.selectedCategory,
-        orgName: session.orgName,
-        orgEmail: session.orgEmail,
-        orgPhone: session.orgPhone,
-        orgWebsite: session.orgWebsite,
-        orgCountry: session.orgCountry,
-        orgState: session.orgState,
-        orgCity: session.orgCity,
-        orgAddress: session.orgAddress,
-        orgTimezone: session.orgTimezone,
-        orgCurrency: session.orgCurrency,
-        orgLanguage: session.orgLanguage,
-        businessProfile: session.businessProfile,
-        selectedModules: session.selectedModules,
-        aiEnabled: session.aiEnabled,
-        aiLanguage: session.aiLanguage,
-        aiPersonality: session.aiPersonality,
-        selectedPlanId: session.selectedPlanId,
-      });
+      const updated = await updateSession(s.id, pickPersistFields(s));
+      sessionRef.current = updated;
       setSession(updated);
       dirtyRef.current = false;
       return updated;
@@ -120,51 +122,59 @@ export function useOnboardingSession() {
     } finally {
       setSaving(false);
     }
-  }, [session]);
+  }, []);
 
   const completeStep = useCallback(async (step: number) => {
-    if (!session) return;
+    const s = sessionRef.current;
+    if (!s) return;
     try {
-      const updated = await apiCompleteStep(session.id, step);
-      setSession(updated);
+      const updated = await apiCompleteStep(s.id, step);
+      sessionRef.current = updated;
+      setSession((prev) => prev ? {
+        ...prev,
+        currentStep: updated.currentStep,
+        completedSteps: updated.completedSteps,
+        version: updated.version,
+        provisionStatus: updated.provisionStatus,
+        organizationId: updated.organizationId,
+        provisionData: updated.provisionData,
+      } : prev);
       return updated;
     } catch {
-      const completed = [...(session.completedSteps ?? []), step];
+      const completed = [...((s).completedSteps ?? []), step];
+      const next = s ? { ...s, completedSteps: completed, currentStep: step + 1 } : s;
+      if (next) sessionRef.current = next;
       setSession((prev) => prev ? { ...prev, completedSteps: completed, currentStep: step + 1 } : prev);
       return null;
     }
-  }, [session]);
+  }, []);
 
   const refreshSession = useCallback(async () => {
-    if (session) await loadSession(session.id);
-  }, [session, loadSession]);
+    const s = sessionRef.current;
+    if (s) await loadSession(s.id);
+  }, [loadSession]);
 
   useEffect(() => {
-    if (!dirtyRef.current || !session) return;
+    if (!dirtyRef.current || !sessionRef.current) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => { persistSession(); }, SAVE_DEBOUNCE_MS);
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [session, persistSession]);
+  }, [session]);
 
   useEffect(() => {
     return () => {
-      if (saveTimerRef.current) {
-        clearTimeout(saveTimerRef.current);
-        if (dirtyRef.current && session) {
-          updateSession(session.id, {
-            currentStep: session.currentStep,
-            selectedIndustry: session.selectedIndustry,
-          }).catch(() => {});
-        }
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (dirtyRef.current && sessionRef.current) {
+        updateSession(sessionRef.current.id, pickPersistFields(sessionRef.current)).catch(() => {});
       }
     };
-  }, [session]);
+  }, []);
 
   return {
     session, setSession, loading, saving, error,
     loadSession, loadLatestByEmail, initSession,
-    saveField, saveBatch, persistSession, completeStep, refreshSession,
+    saveField, saveFields, persistSession, completeStep, refreshSession,
   };
 }

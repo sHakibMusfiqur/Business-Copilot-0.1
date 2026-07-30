@@ -1060,6 +1060,7 @@ model OnboardingSession {
   completedSteps   Json?     @default("[]")
   selectedIndustry String?
   selectedCategory String?
+  selectedCategories Json?    @default("[]")
   orgName          String?
   orgEmail         String?
   orgPhone         String?

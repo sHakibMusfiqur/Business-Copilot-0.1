@@ -38,7 +38,7 @@ const PLANS: Plan[] = [
 ];
 
 export default function PlanPage() {
-  const { wizard, session, saveField, completeStep } = useOnboarding();
+  const { wizard, session, saveField, completeStep, persistSession } = useOnboarding();
   const [selected, setSelected] = useState(session?.selectedPlanId ?? 'growth');
   const [annual, setAnnual] = useState(false);
 
@@ -51,7 +51,8 @@ export default function PlanPage() {
 
   const handleContinue = async () => {
     saveField('selectedPlanId', selected);
-    await completeStep(6);
+    await persistSession();
+    await completeStep(5);
     wizard.goNext();
   };
 

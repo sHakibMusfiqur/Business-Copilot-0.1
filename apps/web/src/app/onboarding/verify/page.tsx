@@ -38,7 +38,7 @@ export default function VerifyPage() {
   };
 
   const handleKeyDown = (index: number, e: React.KeyboardEvent) => {
-    if (e.key === 'Backward-delete' || e.key === 'Backspace' || e.key === 'Delete') {
+    if (e.key === 'Backspace' || e.key === 'Delete') {
       if (!code[index] && index > 0) {
         const prev = document.getElementById(`code-${index - 1}`);
         prev?.focus();

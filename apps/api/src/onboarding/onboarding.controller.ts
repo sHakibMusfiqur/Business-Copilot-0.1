@@ -91,8 +91,12 @@ export class OnboardingController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Provision the organization' })
   @ApiOkResponse({ type: SessionResponseDto })
-  async provision(@Param('id') id: string, @Res({ passthrough: true }) res: Response) {
-    const result = await this.provisioningEngine.provision(id);
+  async provision(
+    @Param('id') id: string,
+    @Body() body: { selectedIndustry?: string | null; orgName?: string | null },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.provisioningEngine.provision(id, body);
     const request = res.req as { idempotencyKey?: string };
     if (request?.idempotencyKey) {
       await this.idempotencyService.cacheResponse(request.idempotencyKey, result);

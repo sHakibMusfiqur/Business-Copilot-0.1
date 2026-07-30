@@ -183,7 +183,7 @@ export class ProvisioningExecutorService {
     tx: any,
   ): Promise<void> {
     const selectedModules = (session.selectedModules as string[]) ?? [];
-    if (selectedModules.includes('subscription') && session.selectedPlanId) {
+    if (session.selectedPlanId && (selectedModules.length === 0 || selectedModules.includes('subscription'))) {
       const org = await tx.organization.findFirst({ orderBy: { createdAt: 'desc' } });
       if (!org) return;
       const plan = await tx.subscriptionPlan.findUnique({

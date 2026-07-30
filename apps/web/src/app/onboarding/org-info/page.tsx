@@ -1,41 +1,70 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { ArrowLeft, ArrowRight, Building2, Globe, MapPin, Phone, Mail } from 'lucide-react';
-import { useState } from 'react';
+import { ArrowLeft, ArrowRight, Building2, Globe, MapPin, Mail } from 'lucide-react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useOnboarding } from '../_hooks/onboarding-context';
-
-const TIMEZONES = Intl.supportedValuesOf?.('timeZone') ?? [
-  'UTC', 'America/New_York', 'America/Chicago', 'America/Denver',
-  'America/Los_Angeles', 'Europe/London', 'Europe/Paris', 'Europe/Berlin',
-  'Asia/Dubai', 'Asia/Dhaka', 'Asia/Kolkata', 'Asia/Singapore',
-  'Asia/Tokyo', 'Australia/Sydney',
-];
-
-const CURRENCIES = [
-  { code: 'USD', label: 'USD - US Dollar' },
-  { code: 'EUR', label: 'EUR - Euro' },
-  { code: 'GBP', label: 'GBP - British Pound' },
-  { code: 'BDT', label: 'BDT - Bangladeshi Taka' },
-  { code: 'INR', label: 'INR - Indian Rupee' },
-  { code: 'JPY', label: 'JPY - Japanese Yen' },
-  { code: 'SGD', label: 'SGD - Singapore Dollar' },
-  { code: 'AED', label: 'AED - UAE Dirham' },
-];
+import { PhoneInput } from '@/components/onboarding/phone-input';
+import { COUNTRIES, getFlagEmoji, findCountryByName } from '@/lib/countries';
+import { TIMEZONES, CURRENCIES } from '@/lib/onboarding-constants';
 
 export default function OrgInfoPage() {
-  const { wizard, session, saveField, completeStep } = useOnboarding();
+  const { wizard, session, saveFields, completeStep, persistSession } = useOnboarding();
   const [name, setName] = useState(session?.orgName ?? '');
   const [email, setEmail] = useState(session?.orgEmail ?? session?.email ?? '');
   const [phone, setPhone] = useState(session?.orgPhone ?? '');
   const [website, setWebsite] = useState(session?.orgWebsite ?? '');
-  const [country, setCountry] = useState(session?.orgCountry ?? '');
+  const [country, setCountry] = useState(session?.orgCountry ?? 'Bangladesh');
   const [state, setState] = useState(session?.orgState ?? '');
   const [city, setCity] = useState(session?.orgCity ?? '');
   const [address, setAddress] = useState(session?.orgAddress ?? '');
-  const [timezone, setTimezone] = useState(session?.orgTimezone ?? 'UTC');
+  const [timezone, setTimezone] = useState(session?.orgTimezone ?? 'Asia/Dhaka');
   const [currency, setCurrency] = useState(session?.orgCurrency ?? 'USD');
   const [localError, setLocalError] = useState<string | null>(null);
+  const [countryOpen, setCountryOpen] = useState(false);
+  const countryRef = useRef<HTMLDivElement>(null);
+
+  const timezoneOptions = useMemo(() =>
+    TIMEZONES.map(tz => {
+      try {
+        const offset = new Intl.DateTimeFormat('en', {
+          timeZone: tz, timeZoneName: 'shortOffset',
+        }).formatToParts(new Date()).find(p => p.type === 'timeZoneName')?.value;
+        return { value: tz, label: offset ? `${tz} (${offset})` : tz };
+      } catch {
+        return { value: tz, label: tz };
+      }
+    }),
+  []);
+
+  const filteredCountries = useMemo(() =>
+    country.trim()
+      ? COUNTRIES.filter(c =>
+          c.name.toLowerCase().startsWith(country.toLowerCase()) ||
+          c.name.toLowerCase().includes(` ${country.toLowerCase()}`)
+        ).slice(0, 20)
+      : COUNTRIES.slice(0, 20),
+    [country]
+  );
+
+  useEffect(() => {
+    if (country.trim()) {
+      const match = findCountryByName(country);
+      if (match) {
+        setTimezone(match.timezone);
+      }
+    }
+  }, [country]);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (countryRef.current && !countryRef.current.contains(e.target as Node)) {
+        setCountryOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   if (!session) {
     return <div className="flex items-center justify-center pt-20"><p className="text-slate-400">No session found.</p></div>;
@@ -44,16 +73,13 @@ export default function OrgInfoPage() {
   const handleContinue = async () => {
     if (!name.trim()) { setLocalError('Organization name is required'); return; }
     setLocalError(null);
-    saveField('orgName', name.trim());
-    saveField('orgEmail', email.trim());
-    saveField('orgPhone', phone.trim());
-    saveField('orgWebsite', website.trim());
-    saveField('orgCountry', country.trim());
-    saveField('orgState', state.trim());
-    saveField('orgCity', city.trim());
-    saveField('orgAddress', address.trim());
-    saveField('orgTimezone', timezone);
-    saveField('orgCurrency', currency);
+    saveFields({
+      orgName: name.trim(), orgEmail: email.trim(), orgPhone: phone.trim(),
+      orgWebsite: website.trim(), orgCountry: country.trim(), orgState: state.trim(),
+      orgCity: city.trim(), orgAddress: address.trim(), orgTimezone: timezone,
+      orgCurrency: currency,
+    });
+    await persistSession();
     await completeStep(2);
     wizard.goNext();
   };
@@ -101,15 +127,7 @@ export default function OrgInfoPage() {
 
           <div>
             <label className="mb-1.5 block text-xs font-medium text-slate-400">Phone</label>
-            <div className="relative">
-              <Phone className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
-              <input
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+1 555-0123"
-                className="w-full rounded-xl border border-slate-700 bg-slate-800/50 py-3 pl-12 pr-4 text-white placeholder-slate-500 backdrop-blur-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              />
-            </div>
+            <PhoneInput value={phone} onChange={setPhone} placeholder="Enter phone number" />
           </div>
 
           <div className="sm:col-span-2">
@@ -125,14 +143,31 @@ export default function OrgInfoPage() {
             </div>
           </div>
 
-          <div>
+          <div className="relative" ref={countryRef}>
             <label className="mb-1.5 block text-xs font-medium text-slate-400">Country</label>
             <input
               value={country}
-              onChange={(e) => setCountry(e.target.value)}
-              placeholder="United States"
+              onChange={(e) => { setCountry(e.target.value); setCountryOpen(true); }}
+              onFocus={() => setCountryOpen(true)}
+              placeholder="Bangladesh"
               className="w-full rounded-xl border border-slate-700 bg-slate-800/50 px-4 py-3 text-white placeholder-slate-500 backdrop-blur-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             />
+            {countryOpen && filteredCountries.length > 0 && (
+              <ul className="absolute left-0 top-full z-50 mt-1 w-full rounded-xl border border-slate-700 bg-slate-800 shadow-xl max-h-48 overflow-y-auto overscroll-contain">
+                {filteredCountries.map((c) => (
+                  <li key={c.code}>
+                    <button
+                      type="button"
+                      onClick={() => { setCountry(c.name); setCountryOpen(false); }}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-white transition-colors hover:bg-slate-700/50"
+                    >
+                      <span className="text-lg leading-none">{getFlagEmoji(c.code)}</span>
+                      <span>{c.name}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <div>
@@ -175,8 +210,8 @@ export default function OrgInfoPage() {
               onChange={(e) => setTimezone(e.target.value)}
               className="w-full rounded-xl border border-slate-700 bg-slate-800/50 px-4 py-3 text-white backdrop-blur-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             >
-              {TIMEZONES.map((tz) => (
-                <option key={tz} value={tz} className="bg-slate-900">{tz}</option>
+              {timezoneOptions.map((opt) => (
+                <option key={opt.value} value={opt.value} className="bg-slate-900">{opt.label}</option>
               ))}
             </select>
           </div>

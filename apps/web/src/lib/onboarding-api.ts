@@ -22,6 +22,7 @@ export interface OnboardingSession {
   completedSteps: number[];
   selectedIndustry: string | null;
   selectedCategory: string | null;
+  selectedCategories: string[];
   orgName: string | null;
   orgEmail: string | null;
   orgPhone: string | null;
@@ -119,8 +120,11 @@ export async function getProvisioningProgress(id: string): Promise<ProvisioningP
   return response.data;
 }
 
-export async function provisionOrganization(id: string): Promise<OnboardingSession> {
-  const response = await api.post(`/onboarding/sessions/${id}/provision`);
+export async function provisionOrganization(
+  id: string,
+  data?: { selectedIndustry?: string | null; orgName?: string | null },
+): Promise<OnboardingSession> {
+  const response = await api.post(`/onboarding/sessions/${id}/provision`, data ?? {});
   return response.data;
 }
 

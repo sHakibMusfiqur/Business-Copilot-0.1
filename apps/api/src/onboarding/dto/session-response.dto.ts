@@ -23,6 +23,9 @@ export class SessionResponseDto {
   selectedCategory?: string;
 
   @ApiPropertyOptional()
+  selectedCategories?: string[];
+
+  @ApiPropertyOptional()
   orgName?: string;
 
   @ApiPropertyOptional()

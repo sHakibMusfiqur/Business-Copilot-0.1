@@ -14,7 +14,7 @@ interface OnboardingContextValue {
   saving: SessionReturn['saving'];
   error: SessionReturn['error'];
   saveField: SessionReturn['saveField'];
-  saveBatch: SessionReturn['saveBatch'];
+  saveFields: SessionReturn['saveFields'];
   completeStep: SessionReturn['completeStep'];
   initSession: SessionReturn['initSession'];
   refreshSession: SessionReturn['refreshSession'];
@@ -41,7 +41,7 @@ export function OnboardingProvider({
         saving: sessionData.saving,
         error: sessionData.error,
         saveField: sessionData.saveField,
-        saveBatch: sessionData.saveBatch,
+        saveFields: sessionData.saveFields,
         completeStep: sessionData.completeStep,
         initSession: sessionData.initSession,
         refreshSession: sessionData.refreshSession,
