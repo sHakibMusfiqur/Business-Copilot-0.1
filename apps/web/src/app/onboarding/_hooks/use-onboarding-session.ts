@@ -11,7 +11,7 @@ const SAVE_DEBOUNCE_MS = 2000;
 
 export function useOnboardingSession() {
   const [session, setSession] = useState<OnboardingSession | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
