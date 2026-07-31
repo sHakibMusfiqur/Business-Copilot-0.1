@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MoreHorizontal, Receipt } from 'lucide-react';
 
@@ -28,6 +28,11 @@ export default function ReceivablesPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [viewReceivable, setViewReceivable] = useState<Receivable | null>(null);
+
+  const handleSearch = useCallback((value: string) => {
+    setSearch(value);
+    setPage(1);
+  }, []);
 
   const query = useQuery({
     queryKey: ['receivables', { page, limit: 10, search }],
@@ -76,7 +81,7 @@ export default function ReceivablesPage() {
         emptyTitle="No receivables"
         emptyDescription="Receivables will appear when sales orders are delivered."
         searchPlaceholder="Search by invoice or customer..."
-        onSearchChange={(v) => { setSearch(v); setPage(1); }}
+        onSearchChange={handleSearch}
         onPageChange={setPage}
         onSort={() => {}}
         actions={(r) => (

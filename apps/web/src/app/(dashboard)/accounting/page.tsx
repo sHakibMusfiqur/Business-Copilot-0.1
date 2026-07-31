@@ -1,6 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import {
   BookOpen,
@@ -15,9 +16,13 @@ import {
 import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 import { DashboardError } from '@/components/dashboard/dashboard-error';
 import { formatDate, formatCurrency } from '@/lib/utils';
-import { AccountingCharts } from '@/components/accounting/accounting-charts';
 import { getAccountSummary, getJournalEntries, getPayments } from '@/lib/api';
 import type { AccountSummary, JournalEntry, Payment } from '@/components/accounting/accounting-types';
+
+const AccountingCharts = dynamic(
+  () => import('@/components/accounting/accounting-charts').then((m) => m.AccountingCharts),
+  { ssr: false },
+);
 
 const quickLinks = [
   { label: 'Chart of Accounts', href: '/accounting/accounts', desc: 'Manage accounts' },

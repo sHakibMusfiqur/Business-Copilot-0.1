@@ -33,18 +33,19 @@ import {
   CreditCard,
   DollarSign,
   Contact,
+  History,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { logout as apiLogout } from '@/lib/api';
+import { brandInitials } from '@/lib/branding';
 import { generateInitials } from '@/lib/utils';
 import { AuthProvider } from '@/providers/auth-provider';
-import { QueryProvider } from '@/providers/query-provider';
-import { ThemeProvider } from '@/providers/theme-provider';
+import { OrganizationThemeProvider } from '@/providers/organization-theme-provider';
 import { useAuthStore } from '@/store/auth-store';
-import { History } from 'lucide-react';
+import { useBrandingStore } from '@/store/branding-store';
 
 
 const sidebarItems = [
@@ -98,11 +99,11 @@ export default function DashboardLayout({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuthStore();
+  const brand = useBrandingStore((s) => s.brand);
 
   async function handleLogout() {
     await apiLogout();
@@ -111,10 +112,9 @@ export default function DashboardLayout({
   }
 
   return (
-    <QueryProvider>
-      <ThemeProvider>
-        <AuthProvider>
-          <div className="flex min-h-screen bg-background">
+    <AuthProvider>
+      <OrganizationThemeProvider>
+      <div className="flex min-h-screen bg-background">
             <AnimatePresence>
               {mobileOpen && (
                 <motion.div
@@ -134,9 +134,16 @@ export default function DashboardLayout({
             >
               <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
                 <Link href="/dashboard" className="flex items-center gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500">
-                      <span className="text-sm font-bold text-white">BC</span>
-                    </div>
+                    {brand.logoUrl ? (
+                      <div
+                        className="h-9 w-9 shrink-0 rounded-xl bg-primary/10 bg-contain bg-center bg-no-repeat"
+                        style={{ backgroundImage: `url(${brand.logoUrl})` }}
+                      />
+                    ) : (
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary">
+                        <span className="text-sm font-bold text-primary-foreground">{brandInitials(brand.brandName)}</span>
+                      </div>
+                    )}
                   {!collapsed && (
                     <motion.span
                       initial={{ opacity: 0 }}
@@ -144,7 +151,7 @@ export default function DashboardLayout({
                       exit={{ opacity: 0 }}
                       className="text-sm font-bold text-slate-900"
                     >
-                      Business Copilot
+                      {brand.brandName}
                     </motion.span>
                   )}
                 </Link>
@@ -153,6 +160,7 @@ export default function DashboardLayout({
                     setCollapsed(!collapsed);
                     setMobileOpen(false);
                   }}
+                  aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                   className="hidden rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 lg:block"
                 >
                   {collapsed ? (
@@ -163,6 +171,7 @@ export default function DashboardLayout({
                 </button>
                 <button
                   onClick={() => setMobileOpen(false)}
+                  aria-label="Close sidebar"
                   className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 lg:hidden"
                 >
                   <X className="h-4 w-4" />
@@ -186,7 +195,7 @@ export default function DashboardLayout({
                           onClick={() => setMobileOpen(false)}
                           className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
                             isActive
-                              ? 'bg-red-50 text-red-600 font-semibold'
+                              ? 'bg-primary/10 text-primary font-semibold'
                               : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
                           }`}
                         >
@@ -212,7 +221,7 @@ export default function DashboardLayout({
                     onClick={() => setUserMenuOpen(!userMenuOpen)}
                     className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-slate-500 hover:bg-slate-50 hover:text-slate-800 transition-colors"
                   >
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-50 text-xs font-semibold text-red-600">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
                       {user?.name ? generateInitials(user.name) : 'U'}
                     </div>
                     {!collapsed && (
@@ -256,13 +265,13 @@ export default function DashboardLayout({
               <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-slate-100 bg-white/80 backdrop-blur-xl px-4 lg:px-8">
                 <button
                   onClick={() => setMobileOpen(true)}
+                  aria-label="Open menu"
                   className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 lg:hidden"
                 >
                   <Menu className="h-5 w-5" />
                 </button>
 
                 <button
-                  onClick={() => setSearchOpen(!searchOpen)}
                   className="flex flex-1 items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/50 px-3 py-2 text-sm text-slate-400 hover:border-slate-200 transition-colors lg:max-w-md"
                 >
                   <Search className="h-4 w-4" />
@@ -273,12 +282,12 @@ export default function DashboardLayout({
                 </button>
 
                 <div className="flex items-center gap-1 ml-auto">
-                  <button className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+                  <button aria-label="Help" className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
                     <HelpCircle className="h-4 w-4" />
                   </button>
-                  <button className="relative rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+                  <button aria-label="Notifications" className="relative rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
                     <Bell className="h-4 w-4" />
-                    <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white" />
+                    <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary ring-2 ring-white" />
                   </button>
                 </div>
               </header>
@@ -288,8 +297,7 @@ export default function DashboardLayout({
               </div>
             </main>
           </div>
+          </OrganizationThemeProvider>
         </AuthProvider>
-      </ThemeProvider>
-    </QueryProvider>
   );
 }

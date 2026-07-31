@@ -1,3 +1,5 @@
+import type { Meta } from '@/lib/types';
+
 export interface Customer {
   id: string;
   name: string;
@@ -16,44 +18,9 @@ export interface Customer {
   updatedAt: string;
 }
 
-export interface CustomerMeta {
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}
+export type CustomerMeta = Meta;
 
 export interface CustomersResponse {
   data: Customer[];
   meta: CustomerMeta;
-}
-
-export interface CreateCustomerPayload {
-  name: string;
-  email?: string;
-  phone?: string;
-  company?: string;
-  taxId?: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  zipCode?: string;
-  country?: string;
-  notes?: string;
-  isActive?: boolean;
-}
-
-export interface UpdateCustomerPayload {
-  name?: string;
-  email?: string;
-  phone?: string;
-  company?: string;
-  taxId?: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  zipCode?: string;
-  country?: string;
-  notes?: string;
-  isActive?: boolean;
 }

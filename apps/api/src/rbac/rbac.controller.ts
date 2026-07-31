@@ -16,7 +16,9 @@ import { ApiTags, ApiBearerAuth, ApiOkResponse, ApiCreatedResponse, ApiUnauthori
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
+import { Permissions } from '../common/decorators/permissions.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { PermissionGuard } from '../common/guards/permission.guard';
 
 import { RbacService } from './rbac.service';
 import { CreateRoleDto } from './dto/create-role.dto';
@@ -26,7 +28,7 @@ import { AssignUserRolesDto } from './dto/assign-user-roles.dto';
 
 @ApiTags('RBAC')
 @Controller()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionGuard)
 export class RbacController {
   constructor(private readonly rbacService: RbacService) {}
 
@@ -70,6 +72,7 @@ export class RbacController {
 
   @Post('roles')
   @HttpCode(HttpStatus.CREATED)
+  @Permissions(['organization.manage'])
   @ApiBearerAuth('access-token')
   @ApiCreatedResponse({ description: 'Role created' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
@@ -83,6 +86,7 @@ export class RbacController {
   }
 
   @Patch('roles/:id')
+  @Permissions(['organization.manage'])
   @ApiBearerAuth('access-token')
   @ApiOkResponse({ description: 'Role updated' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
@@ -98,6 +102,7 @@ export class RbacController {
 
   @Delete('roles/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @Permissions(['organization.manage'])
   @ApiBearerAuth('access-token')
   @ApiOkResponse({ description: 'Role deleted' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
@@ -126,6 +131,7 @@ export class RbacController {
   }
 
   @Put('roles/:id/permissions')
+  @Permissions(['organization.manage'])
   @ApiBearerAuth('access-token')
   @ApiOkResponse({ description: 'Permissions assigned to role' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
@@ -156,6 +162,7 @@ export class RbacController {
   }
 
   @Put('users/:id/roles')
+  @Permissions(['organization.manage'])
   @ApiBearerAuth('access-token')
   @ApiOkResponse({ description: 'Roles assigned to user' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })

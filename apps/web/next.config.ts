@@ -3,9 +3,9 @@ import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
   output: 'standalone',
   experimental: {
-    optimizePackageImports: ['lucide-react', '@radix-ui/react-icons'],
+    optimizePackageImports: ['lucide-react'],
   },
-  transpilePackages: ['@bc/types', '@bc/ui'],
+  transpilePackages: ['@bc/types'],
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: '**.amazonaws.com' },

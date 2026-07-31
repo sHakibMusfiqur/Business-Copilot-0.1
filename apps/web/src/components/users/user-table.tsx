@@ -155,7 +155,11 @@ export function UserTable({
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">User</th>
                     <th
                       className="text-left p-4 text-sm font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors"
+                      role="button"
+                      tabIndex={0}
+                      aria-sort={sortBy === 'role' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
                       onClick={() => onSort('role')}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSort('role'); } }}
                     >
                       <span className="inline-flex items-center">
                         Role
@@ -165,7 +169,11 @@ export function UserTable({
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Roles</th>
                     <th
                       className="text-left p-4 text-sm font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors"
+                      role="button"
+                      tabIndex={0}
+                      aria-sort={sortBy === 'isActive' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
                       onClick={() => onSort('isActive')}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSort('isActive'); } }}
                     >
                       <span className="inline-flex items-center">
                         Status
@@ -174,7 +182,11 @@ export function UserTable({
                     </th>
                     <th
                       className="text-left p-4 text-sm font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors"
+                      role="button"
+                      tabIndex={0}
+                      aria-sort={sortBy === 'createdAt' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
                       onClick={() => onSort('createdAt')}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSort('createdAt'); } }}
                     >
                       <span className="inline-flex items-center">
                         Created

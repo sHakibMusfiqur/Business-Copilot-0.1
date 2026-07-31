@@ -1,71 +1,79 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bell, Shield } from 'lucide-react';
+import { Bell, ShieldCheck } from 'lucide-react';
 
-import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
-import { api } from '@/lib/api';
+import { SectionCard } from '@/components/setup/section-card';
 import { SetupPageShell } from '@/components/setup/setup-page-shell';
 import { markChecklistComplete } from '@/lib/onboarding-api';
 import { getOnboardingSession } from '@/lib/session-storage';
+import { useSettings } from '@/lib/use-settings';
 
 const NOTIFICATION_OPTIONS = [
-  { key: 'emailNotifications', label: 'Email Notifications', desc: 'Receive notifications via email', defaultOn: true },
-  { key: 'inAppNotifications', label: 'In-App Notifications', desc: 'Show notifications in the app', defaultOn: true },
-  { key: 'weeklyDigest', label: 'Weekly Digest', desc: 'Receive a weekly summary of activity', defaultOn: true },
-  { key: 'loginAlerts', label: 'Login Alerts', desc: 'Get notified of new login attempts', defaultOn: true },
-  { key: 'featureAnnouncements', label: 'New Feature Announcements', desc: 'Learn about new features and updates', defaultOn: false },
+  { key: 'emailNotifications', label: 'Email Notifications', desc: 'Receive notifications via email' },
+  { key: 'inAppNotifications', label: 'In-App Notifications', desc: 'Show notifications in the app' },
+  { key: 'weeklyDigest', label: 'Weekly Digest', desc: 'Receive a weekly summary of activity' },
+  { key: 'loginAlerts', label: 'Login Alerts', desc: 'Get notified of new login attempts' },
+  { key: 'featureAnnouncements', label: 'New Feature Announcements', desc: 'Learn about new features and updates' },
 ] as const;
 
-function Toggle({ checked, onChange, disabled }: { checked: boolean; onChange: () => void; disabled?: boolean }) {
-  return (
-    <button
-      type="button"
-      onClick={onChange}
-      disabled={disabled}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-        disabled ? 'opacity-50 cursor-not-allowed' : checked ? 'bg-primary' : 'bg-muted'
-      }`}
-    >
-      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-        checked ? 'translate-x-6' : 'translate-x-1'
-      }`} />
-    </button>
-  );
-}
+type NotificationKeys =
+  | 'emailNotifications'
+  | 'inAppNotifications'
+  | 'weeklyDigest'
+  | 'loginAlerts'
+  | 'featureAnnouncements'
+  | 'securityAlerts';
+
+type NotificationsValues = Record<NotificationKeys, boolean>;
+
+const DEFAULTS: NotificationsValues = {
+  emailNotifications: true,
+  inAppNotifications: true,
+  weeklyDigest: true,
+  loginAlerts: true,
+  featureAnnouncements: false,
+  securityAlerts: true,
+};
 
 export default function NotificationsPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [prefs, setPrefs] = useState(() =>
-    Object.fromEntries(NOTIFICATION_OPTIONS.map((opt) => [opt.key, opt.defaultOn]))
-  );
-  const [securityAlerts] = useState(true);
+  const { values, loading, loadError, reload, dirty, update, save, saving, saved } =
+    useSettings('notifications', {
+      defaults: DEFAULTS,
+      normalize: (stored) => {
+        const next: Partial<NotificationsValues> = {};
+        for (const key of Object.keys(DEFAULTS) as NotificationKeys[]) {
+          if (typeof stored[key] === 'boolean') next[key] = stored[key];
+        }
+        return next;
+      },
+    });
 
-  const toggle = (key: string) => {
-    setPrefs((prev) => ({ ...prev, [key]: !prev[key] }));
-  };
+  const toggle = (key: NotificationKeys) => update({ [key]: !values[key] });
 
   const handleSave = async () => {
-    setSaving(true);
     try {
-      await api.post('/settings/notifications', { ...prefs, securityAlerts });
-      const session = getOnboardingSession();
-      if (session?.id) {
-        await markChecklistComplete(session.id, 'notifications');
-      }
-      setSaved(true);
-      toast({ title: 'Notification settings saved', description: 'Your notification preferences have been updated.', variant: 'default' });
-      setTimeout(() => setSaved(false), 3000);
+      await save();
     } catch (err) {
-      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Failed to save notification settings.', variant: 'destructive' });
-    } finally {
-      setSaving(false);
+      toast({
+        title: 'Could not save notification settings',
+        description: err instanceof Error ? err.message : 'Something went wrong while saving.',
+        variant: 'destructive',
+      });
+      return;
     }
+    try {
+      const session = getOnboardingSession();
+      if (session?.id) await markChecklistComplete(session.id, 'notifications');
+    } catch {
+      // best-effort
+    }
+    toast({ title: 'Notification settings saved', description: 'Your notification preferences have been updated.', variant: 'success' });
   };
 
   return (
@@ -81,52 +89,65 @@ export default function NotificationsPage() {
       onCancel={() => router.back()}
       saving={saving}
       saved={saved}
+      dirty={dirty}
     >
-      <div className="space-y-6">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-            <Bell className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">Notification Channels</h3>
-            <p className="text-xs text-muted-foreground mt-1">Select how you want to receive notifications</p>
-          </div>
+      {loadError && (
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-5 py-8 text-center">
+          <p className="text-sm text-destructive">{loadError}</p>
+          <button
+            type="button"
+            onClick={() => void reload()}
+            className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Try again
+          </button>
         </div>
+      )}
 
-        <div className="space-y-4">
-          {NOTIFICATION_OPTIONS.map((opt) => (
-            <div key={opt.key} className="flex items-center gap-3">
-              <Toggle checked={!!prefs[opt.key]} onChange={() => toggle(opt.key)} />
-              <div>
-                <p className="text-sm font-medium">{opt.label}</p>
-                <p className="text-xs text-muted-foreground">{opt.desc}</p>
-              </div>
+      {loading ? (
+        <div className="space-y-6">
+          <Skeleton className="h-72 w-full rounded-2xl" />
+          <Skeleton className="h-40 w-full rounded-2xl" />
+        </div>
+      ) : (
+        <>
+          <SectionCard
+            title="Notification Channels"
+            description="Select how you want to receive notifications"
+            icon={<Bell className="h-4 w-4" />}
+          >
+            <div className="divide-y divide-slate-200/60 dark:divide-white/10">
+              {NOTIFICATION_OPTIONS.map((opt) => (
+                <div key={opt.key} className="flex items-center justify-between gap-4 py-3.5 first:pt-0 last:pb-0">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{opt.label}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">{opt.desc}</p>
+                  </div>
+                  <Switch
+                    checked={!!values[opt.key]}
+                    onCheckedChange={() => toggle(opt.key)}
+                    aria-label={opt.label}
+                  />
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      </div>
+          </SectionCard>
 
-      <Separator />
-
-      <div className="space-y-4">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-            <Shield className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">Security Alerts</h3>
-            <p className="text-xs text-muted-foreground mt-1">Critical security notifications are always enabled</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 opacity-60">
-          <Toggle checked={securityAlerts} onChange={() => {}} disabled />
-          <div>
-            <p className="text-sm font-medium">Security Alerts</p>
-            <p className="text-xs text-muted-foreground">Always enabled for your safety</p>
-          </div>
-        </div>
-      </div>
+          <SectionCard
+            title="Security Alerts"
+            description="Critical security notifications are always enabled"
+            icon={<ShieldCheck className="h-4 w-4" />}
+          >
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-foreground">Security Alerts</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">Always enabled for your safety</p>
+              </div>
+              <Switch checked={true} onCheckedChange={() => undefined} disabled aria-label="Security Alerts" />
+            </div>
+          </SectionCard>
+        </>
+      )}
     </SetupPageShell>
   );
 }

@@ -27,6 +27,7 @@ import { useState } from 'react';
 import { logout as apiLogout } from '@/lib/api';
 import { generateInitials } from '@/lib/utils';
 import { AuthProvider } from '@/providers/auth-provider';
+import { OrganizationThemeProvider } from '@/providers/organization-theme-provider';
 import { useAuthStore } from '@/store/auth-store';
 
 const sidebarItems = [
@@ -53,7 +54,6 @@ export default function AdminLayout({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
@@ -69,6 +69,7 @@ export default function AdminLayout({
 
   return (
     <AuthProvider>
+    <OrganizationThemeProvider>
     <div className="flex min-h-screen bg-background">
             <AnimatePresence>
               {mobileOpen && (
@@ -89,8 +90,8 @@ export default function AdminLayout({
             >
               <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
                 <Link href="/admin" className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-destructive">
-                    <Shield className="h-4 w-4 text-destructive-foreground" />
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary">
+                    <Shield className="h-4 w-4 text-primary-foreground" />
                   </div>
                   {!collapsed && (
                     <motion.span
@@ -169,7 +170,7 @@ export default function AdminLayout({
                     onClick={() => setUserMenuOpen(!userMenuOpen)}
                     className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
                   >
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-xs font-medium text-destructive">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-medium text-primary">
                       {user?.name ? generateInitials(user.name) : 'SA'}
                     </div>
                     {!collapsed && (
@@ -220,7 +221,6 @@ export default function AdminLayout({
                 </button>
 
                 <button
-                  onClick={() => setSearchOpen(!searchOpen)}
                   className="flex flex-1 items-center gap-2 rounded-lg border bg-muted/50 px-3 py-2 text-sm text-muted-foreground lg:max-w-md"
                 >
                   <Search className="h-4 w-4" />
@@ -252,6 +252,7 @@ export default function AdminLayout({
               </div>
             </main>
       </div>
+    </OrganizationThemeProvider>
     </AuthProvider>
   );
 }

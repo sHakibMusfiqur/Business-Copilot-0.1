@@ -21,8 +21,7 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "paths": {
-      "@/*": ["src/*"],
-      "@bc/types": ["../../packages/types/src"]
+      "@/*": ["src/*"]
     }
   },
   "include": ["src/**/*"]

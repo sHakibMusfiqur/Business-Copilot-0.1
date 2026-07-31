@@ -153,7 +153,11 @@ export function CustomerTable({
                   <tr className="border-b bg-muted/50">
                     <th
                       className="text-left p-4 text-sm font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors"
+                      role="button"
+                      tabIndex={0}
+                      aria-sort={sortBy === 'name' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
                       onClick={() => onSort('name')}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSort('name'); } }}
                     >
                       <span className="inline-flex items-center">
                         Name
@@ -162,7 +166,11 @@ export function CustomerTable({
                     </th>
                     <th
                       className="text-left p-4 text-sm font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors"
+                      role="button"
+                      tabIndex={0}
+                      aria-sort={sortBy === 'company' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
                       onClick={() => onSort('company')}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSort('company'); } }}
                     >
                       <span className="inline-flex items-center">
                         Company
@@ -173,7 +181,11 @@ export function CustomerTable({
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Phone</th>
                     <th
                       className="text-left p-4 text-sm font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors"
+                      role="button"
+                      tabIndex={0}
+                      aria-sort={sortBy === 'isActive' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
                       onClick={() => onSort('isActive')}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSort('isActive'); } }}
                     >
                       <span className="inline-flex items-center">
                         Status
@@ -182,7 +194,11 @@ export function CustomerTable({
                     </th>
                     <th
                       className="text-left p-4 text-sm font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors"
+                      role="button"
+                      tabIndex={0}
+                      aria-sort={sortBy === 'createdAt' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
                       onClick={() => onSort('createdAt')}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSort('createdAt'); } }}
                     >
                       <span className="inline-flex items-center">
                         Created

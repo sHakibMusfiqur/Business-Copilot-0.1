@@ -1,20 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Loader2, Check } from 'lucide-react';
+import { Loader2, MailPlus, Send, UserPlus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/components/ui/use-toast';
-import { api } from '@/lib/api';
+import { SectionCard } from '@/components/setup/section-card';
 import { SetupPageShell } from '@/components/setup/setup-page-shell';
+import { api } from '@/lib/api';
+import { generateInitials } from '@/lib/utils';
 import { markChecklistComplete } from '@/lib/onboarding-api';
 import { getOnboardingSession } from '@/lib/session-storage';
 
@@ -36,10 +35,8 @@ interface Member {
 }
 
 export default function MembersPage() {
-  const router = useRouter();
   const { toast } = useToast();
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [sending, setSending] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
 
   const form = useForm<FormData>({
@@ -47,26 +44,36 @@ export default function MembersPage() {
     defaultValues: { name: '', email: '', role: 'Member' },
   });
 
-  const { register, handleSubmit, reset, formState: { errors } } = form;
+  const { register, handleSubmit, reset, formState } = form;
 
   const handleInvite = async (data: FormData) => {
-    setSaving(true);
+    setSending(true);
     try {
-      await api.post('/invitations', { name: data.name, email: data.email, role: data.role });
-      const session = getOnboardingSession();
-      if (session?.id) {
-        await markChecklistComplete(session.id, 'team');
-      }
-      setMembers((prev) => [...prev, { name: data.name, email: data.email, role: data.role, status: 'sent' }]);
-      reset({ name: '', email: '', role: 'Member' });
-      setSaved(true);
-      toast({ title: 'Invitation sent', description: `An invitation has been sent to ${data.email}.`, variant: 'default' });
-      setTimeout(() => setSaved(false), 3000);
+      await api.post('/invitations', { name: data.name.trim(), email: data.email.trim(), role: data.role });
     } catch (err) {
-      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Failed to send invitation.', variant: 'destructive' });
-    } finally {
-      setSaving(false);
+      toast({
+        title: 'Could not send invitation',
+        description: err instanceof Error ? err.message : 'Failed to send invitation.',
+        variant: 'destructive',
+      });
+      setSending(false);
+      return;
     }
+
+    try {
+      const session = getOnboardingSession();
+      if (session?.id) await markChecklistComplete(session.id, 'team');
+    } catch {
+      // best-effort
+    }
+
+    setMembers((prev) => [
+      ...prev,
+      { name: data.name.trim(), email: data.email.trim(), role: data.role, status: 'sent' },
+    ]);
+    reset({ name: '', email: '', role: 'Member' });
+    toast({ title: 'Invitation sent', description: `An invitation has been sent to ${data.email.trim()}.`, variant: 'success' });
+    setSending(false);
   };
 
   return (
@@ -78,81 +85,99 @@ export default function MembersPage() {
         { label: 'Organization' },
         { label: 'Members' },
       ]}
-      onSave={async () => {
-        if (members.length > 0) {
-          setSaved(true);
-          setTimeout(() => setSaved(false), 3000);
-        }
-      }}
-      onCancel={() => router.back()}
-      saved={saved}
+      onSave={() => undefined}
+      hideSaveBar
     >
-      <div className="space-y-6">
-        <div>
-          <h3 className="text-sm font-semibold text-foreground">Invite a Member</h3>
-          <p className="text-xs text-muted-foreground mt-1">Send an invitation to a new team member</p>
-        </div>
-
+      <SectionCard
+        title="Invite a Member"
+        description="Send an invitation to a new team member"
+        icon={<UserPlus className="h-4 w-4" />}
+      >
         <form onSubmit={handleSubmit(handleInvite)} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="name">Full Name *</Label>
+              <Label htmlFor="name" className="text-sm font-medium">
+                Full Name *
+              </Label>
               <Input id="name" {...register('name')} placeholder="John Doe" />
-              {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+              {formState.errors.name && (
+                <p className="text-xs text-destructive">{formState.errors.name.message}</p>
+              )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">Email Address *</Label>
+              <Label htmlFor="email" className="text-sm font-medium">
+                Email Address *
+              </Label>
               <Input id="email" type="email" {...register('email')} placeholder="john@company.com" />
-              {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
+              {formState.errors.email && (
+                <p className="text-xs text-destructive">{formState.errors.email.message}</p>
+              )}
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="role">Role *</Label>
-            <select id="role" {...register('role')} className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
-              {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+          <div className="max-w-sm space-y-2">
+            <Label htmlFor="role" className="text-sm font-medium">
+              Role *
+            </Label>
+            <select
+              id="role"
+              {...register('role')}
+              className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+            >
+              {ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
             </select>
-            {errors.role && <p className="text-xs text-destructive">{errors.role.message}</p>}
+            {formState.errors.role && (
+              <p className="text-xs text-destructive">{formState.errors.role.message}</p>
+            )}
           </div>
 
-          <Button type="submit" disabled={saving} className="gap-2">
-            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-            {saving ? 'Sending...' : 'Send Invitation'}
+          <Button type="submit" disabled={sending} className="gap-2">
+            {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            {sending ? 'Sending...' : 'Send Invitation'}
           </Button>
         </form>
-      </div>
+      </SectionCard>
 
-      {members.length > 0 && (
-        <>
-          <Separator />
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-foreground">Pending Invitations ({members.length})</h3>
-            <div className="space-y-2">
-              {members.map((m) => (
-                <Card key={m.email}>
-                  <CardContent className="flex items-center justify-between p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                        {m.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">{m.name}</p>
-                        <p className="text-xs text-muted-foreground">{m.email}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">{m.role}</span>
-                      <span className="flex items-center gap-1 text-xs text-emerald-500">
-                        <Check className="h-3 w-3" /> Invited
-                      </span>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+      <SectionCard
+        title="Pending Invitations"
+        description="Members who have been invited to join your workspace"
+        icon={<MailPlus className="h-4 w-4" />}
+        badge={members.length > 0 ? <span className="rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">{members.length}</span> : undefined}
+      >
+        {members.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-slate-200/60 px-5 py-10 text-center dark:border-white/10">
+            <MailPlus className="h-8 w-8 text-muted-foreground/50" />
+            <p className="text-sm font-medium text-foreground">No invitations sent yet</p>
+            <p className="text-xs text-muted-foreground">Invite your first team member to start collaborating.</p>
           </div>
-        </>
-      )}
+        ) : (
+          <div className="divide-y divide-slate-200/60 dark:divide-white/10">
+            {members.map((m) => (
+              <div key={m.email} className="flex items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                    {generateInitials(m.name)}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-foreground">{m.name}</p>
+                    <p className="text-xs text-muted-foreground">{m.email}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground">{m.role}</span>
+                  <span className="flex items-center gap-1 text-xs text-emerald-500">
+                    <Send className="h-3 w-3" /> Invited
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </SectionCard>
     </SetupPageShell>
   );
 }

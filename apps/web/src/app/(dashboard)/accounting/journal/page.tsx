@@ -64,6 +64,11 @@ export default function JournalPage() {
     }
   }, [toast, invalidate]);
 
+  const handleSearch = useCallback((value: string) => {
+    setSearch(value);
+    setPage(1);
+  }, []);
+
   if (query.isLoading) return <DashboardSkeleton />;
   if (query.isError) return <DashboardError message={query.error instanceof Error ? query.error.message : undefined} onRetry={() => query.refetch()} />;
 
@@ -125,7 +130,7 @@ export default function JournalPage() {
         emptyTitle="No journal entries found"
         emptyDescription="Create your first journal entry to start tracking transactions."
         searchPlaceholder="Search by entry number or description..."
-        onSearchChange={(v) => { setSearch(v); setPage(1); }}
+        onSearchChange={handleSearch}
         onPageChange={setPage}
         onSort={handleSort}
         actions={(entry) => (

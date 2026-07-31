@@ -1,13 +1,17 @@
-import { Controller, Get } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
-import { Public } from '../common/decorators/public.decorator';
+import { Controller, Get, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Roles } from '../common/decorators/roles.decorator';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
 import { OnboardingAdminService } from './services/onboarding-admin.service';
 import { EventBusFactory } from './provisioning/event-bus-factory.service';
 import { DispatcherFactory } from './provisioning/dispatcher-factory.service';
 
 @ApiTags('Onboarding Admin')
-@Public()
 @Controller('admin/onboarding')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('SUPER_ADMIN')
+@ApiBearerAuth('access-token')
 export class OnboardingAdminController {
   constructor(
     private readonly adminService: OnboardingAdminService,

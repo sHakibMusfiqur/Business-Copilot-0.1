@@ -1,8 +1,11 @@
+import 'reflect-metadata';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
+import { join } from 'path';
 import type { Request, Response, NextFunction } from 'express';
 
 import { AppModule } from './app.module';
@@ -10,9 +13,12 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const requestLogger = new Logger('HTTP');
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
+  app.enableShutdownHooks();
   app.setGlobalPrefix('api');
+
+  app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/' });
 
   app.enableCors({
     origin(origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {

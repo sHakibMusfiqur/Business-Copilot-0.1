@@ -20,20 +20,12 @@ export default function ProvisioningPage() {
   const provisionStartedRef = useRef(false);
   const [retryCount, setRetryCount] = useState(0);
 
-  const traceRef = useRef(0);
-
   useEffect(() => {
-    const traceId = ++traceRef.current;
-    console.log(`[PROVISION EFFECT ${traceId}] FIRED`, {
-      session: session ? { selectedIndustry: session.selectedIndustry, orgName: session.orgName, version: session.version, currentStep: session.currentStep, completedSteps: session.completedSteps, provisionStatus: session.provisionStatus } : null,
-      retryCount,
-      provisionStartedRef: provisionStartedRef.current,
-    });
     if (!session) return;
     if (provisionStartedRef.current) return;
 
     if (session.provisionStatus === 'COMPLETED') {
-      refreshAccessToken();
+      void refreshAccessToken().catch(() => {});
       setDone(true);
       return;
     }
@@ -44,27 +36,23 @@ export default function ProvisioningPage() {
     }
 
     provisionStartedRef.current = true;
+    let active = true;
 
     const startProvision = async () => {
       setStarting(true);
       try {
-        console.log(`[PROVISION ${traceId}] about to call persistSession, session values:`, { selectedIndustry: session.selectedIndustry, orgName: session.orgName, version: session.version });
         const persisted = await persistSession();
-        console.log(`[PROVISION ${traceId}] after persistSession, persisted =`, { selectedIndustry: persisted?.selectedIndustry, orgName: persisted?.orgName, version: persisted?.version });
+        if (!active) return;
         const latestSession = await getSession(session.id).catch(() => persisted ?? session);
-        console.log(`[PROVISION ${traceId}] after getSession, latestSession =`, { selectedIndustry: latestSession?.selectedIndustry, orgName: latestSession?.orgName, version: latestSession?.version });
+        if (!active) return;
         const sessionData = latestSession ?? persisted ?? session;
-        console.log(`[PROVISION ${traceId}] resolved sessionData =`, { selectedIndustry: sessionData?.selectedIndustry, orgName: sessionData?.orgName, version: sessionData?.version });
-        console.log(`[PROVISION ${traceId}] validation check: selectedIndustry=${sessionData?.selectedIndustry}, orgName=${sessionData?.orgName}`);
         if (!sessionData.selectedIndustry || !sessionData.orgName) {
           provisionStartedRef.current = false;
           setStarting(false);
-          console.log(`[PROVISION ${traceId}] VALIDATION FAILED: selectedIndustry=${sessionData.selectedIndustry}, orgName=${sessionData.orgName}`);
           setError('Missing required onboarding data. Redirecting to the step that still needs input.');
           wizard.goTo(!sessionData.selectedIndustry ? 1 : 2);
           return;
         }
-        console.log(`[PROVISION ${traceId}] VALIDATION PASSED, calling provisionOrganization`, { selectedIndustry: sessionData.selectedIndustry, orgName: sessionData.orgName });
         await provisionOrganization(session.id, {
           selectedIndustry: sessionData.selectedIndustry,
           orgName: sessionData.orgName,
@@ -75,6 +63,7 @@ export default function ProvisioningPage() {
         setStarting(false);
         return;
       }
+      if (!active) return;
       setStarting(false);
 
       const es = createProvisioningEventSource(session.id);
@@ -83,6 +72,7 @@ export default function ProvisioningPage() {
       es.addEventListener('provisioning', (event) => {
         try {
           const data = JSON.parse(event.data);
+          if (!active) return;
           setProgress((prev) => ({
             sessionId: session.id,
             status: 'PROVISIONING',
@@ -94,15 +84,12 @@ export default function ProvisioningPage() {
           }));
         } catch { /* ignore parse errors */ }
       });
-
-      es.onerror = () => {
-        es.close();
-      };
     };
 
     startProvision();
 
     return () => {
+      active = false;
       if (esRef.current) {
         esRef.current.close();
         esRef.current = null;
@@ -111,14 +98,22 @@ export default function ProvisioningPage() {
   }, [session, retryCount]);
 
   useEffect(() => {
-    if (!done && progress?.status === 'COMPLETED') {
-      (async () => {
+    if (done || progress?.status !== 'COMPLETED') return;
+    let active = true;
+    (async () => {
+      try {
         await completeStep(6);
         await refreshAccessToken();
-        setDone(true);
-      })();
-    }
-  }, [progress?.status]);
+      } catch {
+        // provisioning already completed server-side; proceed regardless
+      } finally {
+        if (active) setDone(true);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [done, progress?.status]);
 
   if (!session) {
     return <div className="flex items-center justify-center pt-20"><p className="text-slate-400">No session found.</p></div>;

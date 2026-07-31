@@ -31,13 +31,9 @@ export default function ProfilePage() {
   };
 
   const handleContinue = async () => {
-    console.log('[PAGE profile handleContinue BEFORE saveField]', { session: { selectedIndustry: session?.selectedIndustry, orgName: session?.orgName, version: session?.version, currentStep: session?.currentStep } });
     saveField('businessProfile', { ...bp, name: displayName, phone, language, timezone, bio, avatar });
-    console.log('[PAGE profile handleContinue AFTER saveField]', { session: { selectedIndustry: session?.selectedIndustry, orgName: session?.orgName, version: session?.version, currentStep: session?.currentStep } });
     await persistSession();
-    console.log('[PAGE profile handleContinue AFTER persistSession]', { session: { selectedIndustry: session?.selectedIndustry, orgName: session?.orgName, version: session?.version, currentStep: session?.currentStep } });
     await completeStep(3);
-    console.log('[PAGE profile handleContinue AFTER completeStep]', { session: { selectedIndustry: session?.selectedIndustry, orgName: session?.orgName, version: session?.version, currentStep: session?.currentStep } });
     wizard.goNext();
   };
 

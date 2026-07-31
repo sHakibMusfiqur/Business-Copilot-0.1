@@ -7,7 +7,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { TransferOwnershipDto } from './dto/transfer-ownership.dto';
-import { BulkActionDto, BulkChangePlanDto } from './dto/bulk-action.dto';
 import { DashboardCacheService } from './dashboard-cache.service';
 
 const PKG_VERSION = process.env.APP_VERSION ?? '0.1.0';
@@ -48,13 +47,6 @@ export interface PlatformDashboardData {
   };
   recentActivities: { id: string; action: string; createdAt: Date; user: { name: string; email: string } | null }[];
   recentErrors: { id: string; action: string; createdAt: Date; user: { name: string; email: string } | null }[];
-}
-
-export interface BulkActionResult {
-  succeeded: number;
-  failed: number;
-  skipped: number;
-  results: { id: string; status: 'success' | 'failed' | 'skipped'; reason?: string }[];
 }
 
 @Injectable()
@@ -501,33 +493,6 @@ export class PlatformAdminService {
     return result;
   }
 
-  async archiveOrganization(id: string, archivedBy: string, reason?: string) {
-    const org = await this.prisma.organization.findUnique({ where: { id } });
-    if (!org) throw new NotFoundException('Organization not found');
-    if (org.deletedAt) throw new BadRequestException('Cannot archive a deleted organization');
-    if (org.archivedAt) throw new BadRequestException('Organization is already archived');
-
-    const result = this.prisma.organization.update({
-      where: { id },
-      data: { archivedAt: new Date(), archivedBy, archiveReason: reason ?? null, isActive: false },
-    });
-    this.invalidateOrgCache();
-    return result;
-  }
-
-  async unarchiveOrganization(id: string) {
-    const org = await this.prisma.organization.findUnique({ where: { id } });
-    if (!org) throw new NotFoundException('Organization not found');
-    if (!org.archivedAt) throw new BadRequestException('Organization is not archived');
-
-    const result = this.prisma.organization.update({
-      where: { id },
-      data: { archivedAt: null, archivedBy: null, archiveReason: null, isActive: true },
-    });
-    this.invalidateOrgCache();
-    return result;
-  }
-
   async deleteOrganization(id: string, deletedBy: string, reason?: string) {
     const org = await this.prisma.organization.findUnique({ where: { id } });
     if (!org) throw new NotFoundException('Organization not found');
@@ -603,219 +568,6 @@ export class PlatformAdminService {
 
     this.invalidateOrgCache(['dashboard', 'organization-statistics']);
     return { message: 'Ownership transferred successfully' };
-  }
-
-  async changeOrganizationPlan(id: string, planSlug: string) {
-    const org = await this.prisma.organization.findUnique({ where: { id } });
-    if (!org) throw new NotFoundException('Organization not found');
-
-    const plan = await this.prisma.subscriptionPlan.findUnique({ where: { slug: planSlug } });
-    if (!plan) throw new BadRequestException('Subscription plan not found');
-
-    const existingSub = await this.prisma.subscription.findUnique({ where: { organizationId: id } });
-    if (existingSub) {
-      await this.prisma.subscription.update({
-        where: { organizationId: id },
-        data: { planId: plan.id },
-      });
-    } else {
-      const periodEnd = new Date();
-      periodEnd.setMonth(periodEnd.getMonth() + 1);
-      await this.prisma.subscription.create({
-        data: { organizationId: id, planId: plan.id, currentPeriodEnd: periodEnd },
-      });
-    }
-
-    this.invalidateOrgCache(['dashboard', 'plans']);
-    return { message: `Plan changed to ${plan.name}` };
-  }
-
-  private async processBulkWithConcurrency(
-    ids: string[],
-    fn: (id: string) => Promise<{ id: string; status: 'success' | 'failed' | 'skipped'; reason?: string }>,
-    concurrency = 5,
-  ): Promise<BulkActionResult['results']> {
-    const results: BulkActionResult['results'] = [];
-    for (let i = 0; i < ids.length; i += concurrency) {
-      const batch = ids.slice(i, i + concurrency);
-      const batchResults = await Promise.allSettled(batch.map((id) => fn(id)));
-      for (const r of batchResults) {
-        if (r.status === 'fulfilled') {
-          results.push(r.value);
-        } else {
-          results.push({ id: 'unknown', status: 'failed', reason: r.reason instanceof Error ? r.reason.message : 'Unexpected error' });
-        }
-      }
-    }
-    return results;
-  }
-
-  async bulkSuspend(dto: BulkActionDto): Promise<BulkActionResult> {
-    const results = await this.processBulkWithConcurrency(
-      dto.organizationIds,
-      async (id) => {
-        const org = await this.prisma.organization.findUnique({ where: { id } });
-        if (!org) return { id, status: 'skipped' as const, reason: 'Organization not found' };
-        if (org.deletedAt) return { id, status: 'skipped' as const, reason: 'Organization is deleted' };
-        if (org.archivedAt) return { id, status: 'skipped' as const, reason: 'Organization is archived' };
-        if (org.suspendedAt) return { id, status: 'skipped' as const, reason: 'Already suspended' };
-        await this.prisma.organization.update({ where: { id }, data: { isActive: false, suspendedAt: new Date() } });
-        return { id, status: 'success' as const };
-      },
-    );
-    this.invalidateOrgCache();
-    return this.summarize(results);
-  }
-
-  async bulkActivate(dto: BulkActionDto): Promise<BulkActionResult> {
-    const results = await this.processBulkWithConcurrency(
-      dto.organizationIds,
-      async (id) => {
-        const org = await this.prisma.organization.findUnique({ where: { id } });
-        if (!org) return { id, status: 'skipped' as const, reason: 'Organization not found' };
-        if (org.deletedAt) return { id, status: 'skipped' as const, reason: 'Organization is deleted' };
-        if (org.archivedAt) return { id, status: 'skipped' as const, reason: 'Organization is archived' };
-        if (!org.suspendedAt) return { id, status: 'skipped' as const, reason: 'Not suspended' };
-        await this.prisma.organization.update({ where: { id }, data: { isActive: true, suspendedAt: null } });
-        return { id, status: 'success' as const };
-      },
-    );
-    this.invalidateOrgCache();
-    return this.summarize(results);
-  }
-
-  async bulkArchive(dto: BulkActionDto, archivedBy: string): Promise<BulkActionResult> {
-    const results = await this.processBulkWithConcurrency(
-      dto.organizationIds,
-      async (id) => {
-        const org = await this.prisma.organization.findUnique({ where: { id } });
-        if (!org) return { id, status: 'skipped' as const, reason: 'Organization not found' };
-        if (org.deletedAt) return { id, status: 'skipped' as const, reason: 'Organization is deleted' };
-        if (org.archivedAt) return { id, status: 'skipped' as const, reason: 'Already archived' };
-        await this.prisma.organization.update({
-          where: { id },
-          data: { archivedAt: new Date(), archivedBy, archiveReason: dto.reason ?? null, isActive: false },
-        });
-        return { id, status: 'success' as const };
-      },
-    );
-    this.invalidateOrgCache();
-    return this.summarize(results);
-  }
-
-  async bulkDelete(dto: BulkActionDto, deletedBy: string): Promise<BulkActionResult> {
-    const results = await this.processBulkWithConcurrency(
-      dto.organizationIds,
-      async (id) => {
-        const org = await this.prisma.organization.findUnique({ where: { id } });
-        if (!org) return { id, status: 'skipped' as const, reason: 'Organization not found' };
-        if (org.deletedAt) return { id, status: 'skipped' as const, reason: 'Already deleted' };
-        await this.prisma.organization.update({
-          where: { id },
-          data: { deletedAt: new Date(), deletedBy, deletedReason: dto.reason ?? null },
-        });
-        return { id, status: 'success' as const };
-      },
-    );
-    this.invalidateOrgCache();
-    return this.summarize(results);
-  }
-
-  async bulkRestore(dto: BulkActionDto): Promise<BulkActionResult> {
-    const results = await this.processBulkWithConcurrency(
-      dto.organizationIds,
-      async (id) => {
-        const org = await this.prisma.organization.findUnique({ where: { id } });
-        if (!org) return { id, status: 'skipped' as const, reason: 'Organization not found' };
-        if (!org.deletedAt) return { id, status: 'skipped' as const, reason: 'Not deleted' };
-        await this.prisma.organization.update({
-          where: { id },
-          data: { deletedAt: null, deletedBy: null, deletedReason: null },
-        });
-        return { id, status: 'success' as const };
-      },
-    );
-    this.invalidateOrgCache();
-    return this.summarize(results);
-  }
-
-  async bulkChangePlan(dto: BulkChangePlanDto): Promise<BulkActionResult> {
-    const plan = await this.prisma.subscriptionPlan.findUnique({ where: { slug: dto.planSlug } });
-    if (!plan) throw new BadRequestException('Subscription plan not found');
-
-    const results = await this.processBulkWithConcurrency(
-      dto.organizationIds,
-      async (id) => {
-        const org = await this.prisma.organization.findUnique({ where: { id } });
-        if (!org) return { id, status: 'skipped' as const, reason: 'Organization not found' };
-        const existingSub = await this.prisma.subscription.findUnique({ where: { organizationId: id } });
-        if (existingSub) {
-          if (existingSub.planId === plan.id) return { id, status: 'skipped' as const, reason: 'Already on this plan' };
-          await this.prisma.subscription.update({ where: { organizationId: id }, data: { planId: plan.id } });
-        } else {
-          const periodEnd = new Date();
-          periodEnd.setMonth(periodEnd.getMonth() + 1);
-          await this.prisma.subscription.create({ data: { organizationId: id, planId: plan.id, currentPeriodEnd: periodEnd } });
-        }
-        return { id, status: 'success' as const };
-      },
-    );
-    this.invalidateOrgCache(['dashboard', 'plans']);
-    return this.summarize(results);
-  }
-
-  async bulkExport(dto: BulkActionDto) {
-    const orgs = await this.prisma.organization.findMany({
-      where: { id: { in: dto.organizationIds } },
-      include: {
-        _count: { select: { users: true, customers: true, products: true, invoices: true } },
-        subscription: { include: { plan: { select: { name: true } } } },
-      },
-    });
-
-    const owners = await this.prisma.organizationMember.findMany({
-      where: { organizationId: { in: dto.organizationIds }, role: 'OWNER' },
-      include: { user: { select: { name: true, email: true } } },
-    });
-    const ownerMap = new Map(owners.map((o) => [o.organizationId, o.user]));
-
-    const header = 'Name,Slug,Email,Status,Plan,Owner Name,Owner Email,Users,Customers,Products,Invoices,Created At\n';
-    const rows = orgs.map((org) => {
-      const owner = ownerMap.get(org.id);
-      const status = org.deletedAt ? 'DELETED' : org.archivedAt ? 'ARCHIVED' : org.suspendedAt ? 'SUSPENDED' : 'ACTIVE';
-      return [
-        this.escapeCsv(org.name),
-        this.escapeCsv(org.slug),
-        this.escapeCsv(org.email ?? ''),
-        status,
-        this.escapeCsv(org.subscription?.plan?.name ?? 'No Plan'),
-        this.escapeCsv(owner?.name ?? ''),
-        this.escapeCsv(owner?.email ?? ''),
-        org._count.users,
-        org._count.customers,
-        org._count.products,
-        org._count.invoices,
-        org.createdAt.toISOString(),
-      ].join(',');
-    });
-
-    return header + rows.join('\n');
-  }
-
-  private escapeCsv(value: string): string {
-    if (value.includes(',') || value.includes('"') || value.includes('\n')) {
-      return `"${value.replace(/"/g, '""')}"`;
-    }
-    return value;
-  }
-
-  private summarize(results: BulkActionResult['results']): BulkActionResult {
-    return {
-      succeeded: results.filter((r) => r.status === 'success').length,
-      failed: results.filter((r) => r.status === 'failed').length,
-      skipped: results.filter((r) => r.status === 'skipped').length,
-      results,
-    };
   }
 
   async listUsers(page = 1, limit = 20, search?: string, orgId?: string, role?: string) {

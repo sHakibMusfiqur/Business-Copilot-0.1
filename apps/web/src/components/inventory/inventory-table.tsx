@@ -160,7 +160,11 @@ export function InventoryTable({
                   <tr className="border-b bg-muted/50">
                     <th
                       className="text-left p-4 text-sm font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors"
+                      role="button"
+                      tabIndex={0}
+                      aria-sort={sortBy === 'name' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
                       onClick={() => onSort('name')}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSort('name'); } }}
                     >
                       <span className="inline-flex items-center">
                         Product
@@ -169,7 +173,11 @@ export function InventoryTable({
                     </th>
                     <th
                       className="text-left p-4 text-sm font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors"
+                      role="button"
+                      tabIndex={0}
+                      aria-sort={sortBy === 'sku' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
                       onClick={() => onSort('sku')}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSort('sku'); } }}
                     >
                       <span className="inline-flex items-center">
                         SKU
@@ -190,7 +198,11 @@ export function InventoryTable({
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Status</th>
                     <th
                       className="text-left p-4 text-sm font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors"
+                      role="button"
+                      tabIndex={0}
+                      aria-sort={sortBy === 'updatedAt' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
                       onClick={() => onSort('updatedAt')}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSort('updatedAt'); } }}
                     >
                       <span className="inline-flex items-center">
                         Updated

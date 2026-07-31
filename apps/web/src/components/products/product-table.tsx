@@ -155,7 +155,11 @@ export function ProductTable({
                   <tr className="border-b bg-muted/50">
                     <th
                       className="text-left p-4 text-sm font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors"
+                      role="button"
+                      tabIndex={0}
+                      aria-sort={sortBy === 'name' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
                       onClick={() => onSort('name')}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSort('name'); } }}
                     >
                       <span className="inline-flex items-center">
                         Product
@@ -164,7 +168,11 @@ export function ProductTable({
                     </th>
                     <th
                       className="text-left p-4 text-sm font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors"
+                      role="button"
+                      tabIndex={0}
+                      aria-sort={sortBy === 'sku' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
                       onClick={() => onSort('sku')}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSort('sku'); } }}
                     >
                       <span className="inline-flex items-center">
                         SKU
@@ -175,7 +183,11 @@ export function ProductTable({
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Category</th>
                     <th
                       className="text-left p-4 text-sm font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors"
+                      role="button"
+                      tabIndex={0}
+                      aria-sort={sortBy === 'unitPrice' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
                       onClick={() => onSort('unitPrice')}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSort('unitPrice'); } }}
                     >
                       <span className="inline-flex items-center">
                         Price
@@ -185,7 +197,11 @@ export function ProductTable({
                     <th className="text-left p-4 text-sm font-medium text-muted-foreground">Stock</th>
                     <th
                       className="text-left p-4 text-sm font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors"
+                      role="button"
+                      tabIndex={0}
+                      aria-sort={sortBy === 'isActive' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
                       onClick={() => onSort('isActive')}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSort('isActive'); } }}
                     >
                       <span className="inline-flex items-center">
                         Status
@@ -194,7 +210,11 @@ export function ProductTable({
                     </th>
                     <th
                       className="text-left p-4 text-sm font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground transition-colors"
+                      role="button"
+                      tabIndex={0}
+                      aria-sort={sortBy === 'createdAt' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}
                       onClick={() => onSort('createdAt')}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSort('createdAt'); } }}
                     >
                       <span className="inline-flex items-center">
                         Created

@@ -1,3 +1,5 @@
+import type { Meta } from '@/lib/types';
+
 export type PurchaseStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'RECEIVED' | 'CANCELLED';
 
 export interface PurchaseSupplier {
@@ -40,42 +42,9 @@ export interface Purchase {
   itemCount?: number;
 }
 
-export interface PurchaseMeta {
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}
+export type PurchaseMeta = Meta;
 
 export interface PurchaseListResponse {
   data: Purchase[];
   meta: PurchaseMeta;
-}
-
-export interface CreatePurchaseItemPayload {
-  productId: string;
-  quantity: number;
-  unitCost: number;
-  discount?: number;
-  tax?: number;
-}
-
-export interface CreatePurchasePayload {
-  supplierId: string;
-  notes?: string;
-  items: CreatePurchaseItemPayload[];
-}
-
-export interface UpdatePurchaseItemPayload {
-  productId: string;
-  quantity: number;
-  unitCost: number;
-  discount?: number;
-  tax?: number;
-}
-
-export interface UpdatePurchasePayload {
-  supplierId?: string;
-  notes?: string;
-  items?: UpdatePurchaseItemPayload[];
 }

@@ -1,177 +1,429 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { Upload } from 'lucide-react';
+import Link from 'next/link';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ChevronRight, Save, Loader2, Eye, Check, AlertTriangle } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/use-toast';
-import { api } from '@/lib/api';
-import { cn } from '@/lib/utils';
-import { SetupPageShell } from '@/components/setup/setup-page-shell';
+import { FileUpload } from '@/components/settings/branding/file-upload';
+import { ColorField } from '@/components/settings/branding/color-field';
+import { SectionCard } from '@/components/setup/section-card';
+import { BrandPreview, type BrandValues } from '@/components/settings/branding/brand-preview';
+import { getSettings, updateSettings, uploadSettingsFiles } from '@/lib/api';
+import { DEFAULT_BRANDING, normalizeBranding, type BrandingTheme } from '@/lib/branding';
 import { markChecklistComplete } from '@/lib/onboarding-api';
 import { getOnboardingSession } from '@/lib/session-storage';
+import { HEX_RE } from '@/lib/validation';
+import { useBrandingStore } from '@/store/branding-store';
 
-const schema = z.object({
-  brandName: z.string().min(2, 'Brand name must be at least 2 characters'),
-  logoUrl: z.string().url().or(z.literal('')),
-  tagline: z.string().optional(),
-  primaryColor: z.string(),
-  faviconUrl: z.string().url().or(z.literal('')),
-});
+const PRESET_PRIMARY = ['#3B82F6', '#6366F1', '#F59E0B', '#EF4444', '#10B981', '#8B5CF6'];
+const PRESET_SECONDARY = ['#8B5CF6', '#6366F1', '#0EA5E9', '#EC4899', '#F97316', '#14B8A6'];
+const PRESET_ACCENT = ['#10B981', '#22C55E', '#EAB308', '#F43F5E', '#38BDF8', '#84CC16'];
 
-type FormData = z.infer<typeof schema>;
+type BrandSettings = Pick<BrandingTheme, 'brandName' | 'tagline' | 'primaryColor' | 'secondaryColor' | 'accentColor'>;
+
+const INITIAL: BrandSettings = {
+  brandName: '',
+  tagline: '',
+  primaryColor: DEFAULT_BRANDING.primaryColor,
+  secondaryColor: DEFAULT_BRANDING.secondaryColor,
+  accentColor: DEFAULT_BRANDING.accentColor,
+};
+
+interface PendingFile {
+  file: File;
+  preview: string | null;
+}
 
 export default function BrandingPage() {
   const router = useRouter();
   const { toast } = useToast();
+
+  const [values, setValues] = useState<BrandSettings>(INITIAL);
+  const [logoFile, setLogoFile] = useState<PendingFile | null>(null);
+  const [faviconFile, setFaviconFile] = useState<PendingFile | null>(null);
+  const [savedLogoUrl, setSavedLogoUrl] = useState<string | null>(null);
+  const [savedFaviconUrl, setSavedFaviconUrl] = useState<string | null>(null);
+  const [logoRemoved, setLogoRemoved] = useState(false);
+  const [faviconRemoved, setFaviconRemoved] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [logoPreview, setLogoPreview] = useState('');
 
-  const form = useForm<FormData>({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      brandName: '',
-      logoUrl: '',
-      tagline: '',
-      primaryColor: '#3B82F6',
-      faviconUrl: '',
-    },
-  });
+  const loadBranding = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const stored = await getSettings<Partial<BrandSettings> & { logoUrl?: string; faviconUrl?: string }>('branding');
+      if (stored) {
+        setValues({
+          brandName: typeof stored.brandName === 'string' ? stored.brandName : INITIAL.brandName,
+          tagline: typeof stored.tagline === 'string' ? stored.tagline : INITIAL.tagline,
+          primaryColor: typeof stored.primaryColor === 'string' ? stored.primaryColor : INITIAL.primaryColor,
+          secondaryColor: typeof stored.secondaryColor === 'string' ? stored.secondaryColor : INITIAL.secondaryColor,
+          accentColor: typeof stored.accentColor === 'string' ? stored.accentColor : INITIAL.accentColor,
+        });
+        setSavedLogoUrl(typeof stored.logoUrl === 'string' ? stored.logoUrl : null);
+        setSavedFaviconUrl(typeof stored.faviconUrl === 'string' ? stored.faviconUrl : null);
+      }
+      setLogoRemoved(false);
+      setFaviconRemoved(false);
+      setSaved(false);
+    } catch {
+      setLoadError('Could not load your brand settings. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const { register, watch, setValue } = form;
-  const primaryColor = watch('primaryColor');
+  useEffect(() => {
+    void loadBranding();
+  }, [loadBranding]);
+
+  const dirty = useMemo(
+    () =>
+      JSON.stringify(values) !== JSON.stringify(INITIAL) ||
+      logoFile !== null ||
+      faviconFile !== null ||
+      (logoRemoved && savedLogoUrl !== null) ||
+      (faviconRemoved && savedFaviconUrl !== null),
+    [values, logoFile, faviconFile, logoRemoved, faviconRemoved, savedLogoUrl, savedFaviconUrl],
+  );
+
+  const brandValues: BrandValues = {
+    brandName: values.brandName,
+    tagline: values.tagline,
+    primaryColor: values.primaryColor,
+    secondaryColor: values.secondaryColor,
+    accentColor: values.accentColor,
+    logoUrl: logoRemoved ? null : (logoFile?.preview ?? savedLogoUrl),
+    faviconUrl: faviconRemoved ? null : (faviconFile?.preview ?? savedFaviconUrl),
+  };
+
+  const setField = <K extends keyof BrandSettings>(key: K, value: BrandSettings[K]) => {
+    setValues((prev) => ({ ...prev, [key]: value }));
+    setSaved(false);
+  };
+
+  const validate = (): string | null => {
+    if (values.brandName.trim().length < 2) {
+      return 'Company name must be at least 2 characters.';
+    }
+    if (!HEX_RE.test(values.primaryColor) || !HEX_RE.test(values.secondaryColor) || !HEX_RE.test(values.accentColor)) {
+      return 'All colors must be valid 6-digit hex values.';
+    }
+    return null;
+  };
 
   const handleSave = async () => {
+    const err = validate();
+    if (err) {
+      toast({ title: 'Check your settings', description: err, variant: 'destructive' });
+      return;
+    }
+
     setSaving(true);
+    setSaved(false);
     try {
-      const data = {
-        brandName: form.getValues('brandName'),
-        logoUrl: form.getValues('logoUrl'),
-        tagline: form.getValues('tagline'),
-        primaryColor: form.getValues('primaryColor'),
-        faviconUrl: form.getValues('faviconUrl'),
-      };
-      await api.post('/settings/branding', data);
+      let logoUrl = logoRemoved ? '' : savedLogoUrl;
+      let faviconUrl = faviconRemoved ? '' : savedFaviconUrl;
+
+      if (logoFile || faviconFile) {
+        const uploaded = await uploadSettingsFiles({
+          logo: logoFile?.file,
+          favicon: faviconFile?.file,
+        });
+        if (uploaded.logoUrl) logoUrl = uploaded.logoUrl;
+        if (uploaded.faviconUrl) faviconUrl = uploaded.faviconUrl;
+      }
+
+      await updateSettings('branding', {
+        brandName: values.brandName.trim(),
+        tagline: values.tagline.trim(),
+        primaryColor: values.primaryColor,
+        secondaryColor: values.secondaryColor,
+        accentColor: values.accentColor,
+        ...(logoUrl ? { logoUrl } : logoRemoved ? { logoUrl } : {}),
+        ...(faviconUrl ? { faviconUrl } : faviconRemoved ? { faviconUrl } : {}),
+      });
+
+      useBrandingStore.getState().setBrand(
+        normalizeBranding({
+          brandName: values.brandName.trim(),
+          tagline: values.tagline.trim(),
+          primaryColor: values.primaryColor,
+          secondaryColor: values.secondaryColor,
+          accentColor: values.accentColor,
+          logoUrl: logoUrl || null,
+          faviconUrl: faviconUrl || null,
+        }),
+      );
+
       const session = getOnboardingSession();
       if (session?.id) {
-        await Promise.all([
-          markChecklistComplete(session.id, 'logo'),
-          markChecklistComplete(session.id, 'branding'),
-        ]);
+        try {
+          await markChecklistComplete(session.id, 'branding');
+        } catch {
+          // best-effort
+        }
       }
+
       setSaved(true);
-      toast({ title: 'Branding updated', description: 'Your brand settings have been saved.', variant: 'default' });
-      setTimeout(() => setSaved(false), 3000);
-    } catch (err) {
-      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Failed to save branding settings.', variant: 'destructive' });
+      setLogoFile(null);
+      setFaviconFile(null);
+      setSavedLogoUrl(logoRemoved ? null : logoUrl);
+      setSavedFaviconUrl(faviconRemoved ? null : faviconUrl);
+      setLogoRemoved(false);
+      setFaviconRemoved(false);
+      toast({ title: 'Branding saved', description: 'Your brand settings have been updated successfully.', variant: 'success' });
+
+      if (session?.id) {
+        setTimeout(() => router.push(`/onboarding/success?session=${session.id}`), 900);
+      }
+    } catch (saveErr) {
+      toast({
+        title: 'Could not save branding',
+        description: saveErr instanceof Error ? saveErr.message : 'Something went wrong while saving.',
+        variant: 'destructive',
+      });
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <SetupPageShell
-      title="Branding"
-      description="Upload your company logo and customize your brand identity"
-      breadcrumb={[
-        { label: 'Home', href: '/dashboard' },
-        { label: 'Settings' },
-        { label: 'Branding' },
-      ]}
-      onSave={handleSave}
-      onCancel={() => router.back()}
-      saving={saving}
-      saved={saved}
-    >
-      <div className="space-y-6">
-        <div>
-          <h3 className="text-sm font-semibold text-foreground">Company Logo</h3>
-          <p className="text-xs text-muted-foreground mt-1">Upload your company logo for use across the platform</p>
-        </div>
-        <div className="flex items-center gap-6">
-          <div className={cn(
-            "flex h-20 w-20 shrink-0 items-center justify-center rounded-xl border-2 border-dashed bg-muted/50 transition-colors",
-            logoPreview ? "border-primary/30" : "border-muted-foreground/25"
-          )}>
-            {logoPreview ? (
-              <Image src={logoPreview} alt="Logo preview" width={64} height={64} className="h-16 w-16 rounded-lg object-contain" />
-            ) : (
-              <Upload className="h-6 w-6 text-muted-foreground" />
-            )}
-          </div>
-          <div className="flex-1 space-y-2">
-            <Label htmlFor="logoUrl">Logo URL</Label>
-            <Input
-              id="logoUrl"
-              placeholder="https://example.com/logo.png"
-              value={form.watch('logoUrl')}
-              onChange={(e) => {
-                form.setValue('logoUrl', e.target.value);
-                setLogoPreview(e.target.value);
-              }}
-            />
-          </div>
-        </div>
-      </div>
+    <div className="mx-auto max-w-6xl space-y-6">
+      {/* Header */}
+      <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+        <nav className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Link href="/dashboard" className="transition-colors hover:text-foreground">Home</Link>
+          <ChevronRight className="h-3.5 w-3.5" />
+          <Link href="/settings" className="transition-colors hover:text-foreground">Settings</Link>
+          <ChevronRight className="h-3.5 w-3.5" />
+          <span className="font-medium text-foreground">Branding</span>
+        </nav>
 
-      <Separator />
-
-      <div className="space-y-4">
-        <div>
-          <h3 className="text-sm font-semibold text-foreground">Brand Identity</h3>
-          <p className="text-xs text-muted-foreground mt-1">Define your brand appearance and messaging</p>
-        </div>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="brandName">Brand Name *</Label>
-            <Input id="brandName" {...register('brandName')} placeholder="Acme Corporation" />
-            {form.formState.errors.brandName && (
-              <p className="text-xs text-destructive">{form.formState.errors.brandName.message}</p>
-            )}
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground">Branding</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Customize your company identity — everything updates live as you edit.
+            </p>
           </div>
-          <div className="space-y-2">
-            <Label>Primary Color</Label>
-            <div className="flex items-center gap-3">
-              <input
-                type="color"
-                value={primaryColor}
-                onChange={(e) => setValue('primaryColor', e.target.value)}
-                className="h-10 w-10 shrink-0 cursor-pointer rounded-lg border border-border"
+          <AnimatePresence>
+            {dirty && !saving && (
+              <motion.span
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                className="inline-flex w-fit items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-500"
+              >
+                <AlertTriangle className="h-3.5 w-3.5" /> Unsaved changes
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </div>
+      </motion.div>
+
+      {loadError && (
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-destructive/30 bg-destructive/5 px-5 py-8 text-center">
+          <p className="text-sm text-destructive">{loadError}</p>
+          <button
+            type="button"
+            onClick={() => void loadBranding()}
+            className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Try again
+          </button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_430px]">
+          <div className="space-y-6">
+            <Skeleton className="h-48 w-full rounded-2xl" />
+            <Skeleton className="h-36 w-full rounded-2xl" />
+            <Skeleton className="h-64 w-full rounded-2xl" />
+          </div>
+          <Skeleton className="h-96 w-full rounded-2xl" />
+        </div>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px] xl:grid-cols-[minmax(0,1fr)_430px]">
+          {/* Left: form */}
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay: 0.05 }}
+            className="min-w-0 space-y-6"
+          >
+            <SectionCard
+              title="Company Logo"
+              description="Upload the logo shown across your workspace, emails, and login page."
+              icon={<Eye className="h-4 w-4" />}
+            >
+              <FileUpload
+                variant="logo"
+                preview={logoRemoved ? null : (logoFile?.preview ?? savedLogoUrl)}
+                onChange={(file, preview) => {
+                  setLogoFile(file ? { file, preview } : null);
+                  if (file) setLogoRemoved(false);
+                  else setLogoRemoved(true);
+                  setSaved(false);
+                }}
+                disabled={saving}
               />
-              <Input
-                value={primaryColor}
-                onChange={(e) => setValue('primaryColor', e.target.value)}
-                placeholder="#3B82F6"
-              />
+            </SectionCard>
+
+            <SectionCard
+              title="Favicon"
+              description="The small icon displayed in the browser tab next to your page title."
+              icon={<Eye className="h-4 w-4" />}
+            >
+              <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+                <div className="flex-1">
+                  <FileUpload
+                    variant="favicon"
+                    preview={faviconRemoved ? null : (faviconFile?.preview ?? savedFaviconUrl)}
+                    onChange={(file, preview) => {
+                      setFaviconFile(file ? { file, preview } : null);
+                      if (file) setFaviconRemoved(false);
+                      else setFaviconRemoved(true);
+                      setSaved(false);
+                    }}
+                    disabled={saving}
+                  />
+                </div>
+                <div className="flex shrink-0 flex-col items-center gap-2 rounded-xl border border-slate-200/60 bg-muted/20 px-4 py-3 dark:border-white/10">
+                  <p className="text-[11px] font-medium text-muted-foreground">Browser tab preview</p>
+                  <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 shadow-sm">
+                    {brandValues.faviconUrl ? (
+                      <div
+                        className="h-4 w-4 bg-contain bg-center bg-no-repeat"
+                        style={{ backgroundImage: `url(${brandValues.faviconUrl})` }}
+                      />
+                    ) : (
+                      <div className="h-4 w-4 rounded-full" style={{ backgroundColor: values.primaryColor }} />
+                    )}
+                    <span className="text-xs text-foreground">{values.brandName || 'Company'}</span>
+                  </div>
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              title="Brand Identity"
+              description="Define your brand name and color palette used throughout the product."
+              icon={<Eye className="h-4 w-4" />}
+            >
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="brandName" className="text-sm font-medium">Company Name *</Label>
+                  <Input
+                    id="brandName"
+                    value={values.brandName}
+                    onChange={(e) => setField('brandName', e.target.value)}
+                    placeholder="Acme Corporation"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="tagline" className="text-sm font-medium">Tagline</Label>
+                  <Input
+                    id="tagline"
+                    value={values.tagline}
+                    onChange={(e) => setField('tagline', e.target.value)}
+                    placeholder="Enterprise Business Copilot"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6 grid gap-6 sm:grid-cols-1">
+                <div className="grid gap-6 md:grid-cols-3">
+                  <ColorField
+                    label="Primary Color"
+                    description="Main brand color"
+                    value={values.primaryColor}
+                    onChange={(hex) => setField('primaryColor', hex)}
+                    presets={PRESET_PRIMARY}
+                  />
+                  <ColorField
+                    label="Secondary Color"
+                    description="Gradients & accents"
+                    value={values.secondaryColor}
+                    onChange={(hex) => setField('secondaryColor', hex)}
+                    presets={PRESET_SECONDARY}
+                  />
+                  <ColorField
+                    label="Accent Color"
+                    description="Call-to-actions"
+                    value={values.accentColor}
+                    onChange={(hex) => setField('accentColor', hex)}
+                    presets={PRESET_ACCENT}
+                  />
+                </div>
+              </div>
+            </SectionCard>
+
+            {/* Save bar */}
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, delay: 0.15 }}
+              className="sticky bottom-4 z-10"
+            >
+              <div className="flex items-center justify-end gap-3 rounded-2xl border border-slate-200/60 bg-white/80 px-5 py-3.5 shadow-xl shadow-slate-300/30 backdrop-blur-xl dark:border-white/10 dark:bg-slate-950/80 dark:shadow-black/40">
+                <Button
+                  variant="outline"
+                  onClick={() => router.back()}
+                  disabled={saving}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSave}
+                  disabled={saving || saved || !dirty}
+                  className="min-w-[150px] gap-2"
+                >
+                  {saving ? (
+                    <><Loader2 className="h-4 w-4 animate-spin" /> Saving...</>
+                  ) : saved ? (
+                    <><Check className="h-4 w-4" /> Saved</>
+                  ) : (
+                    <><Save className="h-4 w-4" /> Save Changes</>
+                  )}
+                </Button>
+              </div>
+            </motion.div>
+          </motion.div>
+
+          {/* Right: sticky live preview */}
+          <motion.aside
+            initial={{ opacity: 0, x: 12 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.35, delay: 0.1 }}
+            className="min-w-0"
+          >
+            <div className="rounded-2xl border border-slate-200/60 bg-white/70 p-5 shadow-lg shadow-slate-200/40 backdrop-blur-xl lg:sticky lg:top-24 dark:border-white/10 dark:bg-white/[0.04] dark:shadow-black/20">
+              <div className="mb-4 flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 text-primary">
+                  <Eye className="h-4 w-4" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-semibold tracking-tight text-foreground">Live Preview</h2>
+                  <p className="text-[11px] text-muted-foreground">Updates instantly while you edit</p>
+                </div>
+              </div>
+              <BrandPreview brand={brandValues} />
             </div>
-          </div>
+          </motion.aside>
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="tagline">Tagline</Label>
-          <Input id="tagline" {...register('tagline')} placeholder="Enterprise Business Copilot" />
-        </div>
-      </div>
-
-      <Separator />
-
-      <div className="space-y-4">
-        <div>
-          <h3 className="text-sm font-semibold text-foreground">Favicon</h3>
-          <p className="text-xs text-muted-foreground mt-1">Set a custom favicon for your browser tab</p>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="faviconUrl">Favicon URL</Label>
-          <Input id="faviconUrl" {...register('faviconUrl')} placeholder="https://example.com/favicon.ico" />
-        </div>
-      </div>
-    </SetupPageShell>
+      )}
+    </div>
   );
 }

@@ -1,3 +1,5 @@
+import type { Meta } from '@/lib/types';
+
 export interface Product {
   id: string;
   name: string;
@@ -22,60 +24,14 @@ export interface Product {
   updatedAt: string;
 }
 
-export interface ProductMeta {
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}
+export type ProductMeta = Meta;
 
 export interface ProductsResponse {
   data: Product[];
   meta: ProductMeta;
 }
 
-export interface CreateProductPayload {
-  name: string;
-  sku: string;
-  barcode?: string;
-  brand?: string;
-  description?: string;
-  categoryId?: string;
-  supplierId?: string;
-  costPrice?: number;
-  unitPrice?: number;
-  unit?: string;
-  taxRate?: number;
-  minimumStock?: number;
-  maximumStock?: number;
-  imageUrl?: string;
-  isActive?: boolean;
-}
-
-export interface UpdateProductPayload {
-  name?: string;
-  sku?: string;
-  barcode?: string;
-  brand?: string;
-  description?: string;
-  categoryId?: string;
-  supplierId?: string;
-  costPrice?: number;
-  unitPrice?: number;
-  unit?: string;
-  taxRate?: number;
-  minimumStock?: number;
-  maximumStock?: number;
-  imageUrl?: string;
-  isActive?: boolean;
-}
-
 export interface CategoryOption {
-  id: string;
-  name: string;
-}
-
-export interface SupplierOption {
   id: string;
   name: string;
 }

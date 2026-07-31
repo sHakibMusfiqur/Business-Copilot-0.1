@@ -1,5 +1,6 @@
-export interface AccountSummary {
-  totalAccounts: number;
+import type { Meta } from '@/lib/types';
+
+export interface AccountSummary {  totalAccounts: number;
   totalAccountsByType: Record<string, number>;
   totalReceivables: number;
   totalReceivablesAmount: number;
@@ -86,9 +87,4 @@ export interface Payment {
   createdBy: { id: string; name: string };
 }
 
-export interface Meta {
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}
+export type { Meta };

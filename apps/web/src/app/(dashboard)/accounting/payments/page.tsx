@@ -13,6 +13,8 @@ import { CreatePaymentDialog } from '@/components/accounting/create-payment-dial
 import { getPayments } from '@/lib/api';
 import type { Payment, Meta } from '@/components/accounting/accounting-types';
 
+const noopSearch = () => {};
+
 export default function PaymentsPage() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
@@ -78,7 +80,7 @@ export default function PaymentsPage() {
         emptyTitle="No payments"
         emptyDescription="No payments recorded yet."
         searchPlaceholder="Search payments..."
-        onSearchChange={() => {}}
+        onSearchChange={noopSearch}
         onPageChange={setPage}
         onSort={() => {}}
       />

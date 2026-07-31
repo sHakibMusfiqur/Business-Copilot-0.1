@@ -12,9 +12,9 @@ import { SaleTable } from '@/components/sales/sales-table';
 import { CreateSaleDialog } from '@/components/sales/create-sale-dialog';
 import { EditSaleDialog } from '@/components/sales/edit-sale-dialog';
 import { SaleDetailsDialog } from '@/components/sales/sale-details-dialog';
-import { DeleteSaleDialog } from '@/components/sales/delete-sale-dialog';
 import { DeliverSaleDialog } from '@/components/sales/deliver-sale-dialog';
-import { getSales, confirmSale } from '@/lib/api';
+import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
+import { deleteSale as deleteSaleRequest, getSales, confirmSale } from '@/lib/api';
 import type { Sale, SaleMeta, SaleListResponse } from '@/components/sales/sales-types';
 
 export default function SalesPage() {
@@ -146,11 +146,20 @@ export default function SalesPage() {
         onClose={() => setViewSale(null)}
       />
 
-      <DeleteSaleDialog
-        sale={deleteSale}
+      <ConfirmDeleteDialog
+        entityName={deleteSale?.orderNumber ?? null}
+        title="Delete Sales Order"
+        description="Only draft orders can be deleted. This action cannot be undone."
+        buttonLabel="Delete Order"
+        successTitle="Sales order deleted"
+        errorFallback="Failed to delete sales order."
         open={deleteSale !== null}
         onClose={() => setDeleteSale(null)}
         onDeleted={invalidate}
+        deleteFn={() => {
+          if (!deleteSale) throw new Error('No sale selected');
+          return deleteSaleRequest(deleteSale.id);
+        }}
       />
 
       <DeliverSaleDialog

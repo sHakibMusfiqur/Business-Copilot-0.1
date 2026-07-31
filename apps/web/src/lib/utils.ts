@@ -42,31 +42,3 @@ export function generateInitials(name: string): string {
     .toUpperCase()
     .slice(0, 2);
 }
-
-export function getStatusColor(status: string): string {
-  const colors: Record<string, string> = {
-    active: 'text-emerald-500 bg-emerald-500/10',
-    inactive: 'text-gray-500 bg-gray-500/10',
-    pending: 'text-amber-500 bg-amber-500/10',
-    paid: 'text-emerald-500 bg-emerald-500/10',
-    draft: 'text-gray-500 bg-gray-500/10',
-    confirmed: 'text-blue-500 bg-blue-500/10',
-    cancelled: 'text-red-500 bg-red-500/10',
-    delivered: 'text-emerald-500 bg-emerald-500/10',
-    new: 'text-blue-500 bg-blue-500/10',
-    won: 'text-emerald-500 bg-emerald-500/10',
-    lost: 'text-red-500 bg-red-500/10',
-  };
-  return colors[status.toLowerCase()] ?? 'text-gray-500 bg-gray-500/10';
-}
-
-export function debounce<T extends (...args: unknown[]) => unknown>(
-  fn: T,
-  delay: number,
-): (...args: Parameters<T>) => void {
-  let timeoutId: ReturnType<typeof setTimeout>;
-  return (...args: Parameters<T>) => {
-    clearTimeout(timeoutId);
-    timeoutId = setTimeout(() => fn(...args), delay);
-  };
-}

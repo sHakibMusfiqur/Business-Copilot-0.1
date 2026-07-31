@@ -15,6 +15,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import type { Meta } from '@/lib/types';
 
 export interface Column<T> {
   key: string;
@@ -24,12 +25,7 @@ export interface Column<T> {
   className?: string;
 }
 
-export interface Meta {
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}
+export type { Meta };
 
 interface DataTableProps<T> {
   data: T[];

@@ -217,20 +217,6 @@ export function findCountryByName(name: string): CountryInfo | undefined {
   return COUNTRY_DATA.find(c => c.name.toLowerCase() === q);
 }
 
-export function findCountryByCode(code: string): CountryInfo | undefined {
-  return COUNTRY_DATA.find(c => c.code === code.toUpperCase());
-}
-
-export function getCountryForDial(dial: string): CountryInfo | undefined {
-  const sorted = [...COUNTRY_DATA].sort((a, b) => b.dial.length - a.dial.length);
-  return sorted.find(c => dial.startsWith(c.dial));
-}
-
-export function getTimezoneForCountry(name: string): string | undefined {
-  const country = findCountryByName(name);
-  return country?.timezone;
-}
-
 export function formatE164(dial: string, localNumber: string): string {
   const digits = localNumber.replace(/\D/g, '');
   return `${dial}${digits}`;

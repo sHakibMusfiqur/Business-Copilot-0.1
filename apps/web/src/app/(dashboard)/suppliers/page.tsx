@@ -10,9 +10,9 @@ import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 import { SupplierTable } from '@/components/suppliers/supplier-table';
 import { CreateSupplierDialog } from '@/components/suppliers/create-supplier-dialog';
 import { EditSupplierDialog } from '@/components/suppliers/edit-supplier-dialog';
-import { DeleteSupplierDialog } from '@/components/suppliers/delete-supplier-dialog';
-import { StatusToggleDialog } from '@/components/suppliers/status-toggle-dialog';
-import { getSuppliers } from '@/lib/api';
+import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
+import { StatusToggleDialog } from '@/components/ui/status-toggle-dialog';
+import { deleteSupplier as deleteSupplierRequest, getSuppliers, updateSupplierStatus } from '@/lib/api';
 import type { Supplier, SuppliersResponse, SupplierMeta } from '@/components/suppliers/supplier-types';
 
 export default function SuppliersPage() {
@@ -114,18 +114,32 @@ export default function SuppliersPage() {
         onUpdated={invalidate}
       />
 
-      <DeleteSupplierDialog
-        supplier={deleteSupplier}
+      <ConfirmDeleteDialog
+        entityName={deleteSupplier?.name ?? null}
+        title="Delete Supplier"
+        description="This supplier will be deactivated and hidden from the system. Their data will not be permanently removed. This action cannot be undone."
+        buttonLabel="Delete Supplier"
+        successTitle="Supplier deleted"
+        errorFallback="Failed to delete supplier."
         open={deleteSupplier !== null}
         onClose={() => setDeleteSupplier(null)}
         onDeleted={invalidate}
+        deleteFn={() => {
+          if (!deleteSupplier) throw new Error('No supplier selected');
+          return deleteSupplierRequest(deleteSupplier.id);
+        }}
       />
 
       <StatusToggleDialog
-        supplier={statusSupplier}
+        entity={statusSupplier}
+        entityLabel="Supplier"
         open={statusSupplier !== null}
         onClose={() => setStatusSupplier(null)}
         onToggled={invalidate}
+        updateStatus={updateSupplierStatus}
+        activateDescription={(name) => `Activate ${name}? They will be visible and usable across the system.`}
+        deactivateDescription={(name) => `Deactivate ${name}? They will be hidden from most views until reactivated.`}
+        errorFallback="Failed to update supplier status."
       />
     </div>
   );

@@ -1,3 +1,5 @@
+import type { Meta } from '@/lib/types';
+
 export interface AuditLog {
   id: string;
   userId: string | null;
@@ -14,25 +16,9 @@ export interface AuditLog {
   createdAt: string;
 }
 
-export interface AuditMeta {
-  page: number;
-  limit: number;
-  total: number;
-  totalPages: number;
-}
+export type AuditMeta = Meta;
 
 export interface AuditListResponse {
   data: AuditLog[];
   meta: AuditMeta;
-}
-
-export interface AuditQueryParams {
-  page?: number;
-  limit?: number;
-  search?: string;
-  action?: string;
-  entity?: string;
-  userId?: string;
-  sortBy?: string;
-  sortOrder?: 'asc' | 'desc';
 }

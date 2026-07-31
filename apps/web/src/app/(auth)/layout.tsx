@@ -1,5 +1,4 @@
-import { QueryProvider } from '@/providers/query-provider';
-import { ThemeProvider } from '@/providers/theme-provider';
+import { OrganizationThemeProvider } from '@/providers/organization-theme-provider';
 
 export default function AuthLayout({
   children,
@@ -7,10 +6,8 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <QueryProvider>
-      <ThemeProvider>
-        {children}
-      </ThemeProvider>
-    </QueryProvider>
+    <OrganizationThemeProvider>
+      {children}
+    </OrganizationThemeProvider>
   );
 }

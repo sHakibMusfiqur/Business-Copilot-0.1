@@ -1,66 +1,60 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import { Globe, CalendarDays } from 'lucide-react';
 
 import { Label } from '@/components/ui/label';
-import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/use-toast';
-import { api } from '@/lib/api';
+import { SectionCard } from '@/components/setup/section-card';
 import { SetupPageShell } from '@/components/setup/setup-page-shell';
 import { markChecklistComplete } from '@/lib/onboarding-api';
 import { getOnboardingSession } from '@/lib/session-storage';
+import { useSettings } from '@/lib/use-settings';
 
-const schema = z.object({
-  language: z.string().min(1, 'Language is required'),
-  timezone: z.string().min(1, 'Timezone is required'),
-  dateFormat: z.string().min(1, 'Date format is required'),
-  currency: z.string().min(1, 'Currency is required'),
-  weekStartsOn: z.string().min(1, 'Week start is required'),
-});
+interface PreferencesValues {
+  language: string;
+  timezone: string;
+  dateFormat: string;
+  currency: string;
+  weekStartsOn: string;
+}
 
-type FormData = z.infer<typeof schema>;
+const DEFAULTS: PreferencesValues = {
+  language: 'English',
+  timezone: 'UTC',
+  dateFormat: 'MM/DD/YYYY',
+  currency: 'USD',
+  weekStartsOn: 'Monday',
+};
 
-const selectClass = 'flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
+const selectClass =
+  'flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
 
 export default function PreferencesPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  const form = useForm<FormData>({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      language: 'English',
-      timezone: 'UTC',
-      dateFormat: 'MM/DD/YYYY',
-      currency: 'USD',
-      weekStartsOn: 'Monday',
-    },
-  });
-
-  const { register, handleSubmit } = form;
+  const { values, loading, loadError, reload, dirty, update, save, saving, saved } =
+    useSettings('preferences', { defaults: DEFAULTS });
 
   const handleSave = async () => {
-    setSaving(true);
     try {
-      await api.post('/settings/preferences', form.getValues());
-      const session = getOnboardingSession();
-      if (session?.id) {
-        await markChecklistComplete(session.id, 'preferences');
-      }
-      setSaved(true);
-      toast({ title: 'Preferences saved', description: 'Your preferences have been updated.', variant: 'default' });
-      setTimeout(() => setSaved(false), 3000);
+      await save();
     } catch (err) {
-      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Failed to save preferences.', variant: 'destructive' });
-    } finally {
-      setSaving(false);
+      toast({
+        title: 'Could not save preferences',
+        description: err instanceof Error ? err.message : 'Something went wrong while saving.',
+        variant: 'destructive',
+      });
+      return;
     }
+    try {
+      const session = getOnboardingSession();
+      if (session?.id) await markChecklistComplete(session.id, 'preferences');
+    } catch {
+      // checklist completion is best-effort and must not fail the save
+    }
+    toast({ title: 'Preferences saved', description: 'Your workspace preferences have been updated.', variant: 'success' });
   };
 
   return (
@@ -72,80 +66,132 @@ export default function PreferencesPage() {
         { label: 'Settings' },
         { label: 'Preferences' },
       ]}
-      onSave={handleSubmit(handleSave)}
+      onSave={handleSave}
       onCancel={() => router.back()}
       saving={saving}
       saved={saved}
+      dirty={dirty}
     >
-      <div className="space-y-6">
-        <div>
-          <h3 className="text-sm font-semibold text-foreground">Localization</h3>
-          <p className="text-xs text-muted-foreground mt-1">Set your language and regional preferences</p>
+      {loadError && (
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-5 py-8 text-center">
+          <p className="text-sm text-destructive">{loadError}</p>
+          <button
+            type="button"
+            onClick={() => void reload()}
+            className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Try again
+          </button>
         </div>
+      )}
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="language">Language *</Label>
-            <select id="language" {...register('language')} className={selectClass}>
-              <option value="English">English</option>
-              <option value="Spanish">Spanish</option>
-              <option value="French">French</option>
-              <option value="German">German</option>
-              <option value="Arabic">Arabic</option>
-              <option value="Chinese">Chinese</option>
-            </select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="timezone">Timezone *</Label>
-            <select id="timezone" {...register('timezone')} className={selectClass}>
-              <option value="UTC">UTC (Coordinated Universal Time)</option>
-              <option value="US/Eastern">US/Eastern (EST/EDT)</option>
-              <option value="US/Pacific">US/Pacific (PST/PDT)</option>
-              <option value="Europe/London">Europe/London (GMT/BST)</option>
-              <option value="Asia/Dubai">Asia/Dubai (GST)</option>
-              <option value="Asia/Shanghai">Asia/Shanghai (CST)</option>
-            </select>
-          </div>
+      {loading ? (
+        <div className="space-y-6">
+          <Skeleton className="h-64 w-full rounded-2xl" />
+          <Skeleton className="h-40 w-full rounded-2xl" />
         </div>
+      ) : (
+        <>
+          <SectionCard
+            title="Localization"
+            description="Set your language and regional preferences"
+            icon={<Globe className="h-4 w-4" />}
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="language" className="text-sm font-medium">
+                  Language *
+                </Label>
+                <select
+                  id="language"
+                  value={values.language}
+                  onChange={(e) => update({ language: e.target.value })}
+                  className={selectClass}
+                >
+                  <option value="English">English</option>
+                  <option value="Spanish">Spanish</option>
+                  <option value="French">French</option>
+                  <option value="German">German</option>
+                  <option value="Arabic">Arabic</option>
+                  <option value="Chinese">Chinese</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="timezone" className="text-sm font-medium">
+                  Timezone *
+                </Label>
+                <select
+                  id="timezone"
+                  value={values.timezone}
+                  onChange={(e) => update({ timezone: e.target.value })}
+                  className={selectClass}
+                >
+                  <option value="UTC">UTC (Coordinated Universal Time)</option>
+                  <option value="US/Eastern">US/Eastern (EST/EDT)</option>
+                  <option value="US/Pacific">US/Pacific (PST/PDT)</option>
+                  <option value="Europe/London">Europe/London (GMT/BST)</option>
+                  <option value="Asia/Dubai">Asia/Dubai (GST)</option>
+                  <option value="Asia/Shanghai">Asia/Shanghai (CST)</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="dateFormat" className="text-sm font-medium">
+                  Date Format *
+                </Label>
+                <select
+                  id="dateFormat"
+                  value={values.dateFormat}
+                  onChange={(e) => update({ dateFormat: e.target.value })}
+                  className={selectClass}
+                >
+                  <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                  <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                  <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="currency" className="text-sm font-medium">
+                  Currency *
+                </Label>
+                <select
+                  id="currency"
+                  value={values.currency}
+                  onChange={(e) => update({ currency: e.target.value })}
+                  className={selectClass}
+                >
+                  <option value="USD">USD - US Dollar</option>
+                  <option value="EUR">EUR - Euro</option>
+                  <option value="GBP">GBP - British Pound</option>
+                  <option value="AED">AED - UAE Dirham</option>
+                  <option value="SAR">SAR - Saudi Riyal</option>
+                </select>
+              </div>
+            </div>
+          </SectionCard>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="dateFormat">Date Format *</Label>
-            <select id="dateFormat" {...register('dateFormat')} className={selectClass}>
-              <option value="MM/DD/YYYY">MM/DD/YYYY</option>
-              <option value="DD/MM/YYYY">DD/MM/YYYY</option>
-              <option value="YYYY-MM-DD">YYYY-MM-DD</option>
-            </select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="currency">Currency *</Label>
-            <select id="currency" {...register('currency')} className={selectClass}>
-              <option value="USD">USD - US Dollar</option>
-              <option value="EUR">EUR - Euro</option>
-              <option value="GBP">GBP - British Pound</option>
-              <option value="AED">AED - UAE Dirham</option>
-              <option value="SAR">SAR - Saudi Riyal</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <Separator />
-
-      <div className="space-y-4">
-        <div>
-          <h3 className="text-sm font-semibold text-foreground">Week Settings</h3>
-          <p className="text-xs text-muted-foreground mt-1">Choose which day your work week starts on</p>
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="weekStartsOn">Week Starts On *</Label>
-          <select id="weekStartsOn" {...register('weekStartsOn')} className={selectClass}>
-            <option value="Monday">Monday</option>
-            <option value="Sunday">Sunday</option>
-            <option value="Saturday">Saturday</option>
-          </select>
-        </div>
-      </div>
+          <SectionCard
+            title="Week Settings"
+            description="Choose which day your work week starts on"
+            icon={<CalendarDays className="h-4 w-4" />}
+          >
+            <div className="max-w-sm space-y-2">
+              <Label htmlFor="weekStartsOn" className="text-sm font-medium">
+                Week Starts On *
+              </Label>
+              <select
+                id="weekStartsOn"
+                value={values.weekStartsOn}
+                onChange={(e) => update({ weekStartsOn: e.target.value })}
+                className={selectClass}
+              >
+                <option value="Monday">Monday</option>
+                <option value="Sunday">Sunday</option>
+                <option value="Saturday">Saturday</option>
+              </select>
+            </div>
+          </SectionCard>
+        </>
+      )}
     </SetupPageShell>
   );
 }

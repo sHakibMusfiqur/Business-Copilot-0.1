@@ -1,73 +1,94 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { CreditCard } from 'lucide-react';
+import { CreditCard, MapPin } from 'lucide-react';
 
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
-import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/components/ui/use-toast';
-import { api } from '@/lib/api';
+import { SectionCard } from '@/components/setup/section-card';
 import { SetupPageShell } from '@/components/setup/setup-page-shell';
 import { markChecklistComplete } from '@/lib/onboarding-api';
 import { getOnboardingSession } from '@/lib/session-storage';
+import { useSettings } from '@/lib/use-settings';
+import { EMAIL_RE } from '@/lib/validation';
 
-const schema = z.object({
-  companyName: z.string().min(2, 'Company name must be at least 2 characters'),
-  taxId: z.string().optional(),
-  billingEmail: z.string().email('Enter a valid email address'),
-  address: z.string().min(5, 'Address is required'),
-  city: z.string().min(2, 'City is required'),
-  country: z.string().min(1, 'Country is required'),
-  currency: z.string().min(1, 'Currency is required'),
-});
+interface BillingValues {
+  companyName: string;
+  taxId: string;
+  billingEmail: string;
+  address: string;
+  city: string;
+  country: string;
+  currency: string;
+}
 
-type FormData = z.infer<typeof schema>;
+const DEFAULTS: BillingValues = {
+  companyName: '',
+  taxId: '',
+  billingEmail: '',
+  address: '',
+  city: '',
+  country: '',
+  currency: 'USD',
+};
 
-const selectClass = 'flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
+const selectClass =
+  'flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2';
 
 export default function BillingPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const { values, loading, loadError, reload, dirty, update, save, saving, saved } =
+    useSettings('billing', { defaults: DEFAULTS });
 
-  const form = useForm<FormData>({
-    resolver: zodResolver(schema),
-    defaultValues: {
-      companyName: '',
-      taxId: '',
-      billingEmail: '',
-      address: '',
-      city: '',
-      country: '',
-      currency: 'USD',
-    },
-  });
-
-  const { register, handleSubmit, formState: { errors } } = form;
+  const emailInvalid = !EMAIL_RE.test(values.billingEmail);
 
   const handleSave = async () => {
-    setSaving(true);
-    try {
-      await api.post('/settings/billing', form.getValues());
-      const session = getOnboardingSession();
-      if (session?.id) {
-        await markChecklistComplete(session.id, 'billing');
-      }
-      setSaved(true);
-      toast({ title: 'Billing settings saved', description: 'Your billing information has been updated.', variant: 'default' });
-      setTimeout(() => setSaved(false), 3000);
-    } catch (err) {
-      toast({ title: 'Error', description: err instanceof Error ? err.message : 'Failed to save billing settings.', variant: 'destructive' });
-    } finally {
-      setSaving(false);
+    if (values.companyName.trim().length < 2) {
+      toast({ title: 'Check your settings', description: 'Company name must be at least 2 characters.', variant: 'destructive' });
+      return;
     }
+    if (emailInvalid) {
+      toast({ title: 'Check your settings', description: 'Enter a valid billing email address.', variant: 'destructive' });
+      return;
+    }
+    if (values.address.trim().length < 5) {
+      toast({ title: 'Check your settings', description: 'Street address is required.', variant: 'destructive' });
+      return;
+    }
+    if (values.city.trim().length < 2) {
+      toast({ title: 'Check your settings', description: 'City is required.', variant: 'destructive' });
+      return;
+    }
+    if (values.country.trim().length === 0) {
+      toast({ title: 'Check your settings', description: 'Country is required.', variant: 'destructive' });
+      return;
+    }
+    if (values.currency.trim().length === 0) {
+      toast({ title: 'Check your settings', description: 'Currency is required.', variant: 'destructive' });
+      return;
+    }
+
+    try {
+      await save();
+    } catch (err) {
+      toast({
+        title: 'Could not save billing settings',
+        description: err instanceof Error ? err.message : 'Something went wrong while saving.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    try {
+      const session = getOnboardingSession();
+      if (session?.id) await markChecklistComplete(session.id, 'billing');
+    } catch {
+      // best-effort
+    }
+    toast({ title: 'Billing settings saved', description: 'Your billing information has been updated.', variant: 'success' });
   };
 
   return (
@@ -79,87 +100,149 @@ export default function BillingPage() {
         { label: 'Settings' },
         { label: 'Billing' },
       ]}
-      onSave={handleSubmit(handleSave)}
+      onSave={handleSave}
       onCancel={() => router.back()}
       saving={saving}
       saved={saved}
+      dirty={dirty}
     >
-      <div className="space-y-6">
-        <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-            <CreditCard className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">Billing Information</h3>
-            <p className="text-xs text-muted-foreground mt-1">Set up your company billing details</p>
-          </div>
+      {loadError && (
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/5 px-5 py-8 text-center">
+          <p className="text-sm text-destructive">{loadError}</p>
+          <button
+            type="button"
+            onClick={() => void reload()}
+            className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Try again
+          </button>
         </div>
+      )}
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="companyName">Company Name *</Label>
-            <Input id="companyName" {...register('companyName')} placeholder="Acme Corporation" />
-            {errors.companyName && <p className="text-xs text-destructive">{errors.companyName.message}</p>}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="taxId">Tax ID / VAT Number</Label>
-            <Input id="taxId" {...register('taxId')} placeholder="US123456789" />
-          </div>
+      {loading ? (
+        <div className="space-y-6">
+          <Skeleton className="h-56 w-full rounded-2xl" />
+          <Skeleton className="h-64 w-full rounded-2xl" />
         </div>
+      ) : (
+        <>
+          <SectionCard
+            title="Billing Information"
+            description="Set up your company billing details"
+            icon={<CreditCard className="h-4 w-4" />}
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="companyName" className="text-sm font-medium">
+                  Company Name *
+                </Label>
+                <Input
+                  id="companyName"
+                  value={values.companyName}
+                  onChange={(e) => update({ companyName: e.target.value })}
+                  placeholder="Acme Corporation"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="taxId" className="text-sm font-medium">
+                  Tax ID / VAT Number
+                </Label>
+                <Input
+                  id="taxId"
+                  value={values.taxId}
+                  onChange={(e) => update({ taxId: e.target.value })}
+                  placeholder="US123456789"
+                />
+              </div>
+            </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="billingEmail">Billing Email *</Label>
-          <Input id="billingEmail" type="email" {...register('billingEmail')} placeholder="billing@company.com" />
-          {errors.billingEmail && <p className="text-xs text-destructive">{errors.billingEmail.message}</p>}
-        </div>
-      </div>
+            <div className="mt-5 max-w-sm space-y-2">
+              <Label htmlFor="billingEmail" className="text-sm font-medium">
+                Billing Email *
+              </Label>
+              <Input
+                id="billingEmail"
+                type="email"
+                value={values.billingEmail}
+                onChange={(e) => update({ billingEmail: e.target.value })}
+                placeholder="billing@company.com"
+              />
+              {emailInvalid && <p className="text-xs text-destructive">Enter a valid email address</p>}
+            </div>
+          </SectionCard>
 
-      <Separator />
+          <SectionCard
+            title="Billing Address"
+            description="Enter your billing address"
+            icon={<MapPin className="h-4 w-4" />}
+          >
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="address" className="text-sm font-medium">
+                  Street Address *
+                </Label>
+                <Textarea
+                  id="address"
+                  value={values.address}
+                  onChange={(e) => update({ address: e.target.value })}
+                  placeholder="123 Main Street, Suite 100"
+                  rows={2}
+                />
+              </div>
 
-      <div className="space-y-4">
-        <div>
-          <h3 className="text-sm font-semibold text-foreground">Billing Address</h3>
-          <p className="text-xs text-muted-foreground mt-1">Enter your billing address</p>
-        </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="city" className="text-sm font-medium">
+                    City *
+                  </Label>
+                  <Input
+                    id="city"
+                    value={values.city}
+                    onChange={(e) => update({ city: e.target.value })}
+                    placeholder="San Francisco"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="country" className="text-sm font-medium">
+                    Country *
+                  </Label>
+                  <select
+                    id="country"
+                    value={values.country}
+                    onChange={(e) => update({ country: e.target.value })}
+                    className={selectClass}
+                  >
+                    <option value="">Select country</option>
+                    <option value="US">United States</option>
+                    <option value="AE">United Arab Emirates</option>
+                    <option value="SA">Saudi Arabia</option>
+                    <option value="GB">United Kingdom</option>
+                    <option value="DE">Germany</option>
+                  </select>
+                </div>
+              </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="address">Street Address *</Label>
-          <Textarea id="address" {...register('address')} placeholder="123 Main Street, Suite 100" rows={2} />
-          {errors.address && <p className="text-xs text-destructive">{errors.address.message}</p>}
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="city">City *</Label>
-            <Input id="city" {...register('city')} placeholder="San Francisco" />
-            {errors.city && <p className="text-xs text-destructive">{errors.city.message}</p>}
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="country">Country *</Label>
-            <select id="country" {...register('country')} className={selectClass}>
-              <option value="">Select country</option>
-              <option value="US">United States</option>
-              <option value="AE">United Arab Emirates</option>
-              <option value="SA">Saudi Arabia</option>
-              <option value="GB">United Kingdom</option>
-              <option value="DE">Germany</option>
-            </select>
-            {errors.country && <p className="text-xs text-destructive">{errors.country.message}</p>}
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="currency">Currency *</Label>
-          <select id="currency" {...register('currency')} className={selectClass}>
-            <option value="USD">USD - US Dollar</option>
-            <option value="EUR">EUR - Euro</option>
-            <option value="GBP">GBP - British Pound</option>
-            <option value="AED">AED - UAE Dirham</option>
-            <option value="SAR">SAR - Saudi Riyal</option>
-          </select>
-          {errors.currency && <p className="text-xs text-destructive">{errors.currency.message}</p>}
-        </div>
-      </div>
+              <div className="max-w-sm space-y-2">
+                <Label htmlFor="currency" className="text-sm font-medium">
+                  Currency *
+                </Label>
+                <select
+                  id="currency"
+                  value={values.currency}
+                  onChange={(e) => update({ currency: e.target.value })}
+                  className={selectClass}
+                >
+                  <option value="USD">USD - US Dollar</option>
+                  <option value="EUR">EUR - Euro</option>
+                  <option value="GBP">GBP - British Pound</option>
+                  <option value="AED">AED - UAE Dirham</option>
+                  <option value="SAR">SAR - Saudi Riyal</option>
+                </select>
+              </div>
+            </div>
+          </SectionCard>
+        </>
+      )}
     </SetupPageShell>
   );
 }

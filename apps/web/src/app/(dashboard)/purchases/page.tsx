@@ -11,9 +11,9 @@ import { PurchaseTable } from '@/components/purchase/purchase-table';
 import { CreatePurchaseDialog } from '@/components/purchase/create-purchase-dialog';
 import { EditPurchaseDialog } from '@/components/purchase/edit-purchase-dialog';
 import { PurchaseDetailsDialog } from '@/components/purchase/purchase-details-dialog';
-import { DeletePurchaseDialog } from '@/components/purchase/delete-purchase-dialog';
 import { ReceivePurchaseDialog } from '@/components/purchase/receive-purchase-dialog';
-import { getPurchases, approvePurchase } from '@/lib/api';
+import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
+import { deletePurchase as deletePurchaseRequest, getPurchases, approvePurchase } from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
 import { useMutation } from '@tanstack/react-query';
 import type { Purchase, PurchaseMeta, PurchaseListResponse } from '@/components/purchase/purchase-types';
@@ -147,11 +147,20 @@ export default function PurchasesPage() {
         onClose={() => setViewPurchase(null)}
       />
 
-      <DeletePurchaseDialog
-        purchase={deletePurchase}
+      <ConfirmDeleteDialog
+        entityName={deletePurchase?.orderNumber ?? null}
+        title="Delete Purchase Order"
+        description="Only draft orders can be deleted. This action cannot be undone."
+        buttonLabel="Delete Order"
+        successTitle="Purchase order deleted"
+        errorFallback="Failed to delete purchase order."
         open={deletePurchase !== null}
         onClose={() => setDeletePurchase(null)}
         onDeleted={invalidate}
+        deleteFn={() => {
+          if (!deletePurchase) throw new Error('No purchase selected');
+          return deletePurchaseRequest(deletePurchase.id);
+        }}
       />
 
       <ReceivePurchaseDialog

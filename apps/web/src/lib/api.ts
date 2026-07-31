@@ -4,25 +4,13 @@ import axios, {
   type InternalAxiosRequestConfig,
 } from 'axios';
 
-import type { SaleListResponse, Sale } from '@/components/sales/sales-types';
-
-import { useAuthStore } from '@/store/auth-store';
+import type { SaleListResponse } from '@/components/sales/sales-types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 interface TokenResponse {
   accessToken: string;
   refreshToken: string;
-}
-
-export interface PaginatedResponse<T> {
-  data: T[];
-  meta: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-  };
 }
 
 export interface OrganizationListResponse {
@@ -46,31 +34,6 @@ export interface OrganizationListResponse {
   owner: { id: string; name: string; email: string } | null;
   plan: { name: string; slug: string } | null;
   subscriptionStatus: string | null;
-}
-
-export interface UserListResponse {
-  id: string;
-  email: string;
-  name: string;
-  role: string;
-  isActive: boolean;
-  avatar: string | null;
-  organizationId: string | null;
-  lastLoginAt: string | null;
-  createdAt: string;
-  organization: { id: string; name: string } | null;
-  memberOf: { role: string }[];
-}
-
-export interface AuditLogResponse {
-  id: string;
-  action: string;
-  entity: string | null;
-  entityId: string | null;
-  status: string;
-  createdAt: string;
-  user: { id: string; name: string; email: string } | null;
-  organization: { id: string; name: string } | null;
 }
 
 export interface SubscriptionPlanResponse {
@@ -130,13 +93,72 @@ export interface DashboardResponse {
 export class ApiError extends Error {
   status: number;
   code: string;
+  details?: string;
 
-  constructor(message: string, status: number, code = 'UNKNOWN_ERROR') {
+  constructor(message: string, status: number, code = 'UNKNOWN_ERROR', details?: string) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
+    this.details = details;
   }
+}
+
+function friendlyMessage(status: number, data?: Record<string, unknown>): string {
+  const raw = data?.message;
+  if (typeof raw === 'string' && raw.trim()) return raw;
+  const error = data?.error;
+  if (typeof error === 'string' && error.trim()) return error;
+
+  switch (status) {
+    case 400:
+      return 'The request was invalid. Please check your input and try again.';
+    case 401:
+      return 'Your session has expired. Please sign in again.';
+    case 403:
+      return 'You do not have permission to perform this action.';
+    case 404:
+      return 'The requested resource could not be found.';
+    case 409:
+      return 'A record with this name already exists.';
+    case 422:
+      return 'The request could not be processed. Please check your input.';
+    case 429:
+      return 'Too many requests. Please try again shortly.';
+    default:
+      return 'Something went wrong. Please try again.';
+  }
+}
+
+const SENSITIVE_KEYS = ['password', 'newPassword', 'confirmPassword', 'currentPassword', 'accessToken', 'refreshToken', 'token', 'secret', 'apiKey', 'smtpPassword', 'authorization'];
+
+function redactSensitive(data: unknown): unknown {
+  if (Array.isArray(data)) {
+    return data.map((item) => redactSensitive(item));
+  }
+  if (data && typeof data === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(data)) {
+      out[key] = SENSITIVE_KEYS.some((k) => key.toLowerCase().includes(k.toLowerCase()))
+        ? '[REDACTED]'
+        : redactSensitive(value);
+    }
+    return out;
+  }
+  return data;
+}
+
+function buildDebugInfo(error: AxiosError, baseURL: string): string {
+  const url = error.config?.url ?? '(none)';
+  const method = error.config?.method ?? '(none)';
+  const fullURL = baseURL + url;
+  const respStatus = error.response?.status ?? '(none)';
+  const respData = error.response?.data ? JSON.stringify(error.response.data).substring(0, 200) : '(none)';
+  return (
+    `[AXIOS_DEBUG] url=${fullURL} | method=${method} | errMsg=${error.message} | ` +
+    `status=${respStatus} | respData=${respData} | code=${error.code ?? '(none)'} | ` +
+    `reqData=${JSON.stringify(redactSensitive(error.config?.data) ?? '(none)')}`
+  );
 }
 
 function normalizeError(error: unknown): ApiError {
@@ -144,51 +166,13 @@ function normalizeError(error: unknown): ApiError {
   if (axios.isAxiosError(error)) {
     const data = error.response?.data as Record<string, unknown> | undefined;
     const baseURL = error.config?.baseURL ?? '(none)';
-    const url = error.config?.url ?? '(none)';
-    const method = error.config?.method ?? '(none)';
-    const fullURL = baseURL + url;
-    const reqHeaders = JSON.stringify(error.config?.headers ?? {});
-    const reqData = error.config?.data ?? '(none)';
-    const hasResponse = error.response ? 'YES' : 'NO';
-    const respStatus = error.response?.status ?? '(none)';
-    const respData = error.response?.data ? JSON.stringify(error.response.data).substring(0,200) : '(none)';
-    const errCode = error.code ?? '(none)';
-    const errMsg = error.message ?? '(none)';
-    const isAxios = (error as { isAxiosError?: unknown }).isAxiosError ? 'YES' : 'NO';
-    const hasRequest = error.request ? 'YES' : 'NO';
-    const reqReadyState = typeof error.request === 'object' && error.request !== null
-      ? ((error.request as { readyState?: unknown }).readyState?.toString() ?? '(no readyState)')
-      : '(no request object)';
-    const toJSON = typeof error.toJSON === 'function' ? JSON.stringify(error.toJSON(), null, 2) : '(no toJSON)';
-    const errStack = error.stack ?? '(no stack)';
-    const errCause = error.cause?.toString() ?? '(no cause)';
-
-    const debugInfo =
-      `[AXIOS_DEBUG] ` +
-      `url=${fullURL} | ` +
-      `method=${method} | ` +
-      `errMsg=${errMsg} | ` +
-      `errCode=${errCode} | ` +
-      `isAxios=${isAxios} | ` +
-      `hasResponse=${hasResponse} | ` +
-      `respStatus=${respStatus} | ` +
-      `hasRequest=${hasRequest} | ` +
-      `reqReadyState=${reqReadyState} | ` +
-      `reqData=${reqData} | ` +
-      `reqHeaders=${reqHeaders} | ` +
-      `respData=${respData} | ` +
-      `errStack=${errStack} | ` +
-      `errCause=${errCause} | ` +
-      `toJSON=${toJSON}`;
-
     const status = error.response?.status ?? 0;
-    const message = debugInfo;
     const code = (data?.code as string) ?? error.code ?? 'UNKNOWN_ERROR';
-    return new ApiError(message, status, code);
+    const debugInfo = buildDebugInfo(error, baseURL);
+    return new ApiError(friendlyMessage(status, data), status, code, debugInfo);
   }
   if (error instanceof Error) {
-    const debugInfo = `[ERROR_DEBUG] name=${error.name} msg=${error.message} cause=${error.cause} stack=${error.stack}`;
-    return new ApiError(debugInfo, 0);
+    return new ApiError(error.message || 'Something went wrong. Please try again.', 0, 'UNKNOWN_ERROR');
   }
   return new ApiError('An unexpected error occurred', 0);
 }
@@ -241,7 +225,7 @@ api.interceptors.response.use(
           return api(originalRequest);
         } catch {
           setAccessToken(null);
-          useAuthStore.getState().logout();
+          void import('@/store/auth-store').then(({ useAuthStore }) => useAuthStore.getState().logout());
           return Promise.reject(normalized);
         }
       }
@@ -315,11 +299,6 @@ export async function logout() {
   }
 }
 
-export async function getProfile() {
-  const response = await api.get('/auth/profile');
-  return response.data;
-}
-
 export async function getMe() {
   const response = await api.get('/auth/me');
   return response.data;
@@ -350,11 +329,6 @@ export async function getAdminOrganizations(page = 1, limit = 20, search?: strin
   return response.data;
 }
 
-export async function getAdminOrganization(id: string) {
-  const response = await api.get(`/admin/organizations/${id}`);
-  return response.data;
-}
-
 export async function createAdminOrganization(data: {
   name: string;
   ownerEmail: string;
@@ -363,11 +337,6 @@ export async function createAdminOrganization(data: {
   planSlug?: string;
 }) {
   const response = await api.post('/admin/organizations', data);
-  return response.data;
-}
-
-export async function updateAdminOrganization(id: string, data: Record<string, unknown>) {
-  const response = await api.patch(`/admin/organizations/${id}`, data);
   return response.data;
 }
 
@@ -383,11 +352,6 @@ export async function activateOrganization(id: string) {
 
 export async function deleteAdminOrganization(id: string) {
   const response = await api.delete(`/admin/organizations/${id}`);
-  return response.data;
-}
-
-export async function transferOwnership(id: string, newOwnerUserId: string) {
-  const response = await api.patch(`/admin/organizations/${id}/transfer`, { newOwnerUserId });
   return response.data;
 }
 
@@ -445,18 +409,8 @@ export async function createRole(data: { name: string; description?: string }) {
   return response.data;
 }
 
-export async function updateRole(id: string, data: { name?: string; description?: string }) {
-  const response = await api.patch(`/roles/${id}`, data);
-  return response.data;
-}
-
 export async function deleteRole(id: string) {
   await api.delete(`/roles/${id}`);
-}
-
-export async function getPermissions() {
-  const response = await api.get('/permissions');
-  return response.data;
 }
 
 export async function getPermissionsGrouped() {
@@ -464,18 +418,8 @@ export async function getPermissionsGrouped() {
   return response.data;
 }
 
-export async function getRolePermissions(roleId: string) {
-  const response = await api.get(`/roles/${roleId}/permissions`);
-  return response.data;
-}
-
 export async function assignPermissions(roleId: string, permissionNames: string[]) {
   const response = await api.put(`/roles/${roleId}/permissions`, { permissionNames });
-  return response.data;
-}
-
-export async function getUserRoles(userId: string) {
-  const response = await api.get(`/users/${userId}/roles`);
   return response.data;
 }
 
@@ -503,11 +447,6 @@ export interface UserListParams {
 
 export async function getUsers(params?: UserListParams) {
   const response = await api.get('/users', { params });
-  return response.data;
-}
-
-export async function getUserById(id: string) {
-  const response = await api.get(`/users/${id}`);
   return response.data;
 }
 
@@ -558,11 +497,6 @@ export interface CustomerListParams {
 
 export async function getCustomers(params?: CustomerListParams) {
   const response = await api.get('/customers', { params });
-  return response.data;
-}
-
-export async function getCustomerById(id: string) {
-  const response = await api.get(`/customers/${id}`);
   return response.data;
 }
 
@@ -628,11 +562,6 @@ export interface SupplierListParams {
 
 export async function getSuppliers(params?: SupplierListParams) {
   const response = await api.get('/suppliers', { params });
-  return response.data;
-}
-
-export async function getSupplierById(id: string) {
-  const response = await api.get(`/suppliers/${id}`);
   return response.data;
 }
 
@@ -703,11 +632,6 @@ export interface ProductListParams {
 
 export async function getProducts(params?: ProductListParams) {
   const response = await api.get('/products', { params });
-  return response.data;
-}
-
-export async function getProductById(id: string) {
-  const response = await api.get(`/products/${id}`);
   return response.data;
 }
 
@@ -829,11 +753,6 @@ export async function getPurchases(params?: PurchaseListParams) {
   return response.data;
 }
 
-export async function getPurchaseById(id: string) {
-  const response = await api.get(`/purchase/${id}`);
-  return response.data;
-}
-
 export async function createPurchase(data: {
   supplierId: string;
   notes?: string;
@@ -898,11 +817,6 @@ export interface SalesListParams {
 
 export async function getSales(params?: SalesListParams): Promise<SaleListResponse> {
   const response = await api.get('/sales', { params });
-  return response.data;
-}
-
-export async function getSaleById(id: string): Promise<Sale> {
-  const response = await api.get(`/sales/${id}`);
   return response.data;
 }
 
@@ -978,11 +892,6 @@ export async function getAccounts(params?: AccountListParams) {
   return response.data;
 }
 
-export async function getAccountById(id: string) {
-  const response = await api.get(`/accounting/accounts/${id}`);
-  return response.data;
-}
-
 export async function createAccount(data: {
   code: string;
   name: string;
@@ -1030,11 +939,6 @@ export async function getJournalEntries(params?: JournalEntryListParams) {
   return response.data;
 }
 
-export async function getJournalEntryById(id: string) {
-  const response = await api.get(`/accounting/journal/${id}`);
-  return response.data;
-}
-
 export async function createJournalEntry(data: {
   description: string;
   referenceId?: string;
@@ -1047,22 +951,6 @@ export async function createJournalEntry(data: {
   }>;
 }) {
   const response = await api.post('/accounting/journal', data);
-  return response.data;
-}
-
-export async function updateJournalEntry(
-  id: string,
-  data: {
-    description?: string;
-    lines?: Array<{
-      accountId: string;
-      debit: number;
-      credit: number;
-      description?: string;
-    }>;
-  },
-) {
-  const response = await api.patch(`/accounting/journal/${id}`, data);
   return response.data;
 }
 
@@ -1256,18 +1144,42 @@ export async function getAuditLogs(params?: {
   return response.data;
 }
 
-export async function getAuditActions() {
-  const response = await api.get('/audit/actions');
+// ─── Settings ────────────────────────────────────────────
+
+export type SettingsNamespace =
+  | 'branding'
+  | 'tax'
+  | 'email'
+  | 'billing'
+  | 'preferences'
+  | 'notifications';
+
+export async function getSettings<T = Record<string, unknown>>(
+  namespace: SettingsNamespace,
+): Promise<T | null> {
+  const response = await api.get<T | null>(`/settings/${namespace}`);
   return response.data;
 }
 
-export function getAuditExportUrl(params?: {
-  action?: string;
-  entity?: string;
-}): string {
-  const searchParams = new URLSearchParams();
-  if (params?.action) searchParams.set('action', params.action);
-  if (params?.entity) searchParams.set('entity', params.entity);
-  const query = searchParams.toString();
-  return `${API_URL}/api/audit/export${query ? `?${query}` : ''}`;
+export async function updateSettings<T extends object>(
+  namespace: SettingsNamespace,
+  settings: T,
+): Promise<T> {
+  const response = await api.put<T>(`/settings/${namespace}`, settings);
+  return response.data;
+}
+
+export async function uploadSettingsFiles(files: {
+  logo?: File;
+  favicon?: File;
+}): Promise<{ logoUrl?: string; faviconUrl?: string }> {
+  const formData = new FormData();
+  if (files.logo) formData.append('logo', files.logo);
+  if (files.favicon) formData.append('favicon', files.favicon);
+  const response = await api.post<{ logoUrl?: string; faviconUrl?: string }>(
+    '/settings/files',
+    formData,
+    { headers: { 'Content-Type': 'multipart/form-data' } },
+  );
+  return response.data;
 }

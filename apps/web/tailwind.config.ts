@@ -8,7 +8,6 @@ const config: Config = {
     './src/pages/**/*.{ts,tsx}',
     './src/components/**/*.{ts,tsx}',
     './src/app/**/*.{ts,tsx}',
-    '../../packages/ui/src/**/*.{ts,tsx}',
   ],
   theme: {
     container: {

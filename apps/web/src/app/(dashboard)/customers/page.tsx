@@ -10,9 +10,9 @@ import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 import { CustomerTable } from '@/components/customers/customer-table';
 import { CreateCustomerDialog } from '@/components/customers/create-customer-dialog';
 import { EditCustomerDialog } from '@/components/customers/edit-customer-dialog';
-import { DeleteCustomerDialog } from '@/components/customers/delete-customer-dialog';
-import { StatusToggleDialog } from '@/components/customers/status-toggle-dialog';
-import { getCustomers } from '@/lib/api';
+import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
+import { StatusToggleDialog } from '@/components/ui/status-toggle-dialog';
+import { deleteCustomer as deleteCustomerRequest, getCustomers, updateCustomerStatus } from '@/lib/api';
 import type { Customer, CustomersResponse, CustomerMeta } from '@/components/customers/customer-types';
 
 export default function CustomersPage() {
@@ -114,18 +114,32 @@ export default function CustomersPage() {
         onUpdated={invalidate}
       />
 
-      <DeleteCustomerDialog
-        customer={deleteCustomer}
+      <ConfirmDeleteDialog
+        entityName={deleteCustomer?.name ?? null}
+        title="Delete Customer"
+        description="This customer will be deactivated and hidden from the system. Their data will not be permanently removed. This action cannot be undone."
+        buttonLabel="Delete Customer"
+        successTitle="Customer deleted"
+        errorFallback="Failed to delete customer."
         open={deleteCustomer !== null}
         onClose={() => setDeleteCustomer(null)}
         onDeleted={invalidate}
+        deleteFn={() => {
+          if (!deleteCustomer) throw new Error('No customer selected');
+          return deleteCustomerRequest(deleteCustomer.id);
+        }}
       />
 
       <StatusToggleDialog
-        customer={statusCustomer}
+        entity={statusCustomer}
+        entityLabel="Customer"
         open={statusCustomer !== null}
         onClose={() => setStatusCustomer(null)}
         onToggled={invalidate}
+        updateStatus={updateCustomerStatus}
+        activateDescription={(name) => `Activate ${name}? They will be visible and usable across the system.`}
+        deactivateDescription={(name) => `Deactivate ${name}? They will be hidden from most views until reactivated.`}
+        errorFallback="Failed to update customer status."
       />
     </div>
   );

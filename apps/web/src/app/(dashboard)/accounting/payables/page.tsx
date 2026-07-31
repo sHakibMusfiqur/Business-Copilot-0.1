@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MoreHorizontal, CreditCard } from 'lucide-react';
 
@@ -28,6 +28,11 @@ export default function PayablesPage() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [viewPayable, setViewPayable] = useState<Payable | null>(null);
+
+  const handleSearch = useCallback((value: string) => {
+    setSearch(value);
+    setPage(1);
+  }, []);
 
   const query = useQuery({
     queryKey: ['payables', { page, limit: 10, search }],
@@ -76,7 +81,7 @@ export default function PayablesPage() {
         emptyTitle="No payables"
         emptyDescription="Payables will appear when purchase orders are received."
         searchPlaceholder="Search by bill or supplier..."
-        onSearchChange={(v) => { setSearch(v); setPage(1); }}
+        onSearchChange={handleSearch}
         onPageChange={setPage}
         onSort={() => {}}
         actions={(p) => (

@@ -50,13 +50,9 @@ export default function PlanPage() {
   const selectedPlan = PLANS.find((p) => p.id === selected);
 
   const handleContinue = async () => {
-    console.log('[PAGE plan handleContinue BEFORE saveField]', { session: { selectedIndustry: session?.selectedIndustry, orgName: session?.orgName, version: session?.version, currentStep: session?.currentStep } });
     saveField('selectedPlanId', selected);
-    console.log('[PAGE plan handleContinue AFTER saveField]', { session: { selectedIndustry: session?.selectedIndustry, orgName: session?.orgName, version: session?.version, currentStep: session?.currentStep } });
     await persistSession();
-    console.log('[PAGE plan handleContinue AFTER persistSession]', { session: { selectedIndustry: session?.selectedIndustry, orgName: session?.orgName, version: session?.version, currentStep: session?.currentStep } });
     await completeStep(5);
-    console.log('[PAGE plan handleContinue AFTER completeStep]', { session: { selectedIndustry: session?.selectedIndustry, orgName: session?.orgName, version: session?.version, currentStep: session?.currentStep } });
     wizard.goNext();
   };
 

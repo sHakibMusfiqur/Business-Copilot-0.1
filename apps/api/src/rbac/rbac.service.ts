@@ -76,36 +76,6 @@ export class RbacService {
     }));
   }
 
-  async findRoleById(orgId: string, roleId: string) {
-    const role = await this.prisma.role.findFirst({
-      where: { id: roleId, organizationId: orgId },
-      include: {
-        rolePermissions: {
-          include: { permission: true },
-        },
-        _count: {
-          select: { userAssignments: true },
-        },
-      },
-    });
-
-    if (!role) {
-      throw new NotFoundException('Role not found');
-    }
-
-    return {
-      id: role.id,
-      name: role.name,
-      description: role.description,
-      isSystem: role.isSystem,
-      organizationId: role.organizationId,
-      createdAt: role.createdAt,
-      updatedAt: role.updatedAt,
-      userCount: role._count.userAssignments,
-      permissions: role.rolePermissions.map((rp) => rp.permission),
-    };
-  }
-
   async createRole(orgId: string, dto: CreateRoleDto) {
     const existing = await this.prisma.role.findUnique({
       where: { organizationId_name: { organizationId: orgId, name: dto.name } },
@@ -302,23 +272,6 @@ export class RbacService {
     });
   }
 
-  async findUsersInOrganization(orgId: string) {
-    return this.prisma.user.findMany({
-      where: { organizationId: orgId, isActive: true },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        avatar: true,
-        role: true,
-        roleAssignments: {
-          include: { role: { select: { id: true, name: true } } },
-        },
-      },
-      orderBy: { name: 'asc' },
-    });
-  }
-
   // ─── Permission Resolution ─────────────────────────────────────
 
   async getUserPermissions(userId: string, orgId: string): Promise<string[]> {
@@ -333,20 +286,6 @@ export class RbacService {
     });
 
     return [...new Set(result.map((rp) => rp.permission.name))];
-  }
-
-  async userHasPermission(userId: string, orgId: string, permissionName: string): Promise<boolean> {
-    const count = await this.prisma.rolePermission.count({
-      where: {
-        role: {
-          organizationId: orgId,
-          userAssignments: { some: { userId } },
-        },
-        permission: { name: permissionName },
-      },
-    });
-
-    return count > 0;
   }
 
   async userHasAllPermissions(userId: string, orgId: string, permissionNames: string[]): Promise<boolean> {

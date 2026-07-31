@@ -1,4 +1,4 @@
-import { Injectable, Logger, Inject } from '@nestjs/common';
+import { Injectable, Logger, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import { IndustryTemplateFactory } from '../industry-templates/industry-template.factory';
@@ -39,10 +39,10 @@ export class ProvisioningOrchestratorService {
     const session = await this.prisma.onboardingSession.findUnique({
       where: { id: sessionId },
     });
-    if (!session) throw new Error('Session not found');
+    if (!session) throw new NotFoundException('Session not found');
 
     const config = this.industryFactory.getProvisioningConfig(session.selectedIndustry as string);
-    if (!config) throw new Error('Invalid industry');
+    if (!config) throw new BadRequestException('Invalid industry');
 
     await this.auditService.record({
       action: 'PROVISION_STARTED',

@@ -1,3 +1,5 @@
+import type { Meta } from '@/lib/types';
+
 export interface InventoryProduct {
   id: string;
   name: string;
@@ -15,12 +17,7 @@ export interface InventoryProduct {
   updatedAt: string;
 }
 
-export interface InventoryMeta {
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}
+export type InventoryMeta = Meta;
 
 export interface InventoryResponse {
   data: InventoryProduct[];

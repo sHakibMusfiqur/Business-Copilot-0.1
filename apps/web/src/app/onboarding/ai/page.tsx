@@ -17,13 +17,9 @@ export default function AiPage() {
   }
 
   const handleContinue = async () => {
-    console.log('[PAGE ai handleContinue BEFORE saveFields]', { session: { selectedIndustry: session?.selectedIndustry, orgName: session?.orgName, version: session?.version, currentStep: session?.currentStep } });
     saveFields({ aiEnabled: enabled, aiLanguage: language, aiPersonality: personality });
-    console.log('[PAGE ai handleContinue AFTER saveFields]', { session: { selectedIndustry: session?.selectedIndustry, orgName: session?.orgName, version: session?.version, currentStep: session?.currentStep } });
     await persistSession();
-    console.log('[PAGE ai handleContinue AFTER persistSession]', { session: { selectedIndustry: session?.selectedIndustry, orgName: session?.orgName, version: session?.version, currentStep: session?.currentStep } });
     await completeStep(4);
-    console.log('[PAGE ai handleContinue AFTER completeStep]', { session: { selectedIndustry: session?.selectedIndustry, orgName: session?.orgName, version: session?.version, currentStep: session?.currentStep } });
     wizard.goNext();
   };
 

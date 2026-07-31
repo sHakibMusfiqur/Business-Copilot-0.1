@@ -58,6 +58,11 @@ export default function AccountsPage() {
     });
   }, []);
 
+  const handleSearch = useCallback((value: string) => {
+    setSearch(value);
+    setPage(1);
+  }, []);
+
   if (query.isLoading) return <DashboardSkeleton />;
   if (query.isError) return <DashboardError message={query.error instanceof Error ? query.error.message : undefined} onRetry={() => query.refetch()} />;
 
@@ -111,7 +116,7 @@ export default function AccountsPage() {
         emptyTitle="No accounts found"
         emptyDescription="No accounts match your search. Create a new account to get started."
         searchPlaceholder="Search by code or name..."
-        onSearchChange={(v) => { setSearch(v); setPage(1); }}
+        onSearchChange={handleSearch}
         onPageChange={setPage}
         onSort={handleSort}
         actions={(account) => (

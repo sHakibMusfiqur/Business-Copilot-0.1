@@ -1,3 +1,5 @@
+import type { Meta } from '@/lib/types';
+
 export type SalesStatus = 'DRAFT' | 'PENDING' | 'CONFIRMED' | 'DELIVERED' | 'CANCELLED';
 
 export interface SaleCustomer {
@@ -40,42 +42,9 @@ export interface Sale {
   itemCount?: number;
 }
 
-export interface SaleMeta {
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}
+export type SaleMeta = Meta;
 
 export interface SaleListResponse {
   data: Sale[];
   meta: SaleMeta;
-}
-
-export interface CreateSaleItemPayload {
-  productId: string;
-  quantity: number;
-  unitPrice: number;
-  discount?: number;
-  tax?: number;
-}
-
-export interface CreateSalePayload {
-  customerId: string;
-  notes?: string;
-  items: CreateSaleItemPayload[];
-}
-
-export interface UpdateSaleItemPayload {
-  productId: string;
-  quantity: number;
-  unitPrice: number;
-  discount?: number;
-  tax?: number;
-}
-
-export interface UpdateSalePayload {
-  customerId?: string;
-  notes?: string;
-  items?: UpdateSaleItemPayload[];
 }

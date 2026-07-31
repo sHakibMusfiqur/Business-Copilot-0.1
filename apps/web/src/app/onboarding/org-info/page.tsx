@@ -73,18 +73,14 @@ export default function OrgInfoPage() {
   const handleContinue = async () => {
     if (!name.trim()) { setLocalError('Organization name is required'); return; }
     setLocalError(null);
-    console.log('[PAGE org-info handleContinue BEFORE saveFields]', { session: { selectedIndustry: session?.selectedIndustry, orgName: session?.orgName, version: session?.version, currentStep: session?.currentStep }, name: name.trim() });
     saveFields({
       orgName: name.trim(), orgEmail: email.trim(), orgPhone: phone.trim(),
       orgWebsite: website.trim(), orgCountry: country.trim(), orgState: state.trim(),
       orgCity: city.trim(), orgAddress: address.trim(), orgTimezone: timezone,
       orgCurrency: currency,
     });
-    console.log('[PAGE org-info handleContinue AFTER saveFields]', { session: { selectedIndustry: session?.selectedIndustry, orgName: session?.orgName, version: session?.version, currentStep: session?.currentStep } });
     await persistSession();
-    console.log('[PAGE org-info handleContinue AFTER persistSession]', { session: { selectedIndustry: session?.selectedIndustry, orgName: session?.orgName, version: session?.version, currentStep: session?.currentStep } });
     await completeStep(2);
-    console.log('[PAGE org-info handleContinue AFTER completeStep]', { session: { selectedIndustry: session?.selectedIndustry, orgName: session?.orgName, version: session?.version, currentStep: session?.currentStep } });
     wizard.goNext();
   };
 

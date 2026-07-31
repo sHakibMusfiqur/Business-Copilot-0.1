@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { ChevronDown, Search } from 'lucide-react';
 import { COUNTRIES, getFlagEmoji, parseE164, formatE164, type CountryInfo } from '@/lib/countries';
 
@@ -34,10 +34,15 @@ export function PhoneInput({ value, onChange, placeholder = 'Enter phone number'
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const filtered = COUNTRIES.filter(c =>
-    c.name.toLowerCase().includes(search.toLowerCase()) ||
-    c.dial.includes(search) ||
-    c.code.toLowerCase().includes(search)
+  const filtered = useMemo(
+    () =>
+      COUNTRIES.filter(
+        (c) =>
+          c.name.toLowerCase().includes(search.toLowerCase()) ||
+          c.dial.includes(search) ||
+          c.code.toLowerCase().includes(search),
+      ),
+    [search],
   );
 
   const handleCountrySelect = useCallback((country: CountryInfo) => {
@@ -76,6 +81,9 @@ export function PhoneInput({ value, onChange, placeholder = 'Enter phone number'
         <button
           type="button"
           onClick={() => setIsOpen(!isOpen)}
+          aria-haspopup="listbox"
+          aria-expanded={isOpen}
+          aria-label="Select country code"
           className="flex shrink-0 items-center gap-1.5 rounded-l-xl border border-r-0 border-slate-700 bg-slate-800/50 px-3 py-3 text-white transition-colors hover:bg-slate-700/50 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
         >
           <span className="text-lg leading-none">{getFlagEmoji(selectedCountry.code)}</span>
@@ -86,6 +94,7 @@ export function PhoneInput({ value, onChange, placeholder = 'Enter phone number'
           value={localNumber}
           onChange={handleLocalNumberChange}
           placeholder={placeholder}
+          aria-label={placeholder}
           inputMode="numeric"
           className="w-full min-w-0 rounded-r-xl border border-slate-700 bg-slate-800/50 py-3 pl-3 pr-4 text-white placeholder-slate-500 backdrop-blur-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
         />
@@ -100,15 +109,16 @@ export function PhoneInput({ value, onChange, placeholder = 'Enter phone number'
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search countries..."
+              aria-label="Search countries"
               className="w-full rounded-lg border border-slate-700 bg-slate-900/50 py-2 pl-8 pr-3 text-sm text-white placeholder-slate-500 focus:border-blue-500 focus:outline-none"
             />
           </div>
-          <ul className="max-h-60 overflow-y-auto overscroll-contain">
+          <ul role="listbox" aria-label="Country codes" className="max-h-60 overflow-y-auto overscroll-contain">
             {filtered.length === 0 ? (
               <li className="px-3 py-2 text-sm text-slate-500">No countries found</li>
             ) : (
               filtered.map((country) => (
-                <li key={country.code}>
+                <li key={country.code} role="option" aria-selected={country.code === selectedCountry.code}>
                   <button
                     type="button"
                     onClick={() => handleCountrySelect(country)}

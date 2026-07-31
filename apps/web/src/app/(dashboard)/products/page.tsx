@@ -10,9 +10,9 @@ import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 import { ProductTable } from '@/components/products/product-table';
 import { CreateProductDialog } from '@/components/products/create-product-dialog';
 import { EditProductDialog } from '@/components/products/edit-product-dialog';
-import { DeleteProductDialog } from '@/components/products/delete-product-dialog';
-import { StatusToggleDialog } from '@/components/products/status-toggle-dialog';
-import { getProducts } from '@/lib/api';
+import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
+import { StatusToggleDialog } from '@/components/ui/status-toggle-dialog';
+import { deleteProduct as deleteProductRequest, getProducts, updateProductStatus } from '@/lib/api';
 import type { Product, ProductsResponse, ProductMeta } from '@/components/products/product-types';
 
 export default function ProductsPage() {
@@ -114,18 +114,32 @@ export default function ProductsPage() {
         onUpdated={invalidate}
       />
 
-      <DeleteProductDialog
-        product={deleteProduct}
+      <ConfirmDeleteDialog
+        entityName={deleteProduct?.name ?? null}
+        title="Delete Product"
+        description="This product will be deactivated and hidden from the system. Their data will not be permanently removed. This action cannot be undone."
+        buttonLabel="Delete Product"
+        successTitle="Product deleted"
+        errorFallback="Failed to delete product."
         open={deleteProduct !== null}
         onClose={() => setDeleteProduct(null)}
         onDeleted={invalidate}
+        deleteFn={() => {
+          if (!deleteProduct) throw new Error('No product selected');
+          return deleteProductRequest(deleteProduct.id);
+        }}
       />
 
       <StatusToggleDialog
-        product={statusProduct}
+        entity={statusProduct}
+        entityLabel="Product"
         open={statusProduct !== null}
         onClose={() => setStatusProduct(null)}
         onToggled={invalidate}
+        updateStatus={updateProductStatus}
+        activateDescription={(name) => `Activate ${name}? It will be visible and usable across the system.`}
+        deactivateDescription={(name) => `Deactivate ${name}? It will be hidden from most views until reactivated.`}
+        errorFallback="Failed to update product status."
       />
     </div>
   );

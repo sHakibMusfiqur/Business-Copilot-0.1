@@ -74,8 +74,7 @@ export class AuditService {
     }
 
     const orderBy: Prisma.AuditLogOrderByWithRelationInput = {};
-    const sortField = query.sortBy === 'createdAt' ? 'createdAt' : 'createdAt';
-    orderBy[sortField] = query.sortOrder ?? 'desc';
+    orderBy.createdAt = query.sortOrder ?? 'desc';
 
     const [data, total] = await Promise.all([
       this.prisma.auditLog.findMany({

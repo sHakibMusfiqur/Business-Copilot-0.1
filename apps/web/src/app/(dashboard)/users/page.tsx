@@ -10,9 +10,9 @@ import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 import { UserTable } from '@/components/users/user-table';
 import { CreateUserDialog } from '@/components/users/create-user-dialog';
 import { EditUserDialog } from '@/components/users/edit-user-dialog';
-import { DeleteUserDialog } from '@/components/users/delete-user-dialog';
-import { StatusToggleDialog } from '@/components/users/status-toggle-dialog';
-import { getUsers } from '@/lib/api';
+import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
+import { StatusToggleDialog } from '@/components/ui/status-toggle-dialog';
+import { deleteUser as deleteUserRequest, getUsers, updateUserStatus } from '@/lib/api';
 import type { User, UsersResponse, UserMeta } from '@/components/users/user-types';
 
 export default function UsersPage() {
@@ -115,18 +115,32 @@ export default function UsersPage() {
         onUpdated={invalidate}
       />
 
-      <DeleteUserDialog
-        user={deleteUser}
+      <ConfirmDeleteDialog
+        entityName={deleteUser?.name ?? null}
+        title="Delete User"
+        description="This user will be deactivated and hidden from the system. Their data will not be permanently removed. This action cannot be undone."
+        buttonLabel="Delete User"
+        successTitle="User deleted"
+        errorFallback="Failed to delete user."
         open={deleteUser !== null}
         onClose={() => setDeleteUser(null)}
         onDeleted={invalidate}
+        deleteFn={() => {
+          if (!deleteUser) throw new Error('No user selected');
+          return deleteUserRequest(deleteUser.id);
+        }}
       />
 
       <StatusToggleDialog
-        user={statusUser}
+        entity={statusUser}
+        entityLabel="User"
         open={statusUser !== null}
         onClose={() => setStatusUser(null)}
         onToggled={invalidate}
+        updateStatus={updateUserStatus}
+        activateDescription={(name) => `Activate ${name}? They will be able to log in and access the system.`}
+        deactivateDescription={(name) => `Deactivate ${name}? They will not be able to log in until reactivated.`}
+        errorFallback="Failed to update user status."
       />
     </div>
   );

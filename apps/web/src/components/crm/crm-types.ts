@@ -1,3 +1,5 @@
+import type { Meta } from '@/lib/types';
+
 export type LeadStatus = 'NEW' | 'CONTACTED' | 'QUALIFIED' | 'PROPOSAL' | 'NEGOTIATION' | 'WON' | 'LOST';
 
 export type ActivityType = 'CALL' | 'EMAIL' | 'MEETING' | 'TASK' | 'NOTE';
@@ -7,23 +9,7 @@ export interface LeadAssignedTo {
   name: string;
 }
 
-export interface LeadListItem {
-  id: string;
-  leadNumber: string;
-  name: string;
-  company: string | null;
-  email: string | null;
-  phone: string | null;
-  source: string | null;
-  status: LeadStatus;
-  estimatedValue: number;
-  assignedToId: string | null;
-  notes: string | null;
-  createdAt: string;
-  updatedAt: string;
-  assignedTo: LeadAssignedTo | null;
-  activityCount: number;
-}
+export type LeadListItem = Omit<Lead, 'convertedToCustomer'> & { activityCount: number };
 
 export interface Lead {
   id: string;
@@ -74,12 +60,7 @@ export interface LeadSummary {
   upcomingActivities: Activity[];
 }
 
-export interface Meta {
-  total: number;
-  page: number;
-  limit: number;
-  totalPages: number;
-}
+export type { Meta };
 
 export interface LeadListResponse {
   data: LeadListItem[];
