@@ -42,7 +42,7 @@ export function CreateProductDialog({ open, onClose, onCreated }: CreateProductD
 
   const categoriesQuery = useQuery({
     queryKey: ['categories'],
-    queryFn: getCategories,
+    queryFn: () => getCategories(),
     enabled: open,
   });
 

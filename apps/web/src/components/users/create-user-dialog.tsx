@@ -33,7 +33,7 @@ export function CreateUserDialog({ open, onClose, onCreated }: CreateUserDialogP
 
   const rolesQuery = useQuery<Role[]>({
     queryKey: ['roles'],
-    queryFn: getRoles,
+    queryFn: () => getRoles(),
     enabled: open,
   });
 

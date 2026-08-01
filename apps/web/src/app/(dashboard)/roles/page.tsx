@@ -36,17 +36,17 @@ export default function RolesPage() {
 
   const rolesQuery = useQuery<Role[]>({
     queryKey: ['roles'],
-    queryFn: getRoles,
+    queryFn: () => getRoles(),
   });
 
   const permissionsGroupedQuery = useQuery<GroupedPermissions>({
     queryKey: ['permissions', 'grouped'],
-    queryFn: getPermissionsGrouped,
+    queryFn: () => getPermissionsGrouped(),
   });
 
   const usersQuery = useQuery<OrganizationUser[]>({
     queryKey: ['users', 'org'],
-    queryFn: getOrganizationUsers,
+    queryFn: () => getOrganizationUsers(),
   });
 
   const deleteMutation = useMutation({

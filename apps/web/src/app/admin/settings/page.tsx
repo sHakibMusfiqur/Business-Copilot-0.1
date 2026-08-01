@@ -25,7 +25,7 @@ export default function AdminSettingsPage() {
   const queryClient = useQueryClient();
   const { data: settings, isLoading } = useQuery({
     queryKey: ['admin', 'settings'],
-    queryFn: getAdminSettings,
+    queryFn: () => getAdminSettings(),
     staleTime: 30_000,
   });
 

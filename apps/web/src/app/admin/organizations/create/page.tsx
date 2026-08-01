@@ -28,7 +28,7 @@ export default function CreateOrganizationPage() {
 
   const { data: plans } = useQuery({
     queryKey: ['admin', 'plans'],
-    queryFn: getAdminPlans,
+    queryFn: () => getAdminPlans(),
     staleTime: 60_000,
   });
 

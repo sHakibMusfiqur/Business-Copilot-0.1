@@ -33,7 +33,7 @@ export function EditUserDialog({ user, open, onClose, onUpdated }: EditUserDialo
 
   const rolesQuery = useQuery<Role[]>({
     queryKey: ['roles'],
-    queryFn: getRoles,
+    queryFn: () => getRoles(),
     enabled: open,
   });
 

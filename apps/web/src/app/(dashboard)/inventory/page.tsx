@@ -32,7 +32,7 @@ export default function InventoryPage() {
 
   const summaryQuery = useQuery<InventorySummary>({
     queryKey: ['inventory', 'summary'],
-    queryFn: getInventorySummary,
+    queryFn: () => getInventorySummary(),
   });
 
   const invalidate = useCallback(() => {

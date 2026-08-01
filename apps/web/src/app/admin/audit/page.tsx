@@ -20,7 +20,7 @@ export default function AdminAuditPage() {
 
   const { data: actions } = useQuery({
     queryKey: ['admin', 'audit', 'actions'],
-    queryFn: getAdminAuditActions,
+    queryFn: () => getAdminAuditActions(),
     staleTime: 60_000,
   });
 

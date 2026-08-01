@@ -23,7 +23,7 @@ function formatFeatureLabel(key: string): string {
 export default function AdminPlansPage() {
   const { data: plans, isLoading } = useQuery({
     queryKey: ['admin', 'plans'],
-    queryFn: getAdminPlans,
+    queryFn: () => getAdminPlans(),
     staleTime: 60_000,
   });
 

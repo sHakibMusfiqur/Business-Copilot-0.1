@@ -21,7 +21,7 @@ import type { DashboardResponse } from '@/lib/api';
 export default function AdminDashboardPage() {
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['admin', 'dashboard'],
-    queryFn: getAdminDashboard,
+    queryFn: () => getAdminDashboard(),
     staleTime: 30_000,
   });
 

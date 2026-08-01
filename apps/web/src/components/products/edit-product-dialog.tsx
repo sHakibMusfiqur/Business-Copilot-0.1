@@ -43,7 +43,7 @@ export function EditProductDialog({ product, open, onClose, onUpdated }: EditPro
 
   const categoriesQuery = useQuery({
     queryKey: ['categories'],
-    queryFn: getCategories,
+    queryFn: () => getCategories(),
     enabled: open,
   });
 
