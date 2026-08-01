@@ -117,7 +117,7 @@ export class OnboardingService {
       'currentStep', 'selectedIndustry', 'selectedCategory', 'selectedCategories', 'orgName', 'orgEmail',
       'orgPhone', 'orgWebsite', 'orgCountry', 'orgState', 'orgCity', 'orgAddress',
       'orgTimezone', 'orgCurrency', 'orgLanguage', 'businessProfile', 'selectedModules',
-      'aiEnabled', 'aiLanguage', 'aiPersonality', 'selectedPlanId', 'userId',
+      'aiEnabled', 'aiLanguage', 'aiPersonality', 'selectedPlanId', 'planInterval', 'userId',
     ];
     if (dto.selectedCategories && dto.selectedCategories.length > 0) {
       data.selectedCategory = dto.selectedCategories[0];
@@ -248,6 +248,7 @@ export class OnboardingService {
       aiLanguage: session.aiLanguage as string ?? null,
       aiPersonality: session.aiPersonality as string ?? null,
       selectedPlanId: session.selectedPlanId as string ?? null,
+      planInterval: (session.planInterval as string) ?? 'MONTHLY',
       provisionStatus: session.provisionStatus as string ?? 'PENDING',
       provisionData: session.provisionData as Record<string, unknown> ?? null,
       organizationId: session.organizationId as string ?? null,

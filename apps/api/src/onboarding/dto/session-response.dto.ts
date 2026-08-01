@@ -76,6 +76,9 @@ export class SessionResponseDto {
   @ApiPropertyOptional()
   selectedPlanId?: string;
 
+  @ApiPropertyOptional()
+  planInterval?: string;
+
   @ApiProperty()
   provisionStatus!: string;
 

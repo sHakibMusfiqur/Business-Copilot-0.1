@@ -190,16 +190,36 @@ export class ProvisioningExecutorService {
         where: { id: session.selectedPlanId as string },
       });
       if (plan) {
-        await tx.subscription.create({
-          data: {
-            organizationId: org.id,
-            planId: plan.id,
-            status: 'TRIALING',
-            currentPeriodStart: new Date(),
-            currentPeriodEnd: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-            trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000),
-          },
-        });
+        const trialDays = plan.freeTrialDays || 30;
+        const trialEndsAt = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000);
+        const billingInterval = session.planInterval === 'YEARLY' ? 'YEARLY' : 'MONTHLY';
+        const existing = await tx.subscription.findUnique({ where: { organizationId: org.id } });
+        if (existing) {
+          await tx.subscription.update({
+            where: { id: existing.id },
+            data: {
+              planId: plan.id,
+              status: 'TRIALING',
+              billingInterval,
+              currentPeriodStart: new Date(),
+              currentPeriodEnd: trialEndsAt,
+              trialEndsAt,
+              canceledAt: null,
+            },
+          });
+        } else {
+          await tx.subscription.create({
+            data: {
+              organizationId: org.id,
+              planId: plan.id,
+              status: 'TRIALING',
+              billingInterval,
+              currentPeriodStart: new Date(),
+              currentPeriodEnd: trialEndsAt,
+              trialEndsAt,
+            },
+          });
+        }
         tasks.push('Subscription active');
       }
     }

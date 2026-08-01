@@ -118,6 +118,11 @@ export class UpdateSessionDto {
   @ApiPropertyOptional()
   @IsString()
   @IsOptional()
+  planInterval?: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
   userId?: string;
 
   @ApiPropertyOptional()

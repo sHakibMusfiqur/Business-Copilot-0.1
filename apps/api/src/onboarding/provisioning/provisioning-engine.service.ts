@@ -143,6 +143,7 @@ export class ProvisioningEngineService {
       aiEnabled: (session.aiEnabled as boolean) ?? false,
       aiLanguage: session.aiLanguage as string ?? null, aiPersonality: session.aiPersonality as string ?? null,
       selectedPlanId: session.selectedPlanId as string ?? null,
+      planInterval: (session.planInterval as string) ?? 'MONTHLY',
       provisionStatus: session.provisionStatus as string ?? 'PENDING',
       provisionData: session.provisionData as Record<string, unknown> ?? null,
       organizationId: session.organizationId as string ?? null,
