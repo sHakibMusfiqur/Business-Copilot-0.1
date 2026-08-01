@@ -6,7 +6,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useOnboarding } from '../_hooks/onboarding-context';
 import { refreshAccessToken } from '@/lib/api';
 import {
-  getSession, provisionOrganization, createProvisioningEventSource,
+  getSession, getProvisioningProgress, provisionOrganization, createProvisioningEventSource,
   type ProvisioningProgress,
 } from '@/lib/onboarding-api';
 
@@ -18,7 +18,17 @@ export default function ProvisioningPage() {
   const [error, setError] = useState<string | null>(null);
   const esRef = useRef<EventSource | null>(null);
   const provisionStartedRef = useRef(false);
+  const doneRef = useRef(false);
+  const progressRef = useRef<ProvisioningProgress | null>(null);
   const [retryCount, setRetryCount] = useState(0);
+
+  useEffect(() => {
+    progressRef.current = progress;
+  }, [progress]);
+
+  useEffect(() => {
+    doneRef.current = done;
+  }, [done]);
 
   useEffect(() => {
     if (!session) return;
@@ -26,6 +36,7 @@ export default function ProvisioningPage() {
 
     if (session.provisionStatus === 'COMPLETED') {
       void refreshAccessToken().catch(() => {});
+      doneRef.current = true;
       setDone(true);
       return;
     }
@@ -37,63 +48,173 @@ export default function ProvisioningPage() {
 
     provisionStartedRef.current = true;
     let active = true;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
+    let safetyTimer: ReturnType<typeof setTimeout> | null = null;
+    let streamOpened = false;
+    let eventsSeen = false;
+    let triggered = false;
+
+    const stopPolling = () => {
+      if (pollTimer) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    };
+
+    const clearTimers = () => {
+      if (fallbackTimer) {
+        clearTimeout(fallbackTimer);
+        fallbackTimer = null;
+      }
+      if (safetyTimer) {
+        clearTimeout(safetyTimer);
+        safetyTimer = null;
+      }
+      stopPolling();
+    };
+
+    const closeEventSource = () => {
+      if (esRef.current) {
+        esRef.current.close();
+        esRef.current = null;
+      }
+    };
+
+    const cleanupAll = () => {
+      active = false;
+      clearTimers();
+      closeEventSource();
+    };
+
+    const handleProgressEvent = (data: {
+      progress?: number;
+      currentTask?: string | null;
+      completedTasks?: string[];
+      failedTask?: string | null;
+    }, status: 'PROVISIONING' | 'COMPLETED') => {
+      setProgress((prev) => ({
+        sessionId: session.id,
+        status,
+        progress: data.progress ?? prev?.progress ?? 0,
+        currentTask: data.currentTask ?? prev?.currentTask ?? null,
+        completedTasks: data.completedTasks ?? prev?.completedTasks ?? [],
+        failedTask: data.failedTask ?? null,
+        error: null,
+      }));
+      if (status === 'COMPLETED') {
+        clearTimers();
+        closeEventSource();
+      }
+    };
+
+    const pollProgress = async () => {
+      if (!active) return;
+      try {
+        const prog = await getProvisioningProgress(session.id);
+        if (!prog || !active) return;
+        setProgress((prev) => ({
+          sessionId: session.id,
+          status: prog.status,
+          progress: prog.progress ?? prev?.progress ?? 0,
+          currentTask: prog.currentTask ?? prev?.currentTask ?? null,
+          completedTasks: prog.completedTasks ?? prev?.completedTasks ?? [],
+          failedTask: prog.failedTask ?? null,
+          error: prog.error ?? null,
+        }));
+        if (prog.status === 'COMPLETED') {
+          clearTimers();
+          closeEventSource();
+        }
+      } catch { /* ignore polling errors */ }
+    };
 
     const startProvision = async () => {
       setStarting(true);
-      try {
-        const persisted = await persistSession();
-        if (!active) return;
-        const latestSession = await getSession(session.id).catch(() => persisted ?? session);
-        if (!active) return;
-        const sessionData = latestSession ?? persisted ?? session;
-        if (!sessionData.selectedIndustry || !sessionData.orgName) {
-          provisionStartedRef.current = false;
-          setStarting(false);
-          setError('Missing required onboarding data. Redirecting to the step that still needs input.');
-          wizard.goTo(!sessionData.selectedIndustry ? 1 : 2);
-          return;
-        }
-        await provisionOrganization(session.id, {
-          selectedIndustry: sessionData.selectedIndustry,
-          orgName: sessionData.orgName,
-        });
-      } catch (e) {
-        provisionStartedRef.current = false;
-        setError((e as Error).message ?? 'Provisioning failed to start');
-        setStarting(false);
-        return;
-      }
-      if (!active) return;
-      setStarting(false);
 
       const es = createProvisioningEventSource(session.id);
       esRef.current = es;
+
+      const triggerProvision = async () => {
+        if (triggered) return;
+        triggered = true;
+        try {
+          const persisted = await persistSession();
+          if (!active) return;
+          const latestSession = await getSession(session.id).catch(() => persisted ?? session);
+          if (!active) return;
+          const sessionData = latestSession ?? persisted ?? session;
+          if (!sessionData.selectedIndustry || !sessionData.orgName) {
+            provisionStartedRef.current = false;
+            setStarting(false);
+            setError('Missing required onboarding data. Redirecting to the step that still needs input.');
+            wizard.goTo(!sessionData.selectedIndustry ? 1 : 2);
+            return;
+          }
+          const result = await provisionOrganization(session.id, {
+            selectedIndustry: sessionData.selectedIndustry,
+            orgName: sessionData.orgName,
+          });
+          if (!active) return;
+          setStarting(false);
+
+          if (result?.provisionStatus === 'COMPLETED') {
+            handleProgressEvent({
+              progress: 100,
+              currentTask: 'Complete',
+              completedTasks: (result.provisionData as { completedTasks?: string[] } | null)?.completedTasks ?? [],
+            }, 'COMPLETED');
+          }
+        } catch (e) {
+          provisionStartedRef.current = false;
+          setError((e as Error).message ?? 'Provisioning failed to start');
+          setStarting(false);
+          return;
+        }
+      };
 
       es.addEventListener('provisioning', (event) => {
         try {
           const data = JSON.parse(event.data);
           if (!active) return;
-          setProgress((prev) => ({
-            sessionId: session.id,
-            status: 'PROVISIONING',
-            progress: data.progress ?? prev?.progress ?? 0,
-            currentTask: data.currentTask ?? prev?.currentTask ?? null,
-            completedTasks: data.completedTasks ?? prev?.completedTasks ?? [],
-            failedTask: data.failedTask ?? null,
-            error: null,
-          }));
+          eventsSeen = true;
+          if (data.progress === 100) {
+            handleProgressEvent(data, 'COMPLETED');
+          } else {
+            handleProgressEvent(data, 'PROVISIONING');
+          }
         } catch { /* ignore parse errors */ }
       });
+
+      es.onopen = () => {
+        streamOpened = true;
+        if (!active) return;
+        void triggerProvision();
+      };
+
+      // Fallback polling: if the stream never opened or no events arrive
+      // within 3 seconds, poll the progress endpoint every 2 seconds.
+      fallbackTimer = setTimeout(() => {
+        if (!active) return;
+        if (eventsSeen || doneRef.current || progressRef.current?.status === 'COMPLETED') return;
+        if (pollTimer) return;
+        void pollProgress();
+        pollTimer = setInterval(() => { void pollProgress(); }, 2000);
+      }, 3000);
+
+      // Safety: if the stream cannot open, still run provisioning after 5s.
+      safetyTimer = setTimeout(() => {
+        if (!active) return;
+        if (triggered) return;
+        if (streamOpened) return;
+        void triggerProvision();
+      }, 5000);
     };
 
-    startProvision();
+    void startProvision();
 
     return () => {
-      active = false;
-      if (esRef.current) {
-        esRef.current.close();
-        esRef.current = null;
-      }
+      cleanupAll();
     };
   }, [session, retryCount]);
 
@@ -107,7 +228,10 @@ export default function ProvisioningPage() {
       } catch {
         // provisioning already completed server-side; proceed regardless
       } finally {
-        if (active) setDone(true);
+        if (active) {
+          doneRef.current = true;
+          setDone(true);
+        }
       }
     })();
     return () => {
@@ -160,6 +284,12 @@ export default function ProvisioningPage() {
           <p className="mb-6 text-sm text-red-400">{error}</p>
           <button
             onClick={() => {
+              if (esRef.current) {
+                esRef.current.close();
+                esRef.current = null;
+              }
+              doneRef.current = false;
+              progressRef.current = null;
               provisionStartedRef.current = false;
               setError(null);
               setRetryCount((c) => c + 1);

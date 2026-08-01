@@ -114,7 +114,7 @@ export class OnboardingService {
 
     const data: Record<string, unknown> = {};
     const fields: (keyof UpdateSessionDto)[] = [
-      'currentStep', 'selectedIndustry', 'selectedCategory', 'orgName', 'orgEmail',
+      'currentStep', 'selectedIndustry', 'selectedCategory', 'selectedCategories', 'orgName', 'orgEmail',
       'orgPhone', 'orgWebsite', 'orgCountry', 'orgState', 'orgCity', 'orgAddress',
       'orgTimezone', 'orgCurrency', 'orgLanguage', 'businessProfile', 'selectedModules',
       'aiEnabled', 'aiLanguage', 'aiPersonality', 'selectedPlanId', 'userId',
@@ -143,6 +143,7 @@ export class OnboardingService {
     }
 
     const versionCondition = dto.version ?? session.version;
+
     const updated = await this.prisma.onboardingSession.updateMany({
       where: { id: sessionId, version: versionCondition },
       data: data as never,
