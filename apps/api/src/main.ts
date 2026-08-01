@@ -13,7 +13,7 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const requestLogger = new Logger('HTTP');
-  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
 
   app.enableShutdownHooks();
   app.setGlobalPrefix('api');
@@ -37,7 +37,7 @@ async function bootstrap() {
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-tenant-id', 'x-onboarding-token'],
   });
 
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
@@ -63,7 +63,11 @@ async function bootstrap() {
     }),
   );
 
-  if (process.env.SWAGGER_ENABLED === 'true') {
+  // Swagger is an opt-in developer aid and must never be exposed in
+  // production. It is disabled automatically when NODE_ENV=production.
+  const isProduction = process.env.NODE_ENV === 'production';
+  const isSwaggerEnabled = !isProduction && process.env.SWAGGER_ENABLED === 'true';
+  if (isSwaggerEnabled) {
     const config = new DocumentBuilder()
       .setTitle(process.env.SWAGGER_TITLE ?? 'Business Copilot API')
       .setDescription(process.env.SWAGGER_DESCRIPTION ?? 'Enterprise ERP + AI Business Copilot API')
@@ -90,7 +94,9 @@ async function bootstrap() {
   await app.listen(port);
 
   logger.log(`Server running on http://localhost:${port}`);
-  logger.log(`Swagger docs at http://localhost:${port}/api/docs`);
+  if (isSwaggerEnabled) {
+    logger.log(`Swagger docs at http://localhost:${port}/api/docs`);
+  }
 }
 
 void bootstrap();

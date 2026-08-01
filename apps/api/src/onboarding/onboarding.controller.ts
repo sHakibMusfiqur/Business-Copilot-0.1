@@ -1,18 +1,22 @@
 import {
   Controller, Get, Post, Patch, Param, Body, Res, Inject,
-  HttpCode, HttpStatus, UseGuards, Sse, MessageEvent,
+  HttpCode, HttpStatus, UseGuards, Sse, MessageEvent, ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiOkResponse, ApiCreatedResponse, ApiBody } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { Response } from 'express';
 import { Observable, map } from 'rxjs';
 import { Public } from '../common/decorators/public.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { OnboardingService } from './onboarding.service';
 import { ProvisioningEngineService } from './provisioning/provisioning-engine.service';
 import { ProvisioningProgressService } from './provisioning/provisioning-progress.service';
 import { PROVISION_EVENT_BUS, type ProvisionEventBus, type ProvisioningEvent } from './provisioning/provision-event-bus.interface';
 import { OnboardingChecklistService } from './services/onboarding-checklist.service';
 import { IdempotencyGuard } from './guards/idempotency.guard';
+import { OnboardingSessionGuard } from './guards/onboarding-session.guard';
 import { Idempotent } from './decorators/idempotent.decorator';
 import { IdempotencyService } from './services/idempotency.service';
 import { CreateSessionDto } from './dto/create-session.dto';
@@ -21,7 +25,6 @@ import { CompleteStepDto } from './dto/complete-step.dto';
 import { SessionResponseDto } from './dto/session-response.dto';
 
 @ApiTags('Onboarding')
-@Public()
 @Controller('onboarding')
 export class OnboardingController {
   constructor(
@@ -33,12 +36,14 @@ export class OnboardingController {
     private readonly idempotencyService: IdempotencyService,
   ) {}
 
+  @Public()
   @Get('industries')
   @ApiOperation({ summary: 'Get all available industries' })
   async getIndustries() {
     return this.onboardingService.getIndustries();
   }
 
+  @Public()
   @Post('sessions')
   @ApiOperation({ summary: 'Create a new onboarding session' })
   @ApiBody({ type: CreateSessionDto })
@@ -47,6 +52,7 @@ export class OnboardingController {
     return this.onboardingService.createSession(dto);
   }
 
+  @UseGuards(OnboardingSessionGuard)
   @Get('sessions/:id')
   @ApiOperation({ summary: 'Get onboarding session by ID' })
   @ApiOkResponse({ type: SessionResponseDto })
@@ -54,13 +60,22 @@ export class OnboardingController {
     return this.onboardingService.getSession(id);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ short: { limit: 10, ttl: 60000 } })
   @Get('by-email/:email')
-  @ApiOperation({ summary: 'Get active onboarding session by email' })
+  @ApiOperation({ summary: 'Get the authenticated user\'s active onboarding session' })
   @ApiOkResponse({ type: SessionResponseDto })
-  async getSessionByEmail(@Param('email') email: string) {
+  async getSessionByEmail(
+    @Param('email') email: string,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    if (user.email.toLowerCase() !== email.toLowerCase()) {
+      throw new ForbiddenException('You can only resume your own onboarding session');
+    }
     return this.onboardingService.getSessionByEmail(email);
   }
 
+  @UseGuards(OnboardingSessionGuard)
   @Patch('sessions/:id')
   @ApiOperation({ summary: 'Update onboarding session' })
   @ApiBody({ type: UpdateSessionDto })
@@ -69,6 +84,7 @@ export class OnboardingController {
     return this.onboardingService.updateSession(id, dto);
   }
 
+  @UseGuards(OnboardingSessionGuard)
   @Post('sessions/:id/complete-step')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Mark a step as completed' })
@@ -78,12 +94,14 @@ export class OnboardingController {
     return this.onboardingService.completeStep(id, dto.step);
   }
 
+  @UseGuards(OnboardingSessionGuard)
   @Get('sessions/:id/preview')
   @ApiOperation({ summary: 'Preview provisioning configuration' })
   async getPreview(@Param('id') id: string) {
     return this.onboardingService.getProvisioningPreview(id);
   }
 
+  @UseGuards(OnboardingSessionGuard)
   @Throttle({ long: { limit: 5, ttl: 60000 } })
   @UseGuards(IdempotencyGuard)
   @Idempotent()
@@ -104,12 +122,14 @@ export class OnboardingController {
     return result;
   }
 
+  @UseGuards(OnboardingSessionGuard)
   @Get('sessions/:id/progress')
   @ApiOperation({ summary: 'Get provisioning progress' })
   async getProgress(@Param('id') id: string) {
     return this.progressService.getProgress(id);
   }
 
+  @UseGuards(OnboardingSessionGuard)
   @Get('sessions/:id/progress/stream')
   @Sse()
   @ApiOperation({ summary: 'SSE stream for provisioning progress' })
@@ -122,12 +142,14 @@ export class OnboardingController {
     );
   }
 
+  @UseGuards(OnboardingSessionGuard)
   @Get('sessions/:id/checklist')
   @ApiOperation({ summary: 'Get onboarding checklist' })
   async getChecklist(@Param('id') id: string) {
     return this.checklistService.getChecklist(id);
   }
 
+  @UseGuards(OnboardingSessionGuard)
   @Post('sessions/:id/checklist/:itemId/complete')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Mark checklist item as complete' })
@@ -138,6 +160,7 @@ export class OnboardingController {
     return this.checklistService.markComplete(id, itemId);
   }
 
+  @UseGuards(OnboardingSessionGuard)
   @Post('sessions/:id/checklist/:itemId/incomplete')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Mark checklist item as incomplete' })
@@ -148,6 +171,7 @@ export class OnboardingController {
     return this.checklistService.markIncomplete(id, itemId);
   }
 
+  @UseGuards(OnboardingSessionGuard)
   @Post('sessions/:id/checklist/:itemId/skip')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Skip a checklist item' })
@@ -158,6 +182,7 @@ export class OnboardingController {
     return this.checklistService.skipItem(id, itemId);
   }
 
+  @UseGuards(OnboardingSessionGuard)
   @Get('sessions/:id/checklist/progress')
   @ApiOperation({ summary: 'Get checklist progress' })
   async getChecklistProgress(@Param('id') id: string) {

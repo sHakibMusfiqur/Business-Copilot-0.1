@@ -1,4 +1,5 @@
 import { Test, type TestingModule } from '@nestjs/testing';
+import { JwtService } from '@nestjs/jwt';
 import { OnboardingService } from './onboarding.service';
 import { IdempotencyService } from './services/idempotency.service';
 import { OnboardingChecklistService } from './services/onboarding-checklist.service';
@@ -16,6 +17,7 @@ import { isTransientError } from './provisioning/retry-policy';
 import { SessionConflictError } from './errors/session-conflict.error';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { ConfigService } from '../config/config.service';
 import { IndustryTemplateFactory } from './industry-templates/industry-template.factory';
 
 const mockPrisma = {
@@ -68,6 +70,14 @@ const mockPrisma = {
 
 const mockAuditService = { record: jest.fn() };
 
+const mockJwtService = {
+  sign: jest.fn().mockReturnValue('onboarding-token'),
+};
+
+const mockConfigService = {
+  jwtSecret: 'test-secret',
+};
+
 const mockIndustryFactory = {
   getAllTemplates: jest.fn().mockReturnValue([]),
   getProvisioningConfig: jest.fn().mockReturnValue({
@@ -113,6 +123,8 @@ describe('Onboarding Module Integration', () => {
         { provide: PrismaService, useValue: mockPrisma },
         { provide: AuditService, useValue: mockAuditService },
         { provide: IndustryTemplateFactory, useValue: mockIndustryFactory },
+        { provide: JwtService, useValue: mockJwtService },
+        { provide: ConfigService, useValue: mockConfigService },
       ],
     }).compile();
 

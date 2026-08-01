@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
 import { AuditModule } from '../audit/audit.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { OnboardingController } from './onboarding.controller';
 import { OnboardingService } from './onboarding.service';
+import { OnboardingSessionGuard } from './guards/onboarding-session.guard';
 import { ProvisioningEngineService } from './provisioning/provisioning-engine.service';
 import { ProvisioningOrchestratorService } from './provisioning/provisioning-orchestrator.service';
 import { ProvisioningExecutorService } from './provisioning/provisioning-executor.service';
@@ -26,10 +28,11 @@ import { OnboardingAdminController } from './onboarding-admin.controller';
 import { OnboardingAdminService } from './services/onboarding-admin.service';
 
 @Module({
-  imports: [AuditModule, PrismaModule],
+  imports: [AuditModule, PrismaModule, JwtModule.register({})],
   controllers: [OnboardingController, OnboardingAdminController],
   providers: [
     OnboardingService,
+    OnboardingSessionGuard,
     ProvisioningEngineService,
     ProvisioningOrchestratorService,
     ProvisioningExecutorService,

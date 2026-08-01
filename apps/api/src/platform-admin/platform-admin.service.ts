@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
 
@@ -51,7 +51,6 @@ export interface PlatformDashboardData {
 
 @Injectable()
 export class PlatformAdminService {
-  private readonly logger = new Logger(PlatformAdminService.name);
   private readonly startTime = Date.now();
 
   constructor(

@@ -4,7 +4,6 @@ import {
   Controller,
   ForbiddenException,
   Get,
-  Logger,
   Param,
   Post,
   Put,
@@ -52,8 +51,6 @@ const VALID_NAMESPACES = new Set([
 @UseGuards(JwtAuthGuard, PermissionGuard)
 @Permissions(['settings.manage'])
 export class SettingsController {
-  private readonly logger = new Logger(SettingsController.name);
-
   constructor(private readonly settingsService: SettingsService) {}
 
   private requireOrg(user: CurrentUserPayload): string {

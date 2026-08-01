@@ -349,7 +349,7 @@ export class AccountingService {
     return entry;
   }
 
-  async updateJournalEntry(orgId: string, userId: string, entryId: string, dto: UpdateJournalEntryDto) {
+  async updateJournalEntry(orgId: string, _userId: string, entryId: string, dto: UpdateJournalEntryDto) {
     const existing = await this.prisma.journalEntry.findFirst({
       where: { id: entryId, organizationId: orgId, deletedAt: null },
     });

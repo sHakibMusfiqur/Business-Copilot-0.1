@@ -1,23 +1,26 @@
 import {
-  Injectable, Logger, NotFoundException, ConflictException, BadRequestException,
+  Injectable, NotFoundException, ConflictException, BadRequestException,
 } from '@nestjs/common';
+import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { ConfigService } from '../config/config.service';
 import { IndustryTemplateFactory } from './industry-templates/industry-template.factory';
 import { SessionConflictError } from './errors/session-conflict.error';
 import type { CreateSessionDto } from './dto/create-session.dto';
 import type { UpdateSessionDto } from './dto/update-session.dto';
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const SESSION_TTL_SECONDS = SESSION_TTL_MS / 1000;
 
 @Injectable()
 export class OnboardingService {
-  private readonly logger = new Logger(OnboardingService.name);
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly industryFactory: IndustryTemplateFactory,
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
 
   async getIndustries() {
@@ -35,7 +38,7 @@ export class OnboardingService {
     if (existing) {
       const age = Date.now() - existing.updatedAt.getTime();
       if (age < SESSION_TTL_MS) {
-        return this.mapSession(existing);
+        return this.mapSessionWithToken(existing);
       }
       await this.prisma.onboardingSession.update({
         where: { id: existing.id },
@@ -61,7 +64,7 @@ export class OnboardingService {
       metadata: { email: dto.email, name: dto.name },
     });
 
-    return this.mapSession(session);
+    return this.mapSessionWithToken(session);
   }
 
   async getSession(sessionId: string) {
@@ -102,7 +105,7 @@ export class OnboardingService {
       throw new ConflictException('Session expired');
     }
 
-    return this.mapSession(session);
+    return this.mapSessionWithToken(session);
   }
 
   async updateSession(sessionId: string, dto: UpdateSessionDto) {
@@ -254,6 +257,27 @@ export class OnboardingService {
       organizationId: session.organizationId as string ?? null,
       createdAt: (session.createdAt as Date).toISOString(),
       updatedAt: (session.updatedAt as Date).toISOString(),
+    };
+  }
+
+  /**
+   * Issues a signed, single-purpose onboarding token bound to this session.
+   * The raw token is only ever returned at session creation or to the
+   * authenticated owner (via getSessionByEmail) and must be presented to
+   * access session endpoints.
+   */
+  private mapSessionWithToken(session: Record<string, unknown> | null) {
+    const mapped = this.mapSession(session);
+    if (!mapped) return null;
+    return {
+      ...mapped,
+      onboardingToken: this.jwtService.sign(
+        { sub: mapped.id, purpose: 'onboarding' },
+        {
+          secret: this.configService.jwtSecret,
+          expiresIn: SESSION_TTL_SECONDS as JwtSignOptions['expiresIn'],
+        },
+      ),
     };
   }
 }

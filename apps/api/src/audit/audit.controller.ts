@@ -4,7 +4,6 @@ import {
   Query,
   Res,
   UseGuards,
-  Logger,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -28,8 +27,6 @@ import { AuditQueryDto } from './dto/audit-query.dto';
 @UseGuards(JwtAuthGuard, PermissionGuard)
 @ApiBearerAuth('access-token')
 export class AuditController {
-  private readonly logger = new Logger(AuditController.name);
-
   constructor(private readonly auditService: AuditService) {}
 
   @Get()

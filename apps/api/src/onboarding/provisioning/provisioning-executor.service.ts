@@ -1,5 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
+import { Injectable } from '@nestjs/common';
 import { IndustryTemplateFactory } from '../industry-templates/industry-template.factory';
 import type { ProvisioningConfig } from '../industry-templates/types';
 import type { ProvisioningContext } from '../industry-templates/industry-template-provider.interface';
@@ -19,10 +18,7 @@ export interface CheckpointResult {
 
 @Injectable()
 export class ProvisioningExecutorService {
-  private readonly logger = new Logger(ProvisioningExecutorService.name);
-
   constructor(
-    private readonly prisma: PrismaService,
     private readonly industryFactory: IndustryTemplateFactory,
   ) {}
 
@@ -37,7 +33,11 @@ export class ProvisioningExecutorService {
     let result: ProvisionResult | undefined;
 
     if (startCheckpoint <= 1) {
-      await this.doCreateOrg(session, tasks, tx);
+      const created = await this.doCreateOrg(session, tasks, tx);
+      // Bind this invocation (and any resume) to the organization we just
+      // created. Resolving by "latest org" races with concurrent provisions
+      // and can attach owner/roles/subscription/settings to the wrong tenant.
+      session.organizationId = created.org.id;
     }
     if (startCheckpoint <= 2) {
       await this.doAssignOwner(session, tasks, tx);
@@ -55,15 +55,15 @@ export class ProvisioningExecutorService {
       await this.doApplySettings(session, config, tasks, tx);
     }
     if (startCheckpoint <= 7) {
-      const lifecycleResult = await this.doIndustryLifecycle(session, config, tasks, tx);
+      const lifecycleResult = await this.doIndustryLifecycle(session, tasks, tx);
       if (lifecycleResult) result = lifecycleResult;
     }
 
     if (!result) {
-      const latestOrg = await tx.organization.findFirst({ orderBy: { createdAt: 'desc' } });
-      if (latestOrg) {
-        const sub = await tx.subscription.findUnique({ where: { organizationId: latestOrg.id } });
-        result = { org: latestOrg, subscription: sub ?? null };
+      const org = await this.resolveOrg(tx, session);
+      if (org) {
+        const sub = await tx.subscription.findUnique({ where: { organizationId: org.id } });
+        result = { org, subscription: sub ?? null };
       }
     }
 
@@ -96,8 +96,33 @@ export class ProvisioningExecutorService {
         timezone: (session.orgTimezone as string) ?? undefined,
       },
     });
+    if (session.id) {
+      await tx.onboardingSession.update({
+        where: { id: session.id as string },
+        data: { organizationId: org.id },
+      });
+    }
     tasks.push('Organization created');
     return { org };
+  }
+
+  /**
+   * Resolves the organization owned by this session. Prefers the session's
+   * persisted organizationId and only falls back to the most recently created
+   * org for legacy sessions that predate that linkage.
+   */
+  private async resolveOrg(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tx: any,
+    session: Record<string, unknown>,
+  ): Promise<{ id: string } | null> {
+    if (session.organizationId) {
+      const org = await tx.organization.findUnique({
+        where: { id: session.organizationId as string },
+      });
+      if (org) return org;
+    }
+    return tx.organization.findFirst({ orderBy: { createdAt: 'desc' } });
   }
 
   private async doAssignOwner(
@@ -107,7 +132,7 @@ export class ProvisioningExecutorService {
     tx: any,
   ): Promise<void> {
     if (!session.userId) return;
-    const org = await tx.organization.findFirst({ orderBy: { createdAt: 'desc' } });
+    const org = await this.resolveOrg(tx, session);
     if (!org) return;
     await tx.user.update({
       where: { id: session.userId as string },
@@ -134,7 +159,7 @@ export class ProvisioningExecutorService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     tx: any,
   ): Promise<void> {
-    const org = await tx.organization.findFirst({ orderBy: { createdAt: 'desc' } });
+    const org = await this.resolveOrg(tx, session);
     if (!org) return;
     const allPerms: { id: string }[] = await tx.permission.findMany({ select: { id: true } });
     const ownerRole = await tx.role.create({
@@ -165,7 +190,7 @@ export class ProvisioningExecutorService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     tx: any,
   ): Promise<void> {
-    const org = await tx.organization.findFirst({ orderBy: { createdAt: 'desc' } });
+    const org = await this.resolveOrg(tx, session);
     if (!org) return;
     for (const dept of config.departments) {
       const code = dept.name
@@ -184,7 +209,7 @@ export class ProvisioningExecutorService {
   ): Promise<void> {
     const selectedModules = (session.selectedModules as string[]) ?? [];
     if (session.selectedPlanId && (selectedModules.length === 0 || selectedModules.includes('subscription'))) {
-      const org = await tx.organization.findFirst({ orderBy: { createdAt: 'desc' } });
+      const org = await this.resolveOrg(tx, session);
       if (!org) return;
       const plan = await tx.subscriptionPlan.findUnique({
         where: { id: session.selectedPlanId as string },
@@ -232,7 +257,7 @@ export class ProvisioningExecutorService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     tx: any,
   ): Promise<void> {
-    const org = await tx.organization.findFirst({ orderBy: { createdAt: 'desc' } });
+    const org = await this.resolveOrg(tx, session);
     if (!org) return;
     await tx.organizationSettings.create({
       data: {
@@ -254,12 +279,11 @@ export class ProvisioningExecutorService {
 
   private async doIndustryLifecycle(
     session: Record<string, unknown>,
-    config: ProvisioningConfig,
     tasks: string[],
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     tx: any,
   ): Promise<ProvisionResult | undefined> {
-    const org = await tx.organization.findFirst({ orderBy: { createdAt: 'desc' } });
+    const org = await this.resolveOrg(tx, session);
     if (!org || !session.selectedIndustry) return;
 
     const provider = this.industryFactory.getProvider(session.selectedIndustry as string);

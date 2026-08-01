@@ -5,10 +5,10 @@ import { motion } from 'framer-motion';
 import {
   ArrowLeft, CalendarClock, CreditCard, Loader2, ShieldCheck, Sparkles,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useOnboarding } from '../_hooks/onboarding-context';
 import {
-  getBillingPlans, getPaymentGateways, startFreeTrial,
+  createCheckoutSession, getBillingPlans, getPaymentGateways, startFreeTrial, verifyPayment,
   type BillingSubscription, type SubscriptionPlanResponse,
 } from '@/lib/api';
 import { detectCurrency } from '@/lib/currency';
@@ -20,6 +20,7 @@ export default function PaymentPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [activated, setActivated] = useState<BillingSubscription | null>(null);
+  const startingRef = useRef(false);
 
   const currency = session ? detectCurrency(session) : 'USD';
 
@@ -46,7 +47,8 @@ export default function PaymentPage() {
   const plan: SubscriptionPlanResponse | undefined = plans?.find((p) => p.id === selectedPlanId);
 
   const handleStartTrial = async () => {
-    if (!plan || starting) return;
+    if (!plan || starting || startingRef.current) return;
+    startingRef.current = true;
     setStarting(true);
     setError(null);
     setNotice(null);
@@ -61,13 +63,81 @@ export default function PaymentPage() {
     } catch (e) {
       setError((e as Error).message ?? 'Could not start your free trial. Please try again.');
     } finally {
+      startingRef.current = false;
       setStarting(false);
     }
   };
 
-  const handlePayNow = () => {
-    setNotice('Secure checkout requires a configured payment provider, which is not available yet. Please start your free trial instead.');
+  const handlePayNow = async () => {
+    if (!plan || starting || startingRef.current) return;
+    startingRef.current = true;
+    setStarting(true);
+    setError(null);
+    setNotice(null);
+    try {
+      saveField('selectedPlanId', plan.id);
+      saveField('planInterval', interval);
+      const checkout = await createCheckoutSession(plan.id, interval);
+      window.location.assign(checkout.checkoutUrl);
+    } catch (e) {
+      setError((e as Error).message ?? 'Could not start secure checkout. Please try again or use the free trial.');
+      startingRef.current = false;
+      setStarting(false);
+    }
   };
+
+  // Handle the redirect back from the gateway (success or cancellation).
+  useEffect(() => {
+    if (!session) return;
+    const params = new URLSearchParams(window.location.search);
+    const sessionStatus = params.get('session_status');
+    const paymentId = params.get('payment_id');
+
+    if (!paymentId || !sessionStatus) return;
+
+    const cleanUrl = () => {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('session_status');
+      url.searchParams.delete('payment_id');
+      window.history.replaceState({}, '', url.toString());
+    };
+
+    if (sessionStatus === 'cancelled') {
+      setNotice('Payment was cancelled. You can try again or start your free trial instead.');
+      cleanUrl();
+      return;
+    }
+
+    if (sessionStatus === 'success') {
+      setStarting(true);
+      (async () => {
+        try {
+          const result = await verifyPayment(paymentId);
+          // Only a backend-confirmed, succeeded payment may advance. If the
+          // payment is still pending (webhook not yet delivered), hold the
+          // user on this step rather than provisioning without a subscription.
+          if (result.payment.status !== 'SUCCEEDED') {
+            setNotice(
+              result.payment.status === 'PENDING'
+                ? 'Your payment is still being confirmed. It should activate within a few seconds.'
+                : 'We could not confirm your payment. Please try again or start your free trial instead.',
+            );
+            setStarting(false);
+            cleanUrl();
+            return;
+          }
+          await persistSession();
+          await completeStep(6);
+          cleanUrl();
+          wizard.goNext();
+        } catch (e) {
+          setError((e as Error).message ?? 'Payment could not be verified. Please try again.');
+          setStarting(false);
+          cleanUrl();
+        }
+      })();
+    }
+  }, [session]);
 
   if (isLoading) {
     return (

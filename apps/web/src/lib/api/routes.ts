@@ -16,6 +16,8 @@ export const API_ROUTES = {
     INDUSTRIES: '/onboarding/industries',
     SESSIONS: '/onboarding/sessions',
     BY_EMAIL: '/onboarding/by-email',
+    COMPLETE_STEP: '/onboarding/sessions/{sessionId}/complete-step',
+    PROVISION: '/onboarding/sessions/{sessionId}/provision',
   },
   ADMIN: {
     DASHBOARD: '/admin/dashboard',
@@ -34,6 +36,9 @@ export const API_ROUTES = {
     CHANGE_PLAN: '/billing/change-plan',
     PAYMENTS: '/billing/payments',
     INVOICES: '/billing/invoices',
+    CHECKOUT: '/billing/checkout',
+    VERIFY: '/billing/verify',
+    REFUND: '/billing/refund',
   },
   ROLES: {
     ROOT: '/roles',

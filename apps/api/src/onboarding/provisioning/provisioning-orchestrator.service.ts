@@ -3,9 +3,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import { IndustryTemplateFactory } from '../industry-templates/industry-template.factory';
 import { ProvisioningExecutorService, type ProvisionResult } from './provisioning-executor.service';
-import { ProvisioningProgressService } from './provisioning-progress.service';
 import { ProvisioningRetryService } from './provisioning-retry.service';
-import { CompensationManager } from './compensation-manager';
 import { PROVISION_EVENT_BUS, type ProvisionEventBus } from './provision-event-bus.interface';
 import type { ProvisioningConfig } from '../industry-templates/types';
 import type { ProvisioningContext } from '../industry-templates/industry-template-provider.interface';
@@ -28,10 +26,8 @@ export class ProvisioningOrchestratorService {
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
     private readonly executorService: ProvisioningExecutorService,
-    private readonly progressService: ProvisioningProgressService,
     @Inject(PROVISION_EVENT_BUS) private readonly eventBus: ProvisionEventBus,
     private readonly retryService: ProvisioningRetryService,
-    private readonly compensationManager: CompensationManager,
     private readonly industryFactory: IndustryTemplateFactory,
   ) {}
 
@@ -148,9 +144,15 @@ export class ProvisioningOrchestratorService {
   private async buildProvisionResult(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     tx: any,
-    _session: Record<string, unknown>,
+    session: Record<string, unknown>,
   ): Promise<ProvisionResult> {
-    const org = await tx.organization.findFirst({ orderBy: { createdAt: 'desc' } });
+    let org: { id: string } | null = null;
+    if (session.organizationId) {
+      org = await tx.organization.findUnique({ where: { id: session.organizationId as string } });
+    }
+    if (!org) {
+      org = await tx.organization.findFirst({ orderBy: { createdAt: 'desc' } });
+    }
     if (!org) throw new Error('Organization not created during transaction');
     const sub = await tx.subscription.findUnique({ where: { organizationId: org.id } });
     return { org, subscription: sub ?? null };

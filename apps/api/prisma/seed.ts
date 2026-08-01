@@ -3,6 +3,38 @@ import * as argon2 from 'argon2';
 
 const prisma = new PrismaClient();
 
+// All seed account credentials are read from the environment. Missing values
+// abort the seed with a clear message instead of silently creating accounts
+// with weak, well-known passwords.
+const SEED_ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL;
+const SEED_ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD;
+const SEED_MANAGER_EMAIL = process.env.SEED_MANAGER_EMAIL;
+const SEED_MANAGER_PASSWORD = process.env.SEED_MANAGER_PASSWORD;
+const SEED_USER_EMAIL = process.env.SEED_USER_EMAIL;
+const SEED_USER_PASSWORD = process.env.SEED_USER_PASSWORD;
+const SEED_SUPER_ADMIN_EMAIL = process.env.SEED_SUPER_ADMIN_EMAIL;
+const SEED_SUPER_ADMIN_PASSWORD = process.env.SEED_SUPER_ADMIN_PASSWORD;
+
+function requireSeedCredentials(): void {
+  const required = [
+    ['SEED_ADMIN_EMAIL', SEED_ADMIN_EMAIL],
+    ['SEED_ADMIN_PASSWORD', SEED_ADMIN_PASSWORD],
+    ['SEED_MANAGER_EMAIL', SEED_MANAGER_EMAIL],
+    ['SEED_MANAGER_PASSWORD', SEED_MANAGER_PASSWORD],
+    ['SEED_USER_EMAIL', SEED_USER_EMAIL],
+    ['SEED_USER_PASSWORD', SEED_USER_PASSWORD],
+    ['SEED_SUPER_ADMIN_EMAIL', SEED_SUPER_ADMIN_EMAIL],
+    ['SEED_SUPER_ADMIN_PASSWORD', SEED_SUPER_ADMIN_PASSWORD],
+  ];
+  const missing = required.filter(([, value]) => !value).map(([name]) => name);
+  if (missing.length > 0) {
+    throw new Error(
+      `Seed aborted: missing required environment variable(s): ${missing.join(', ')}. ` +
+      'Set them before running `npm run db:seed`.',
+    );
+  }
+}
+
 const SEED_PERMISSIONS = [
   { name: 'users.read', module: 'users', label: 'View Users' },
   { name: 'users.create', module: 'users', label: 'Create Users' },
@@ -184,9 +216,12 @@ async function assignRolesToUser(userId: string, roleIds: string[]) {
 
 async function main() {
   console.log('Seeding database...');
+  requireSeedCredentials();
 
-  const adminPassword = await argon2.hash('Admin123!');
-  const userPassword = await argon2.hash('User1234!');
+  const adminPassword = await argon2.hash(SEED_ADMIN_PASSWORD as string);
+  const userPassword = await argon2.hash(SEED_USER_PASSWORD as string);
+  const managerPassword = await argon2.hash(SEED_MANAGER_PASSWORD as string);
+  const superAdminPassword = await argon2.hash(SEED_SUPER_ADMIN_PASSWORD as string);
 
   // ─── Organization ──────────────────────────────────────────────
 
@@ -203,10 +238,10 @@ async function main() {
   // ─── Users ─────────────────────────────────────────────────────
 
   const admin = await prisma.user.upsert({
-    where: { email: 'admin@business-copilot.com' },
+    where: { email: SEED_ADMIN_EMAIL as string },
     update: { organizationId: org.id },
     create: {
-      email: 'admin@business-copilot.com',
+      email: SEED_ADMIN_EMAIL as string,
       password: adminPassword,
       name: 'Admin User',
       role: UserRole.ADMIN,
@@ -226,11 +261,11 @@ async function main() {
   });
 
   const manager = await prisma.user.upsert({
-    where: { email: 'manager@business-copilot.com' },
+    where: { email: SEED_MANAGER_EMAIL as string },
     update: { organizationId: org.id },
     create: {
-      email: 'manager@business-copilot.com',
-      password: userPassword,
+      email: SEED_MANAGER_EMAIL as string,
+      password: managerPassword,
       name: 'Manager User',
       role: UserRole.MANAGER,
       isActive: true,
@@ -249,10 +284,10 @@ async function main() {
   });
 
   const regularUser = await prisma.user.upsert({
-    where: { email: 'user@business-copilot.com' },
+    where: { email: SEED_USER_EMAIL as string },
     update: { organizationId: org.id },
     create: {
-      email: 'user@business-copilot.com',
+      email: SEED_USER_EMAIL as string,
       password: userPassword,
       name: 'Regular User',
       role: UserRole.USER,
@@ -271,10 +306,10 @@ async function main() {
     },
   });
 
-  console.log('Users created:');
-  console.log(`  Admin:    admin@business-copilot.com / Admin123!`);
-  console.log(`  Manager:  manager@business-copilot.com / User1234!`);
-  console.log(`  User:     user@business-copilot.com / User1234!`);
+  console.log('Users created (passwords come from environment variables):');
+  console.log(`  Admin:    ${SEED_ADMIN_EMAIL}`);
+  console.log(`  Manager:  ${SEED_MANAGER_EMAIL}`);
+  console.log(`  User:     ${SEED_USER_EMAIL}`);
 
   // ─── RBAC ──────────────────────────────────────────────────────
 
@@ -361,18 +396,17 @@ async function main() {
 
   // ─── Platform Admin ────────────────────────────────────────────
 
-  const superAdminPassword = await argon2.hash('SuperAdmin123!');
   await prisma.user.upsert({
-    where: { email: 'superadmin@business-copilot.com' },
+    where: { email: SEED_SUPER_ADMIN_EMAIL as string },
     update: {},
     create: {
-      email: 'superadmin@business-copilot.com',
+      email: SEED_SUPER_ADMIN_EMAIL as string,
       name: 'Super Admin',
       password: superAdminPassword,
       role: 'SUPER_ADMIN',
     },
   });
-  console.log('  Super Admin: superadmin@business-copilot.com / SuperAdmin123!');
+  console.log(`  Super Admin: ${SEED_SUPER_ADMIN_EMAIL}`);
 
   // ─── Subscription Plans ────────────────────────────────────────
 
@@ -503,7 +537,8 @@ async function main() {
     { code: 'sslcommerz', name: 'SSLCommerz', sortOrder: 2 },
     { code: 'bkash', name: 'bKash', sortOrder: 3 },
     { code: 'nagad', name: 'Nagad', sortOrder: 4 },
-    { code: 'card', name: 'Card', sortOrder: 5 },
+    { code: 'paypal', name: 'PayPal', sortOrder: 5 },
+    { code: 'card', name: 'Card', sortOrder: 6 },
   ];
 
   for (const gateway of GATEWAYS) {

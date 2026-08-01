@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -6,8 +6,6 @@ import { BillingInterval } from './dto/billing.dto';
 
 @Injectable()
 export class BillingService {
-  private readonly logger = new Logger(BillingService.name);
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
@@ -193,9 +191,17 @@ export class BillingService {
   }
 
   async getGateways() {
-    return this.prisma.paymentGateway.findMany({
+    const gateways = await this.prisma.paymentGateway.findMany({
       orderBy: { sortOrder: 'asc' },
     });
+    // Never expose gateway credentials (config JSON) to clients.
+    return gateways.map((gateway) => ({
+      id: gateway.id,
+      code: gateway.code,
+      name: gateway.name,
+      isEnabled: gateway.isEnabled,
+      sortOrder: gateway.sortOrder,
+    }));
   }
 
   private serializePlan(plan: {

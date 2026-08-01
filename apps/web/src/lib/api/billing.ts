@@ -108,3 +108,44 @@ export async function getBillingInvoices(signal?: AbortSignal): Promise<BillingI
   const response = await api.get(API_ROUTES.BILLING.INVOICES, { signal });
   return response.data;
 }
+
+export interface CheckoutSession {
+  paymentId: string;
+  checkoutUrl: string;
+  gateway: string;
+  sessionRef: string;
+}
+
+export interface VerifiedPayment {
+  payment: {
+    id: string;
+    amount: number;
+    currency: string;
+    billingInterval: BillingInterval;
+    status: PaymentStatus;
+    gateway: string | null;
+    transactionRef: string | null;
+    paidAt: string | null;
+    createdAt: string;
+  };
+  subscription: BillingSubscription | null;
+  invoice: BillingInvoice | null;
+}
+
+export async function createCheckoutSession(
+  planId: string,
+  billingInterval?: BillingInterval,
+): Promise<CheckoutSession> {
+  const response = await api.post(API_ROUTES.BILLING.CHECKOUT, { planId, billingInterval });
+  return response.data;
+}
+
+export async function verifyPayment(paymentId: string): Promise<VerifiedPayment> {
+  const response = await api.post(API_ROUTES.BILLING.VERIFY, { paymentId });
+  return response.data;
+}
+
+export async function refundPayment(paymentId: string, amount?: number): Promise<VerifiedPayment> {
+  const response = await api.post(API_ROUTES.BILLING.REFUND, { paymentId, amount });
+  return response.data;
+}

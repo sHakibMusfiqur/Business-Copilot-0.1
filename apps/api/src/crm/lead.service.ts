@@ -329,7 +329,7 @@ export class LeadService {
   }
 
   async createTimelineEvent(
-    orgId: string,
+    _orgId: string,
     leadId: string,
     userId: string,
     type: string,

@@ -43,8 +43,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
         error = (resp.error as string) ?? exception.name;
       }
     } else if (exception instanceof Error) {
-      message = exception.message;
       error = exception.name;
+      // Never leak internal error messages to clients in production; the full
+      // message and stack are still recorded by the logger below.
+      message =
+        process.env.NODE_ENV === 'production'
+          ? 'Internal server error'
+          : exception.message;
     }
 
     const errorResponse: ErrorResponse = {

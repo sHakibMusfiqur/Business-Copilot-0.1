@@ -66,9 +66,6 @@ const CLEAR_SCRIPT = `
 export class RedisRateLimiterStorage implements RateLimiterStorage {
   private readonly logger = new Logger(RedisRateLimiterStorage.name);
   private readonly redis: Redis;
-  private readonly recordAttemptSha: string | null = null;
-  private readonly getRecordSha: string | null = null;
-  private readonly clearSha: string | null = null;
 
   constructor(redisUrl: string) {
     this.redis = new Redis(redisUrl, {

@@ -47,6 +47,7 @@ export interface OnboardingSession {
   provisionStatus: ProvisionStatus;
   provisionData: Record<string, unknown> | null;
   organizationId: string | null;
+  onboardingToken?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -80,6 +81,27 @@ export interface ChecklistProgress {
 }
 
 const SSE_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+const ONBOARDING_TOKEN_PREFIX = 'bc_onboarding_token';
+
+function tokenKey(sessionId: string): string {
+  return `${ONBOARDING_TOKEN_PREFIX}_${sessionId}`;
+}
+
+function getOnboardingToken(sessionId: string): string | null {
+  if (typeof window === 'undefined') return null;
+  return window.localStorage.getItem(tokenKey(sessionId));
+}
+
+function storeOnboardingToken(sessionId: string, token: string | undefined | null): void {
+  if (typeof window === 'undefined') return;
+  if (!token) return;
+  window.localStorage.setItem(tokenKey(sessionId), token);
+}
+
+function sessionHeaders(sessionId: string): Record<string, string> {
+  const token = getOnboardingToken(sessionId);
+  return token ? { 'X-Onboarding-Token': token } : {};
+}
 
 export async function getIndustries(signal?: AbortSignal): Promise<OnboardingIndustry[]> {
   const response = await api.get(API_ROUTES.ONBOARDING.INDUSTRIES, { signal });
@@ -88,39 +110,56 @@ export async function getIndustries(signal?: AbortSignal): Promise<OnboardingInd
 
 export async function createSession(email: string, name: string): Promise<OnboardingSession> {
   const response = await api.post(API_ROUTES.ONBOARDING.SESSIONS, { email, name });
-  return response.data;
+  const session = response.data as OnboardingSession;
+  storeOnboardingToken(session.id, session.onboardingToken);
+  return session;
 }
 
 export async function getSession(id: string, signal?: AbortSignal): Promise<OnboardingSession> {
-  const response = await api.get(`${API_ROUTES.ONBOARDING.SESSIONS}/${id}`, { signal });
+  const response = await api.get(`${API_ROUTES.ONBOARDING.SESSIONS}/${id}`, {
+    headers: sessionHeaders(id),
+    signal,
+  });
   return response.data;
 }
 
 export async function getSessionByEmail(email: string, signal?: AbortSignal): Promise<OnboardingSession> {
   const response = await api.get(`${API_ROUTES.ONBOARDING.BY_EMAIL}/${encodeURIComponent(email)}`, { signal });
-  return response.data;
+  const session = response.data as OnboardingSession;
+  storeOnboardingToken(session.id, session.onboardingToken);
+  return session;
 }
 
 export async function updateSession(
   id: string,
   data: Record<string, unknown>,
 ): Promise<OnboardingSession> {
-  const response = await api.patch(`${API_ROUTES.ONBOARDING.SESSIONS}/${id}`, data);
+  const response = await api.patch(`${API_ROUTES.ONBOARDING.SESSIONS}/${id}`, data, {
+    headers: sessionHeaders(id),
+  });
   return response.data;
 }
 
 export async function completeStep(id: string, step: number): Promise<OnboardingSession> {
-  const response = await api.post(`${API_ROUTES.ONBOARDING.SESSIONS}/${id}/complete-step`, { step });
+  const response = await api.post(`${API_ROUTES.ONBOARDING.SESSIONS}/${id}/complete-step`, { step }, {
+    headers: sessionHeaders(id),
+  });
   return response.data;
 }
 
 export async function getProvisioningPreview(id: string, signal?: AbortSignal): Promise<unknown> {
-  const response = await api.get(`${API_ROUTES.ONBOARDING.SESSIONS}/${id}/preview`, { signal });
+  const response = await api.get(`${API_ROUTES.ONBOARDING.SESSIONS}/${id}/preview`, {
+    headers: sessionHeaders(id),
+    signal,
+  });
   return response.data;
 }
 
 export async function getProvisioningProgress(id: string, signal?: AbortSignal): Promise<ProvisioningProgress> {
-  const response = await api.get(`${API_ROUTES.ONBOARDING.SESSIONS}/${id}/progress`, { signal });
+  const response = await api.get(`${API_ROUTES.ONBOARDING.SESSIONS}/${id}/progress`, {
+    headers: sessionHeaders(id),
+    signal,
+  });
   return response.data;
 }
 
@@ -128,35 +167,51 @@ export async function provisionOrganization(
   id: string,
   data?: { selectedIndustry?: string | null; orgName?: string | null },
 ): Promise<OnboardingSession> {
-  const response = await api.post(`${API_ROUTES.ONBOARDING.SESSIONS}/${id}/provision`, data ?? {});
+  const response = await api.post(`${API_ROUTES.ONBOARDING.SESSIONS}/${id}/provision`, data ?? {}, {
+    headers: sessionHeaders(id),
+  });
   return response.data;
 }
 
 export function createProvisioningEventSource(id: string): EventSource {
-  return new EventSource(`${SSE_BASE_URL}/api/onboarding/sessions/${id}/progress/stream`);
+  const token = getOnboardingToken(id);
+  const query = token ? `?token=${encodeURIComponent(token)}` : '';
+  return new EventSource(`${SSE_BASE_URL}/api/onboarding/sessions/${id}/progress/stream${query}`);
 }
 
 export async function getChecklist(sessionId: string, signal?: AbortSignal): Promise<ChecklistItem[]> {
-  const response = await api.get(`${API_ROUTES.ONBOARDING.SESSIONS}/${sessionId}/checklist`, { signal });
+  const response = await api.get(`${API_ROUTES.ONBOARDING.SESSIONS}/${sessionId}/checklist`, {
+    headers: sessionHeaders(sessionId),
+    signal,
+  });
   return response.data;
 }
 
 export async function markChecklistComplete(sessionId: string, itemId: string): Promise<ChecklistItem> {
-  const response = await api.post(`${API_ROUTES.ONBOARDING.SESSIONS}/${sessionId}/checklist/${itemId}/complete`);
+  const response = await api.post(`${API_ROUTES.ONBOARDING.SESSIONS}/${sessionId}/checklist/${itemId}/complete`, undefined, {
+    headers: sessionHeaders(sessionId),
+  });
   return response.data;
 }
 
 export async function markChecklistIncomplete(sessionId: string, itemId: string): Promise<ChecklistItem> {
-  const response = await api.post(`${API_ROUTES.ONBOARDING.SESSIONS}/${sessionId}/checklist/${itemId}/incomplete`);
+  const response = await api.post(`${API_ROUTES.ONBOARDING.SESSIONS}/${sessionId}/checklist/${itemId}/incomplete`, undefined, {
+    headers: sessionHeaders(sessionId),
+  });
   return response.data;
 }
 
 export async function skipChecklistItem(sessionId: string, itemId: string): Promise<ChecklistItem> {
-  const response = await api.post(`${API_ROUTES.ONBOARDING.SESSIONS}/${sessionId}/checklist/${itemId}/skip`);
+  const response = await api.post(`${API_ROUTES.ONBOARDING.SESSIONS}/${sessionId}/checklist/${itemId}/skip`, undefined, {
+    headers: sessionHeaders(sessionId),
+  });
   return response.data;
 }
 
 export async function getChecklistProgress(sessionId: string, signal?: AbortSignal): Promise<ChecklistProgress> {
-  const response = await api.get(`${API_ROUTES.ONBOARDING.SESSIONS}/${sessionId}/checklist/progress`, { signal });
+  const response = await api.get(`${API_ROUTES.ONBOARDING.SESSIONS}/${sessionId}/checklist/progress`, {
+    headers: sessionHeaders(sessionId),
+    signal,
+  });
   return response.data;
 }

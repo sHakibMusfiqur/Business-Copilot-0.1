@@ -18,14 +18,23 @@ export class SettingsService {
 
   async get(orgId: string, namespace: string): Promise<Record<string, unknown> | null> {
     const row = await this.getRow(orgId);
-    return this.namespaceValue(row, namespace);
+    return this.sanitize(namespace, this.namespaceValue(row, namespace));
   }
 
   async getAll(orgId: string): Promise<Record<string, unknown>> {
     const row = await this.getRow(orgId);
-    return row?.settings && typeof row.settings === 'object'
-      ? (row.settings as Record<string, unknown>)
-      : {};
+    const settings =
+      row?.settings && typeof row.settings === 'object'
+        ? (row.settings as Record<string, unknown>)
+        : {};
+    const sanitized: Record<string, unknown> = {};
+    for (const [namespace, value] of Object.entries(settings)) {
+      sanitized[namespace] = this.sanitize(
+        namespace,
+        value && typeof value === 'object' ? (value as Record<string, unknown>) : null,
+      );
+    }
+    return sanitized;
   }
 
   async upsert(
@@ -111,5 +120,20 @@ export class SettingsService {
     return value && typeof value === 'object'
       ? (value as Record<string, unknown>)
       : null;
+  }
+
+  /**
+   * Strips secrets from settings before they are returned to clients. The SMTP
+   * password is write-only: it is never echoed back and can only be replaced,
+   * never read.
+   */
+  private sanitize(
+    namespace: string,
+    value: Record<string, unknown> | null,
+  ): Record<string, unknown> | null {
+    if (!value || namespace !== 'email') return value;
+    const sanitized = { ...value };
+    delete sanitized.smtpPassword;
+    return sanitized;
   }
 }
