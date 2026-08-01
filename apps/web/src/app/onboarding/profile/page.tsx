@@ -4,14 +4,12 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Camera, User } from 'lucide-react';
 import { useState, useRef } from 'react';
 import { useOnboarding } from '../_hooks/onboarding-context';
-import { PhoneInput } from '@/components/onboarding/phone-input';
 import { LANGUAGES, TIMEZONES } from '@/lib/onboarding-constants';
 
 export default function ProfilePage() {
   const { wizard, session, saveField, completeStep, persistSession } = useOnboarding();
   const bp = session?.businessProfile as Record<string, unknown> | null ?? {};
   const [displayName, setDisplayName] = useState((bp.name as string) ?? session?.name ?? '');
-  const [phone, setPhone] = useState((bp.phone as string) ?? '');
   const [language, setLanguage] = useState((bp.language as string) ?? 'en');
   const [timezone, setTimezone] = useState((bp.timezone as string) ?? session?.orgTimezone ?? 'Asia/Dhaka');
   const [bio, setBio] = useState((bp.bio as string) ?? '');
@@ -31,7 +29,15 @@ export default function ProfilePage() {
   };
 
   const handleContinue = async () => {
-    saveField('businessProfile', { ...bp, name: displayName, phone, language, timezone, bio, avatar });
+    saveField('businessProfile', {
+      ...bp,
+      name: displayName,
+      phone: session?.orgPhone ?? (bp.phone as string) ?? '',
+      language,
+      timezone,
+      bio,
+      avatar,
+    });
     await persistSession();
     await completeStep(3);
     wizard.goNext();
@@ -74,10 +80,6 @@ export default function ProfilePage() {
               placeholder="Your full name"
               className="w-full rounded-xl border border-slate-700 bg-slate-800/50 px-4 py-3 text-white placeholder-slate-500 backdrop-blur-sm transition-colors focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
             />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-400">Phone Number</label>
-            <PhoneInput value={phone} onChange={setPhone} placeholder="Enter phone number" />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div>
