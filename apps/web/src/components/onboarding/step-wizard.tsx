@@ -15,8 +15,9 @@ const STEPS: Step[] = [
   { id: 3, label: 'Profile' },
   { id: 4, label: 'AI' },
   { id: 5, label: 'Plan' },
-  { id: 6, label: 'Provision' },
-  { id: 7, label: 'Done' },
+  { id: 6, label: 'Payment' },
+  { id: 7, label: 'Provision' },
+  { id: 8, label: 'Done' },
 ];
 
 interface StepWizardProps {

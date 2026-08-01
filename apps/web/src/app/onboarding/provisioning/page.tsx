@@ -41,6 +41,16 @@ export default function ProvisioningPage() {
       return;
     }
 
+    // Provisioning must only begin after payment success or free trial
+    // activation (Payment step completed). Sessions already mid-provisioning
+    // (PROVISIONING/FAILED) are allowed to resume.
+    const provisionActive =
+      session.provisionStatus === 'PROVISIONING' || session.provisionStatus === 'FAILED';
+    if (!(session.completedSteps ?? []).includes(6) && !provisionActive) {
+      wizard.goTo(6);
+      return;
+    }
+
     if (session.provisionStatus === 'FAILED' && retryCount === 0) {
       setError('Previous provisioning failed. Retry to resume.');
       return;
@@ -223,7 +233,7 @@ export default function ProvisioningPage() {
     let active = true;
     (async () => {
       try {
-        await completeStep(6);
+        await completeStep(7);
         await refreshAccessToken();
       } catch {
         // provisioning already completed server-side; proceed regardless

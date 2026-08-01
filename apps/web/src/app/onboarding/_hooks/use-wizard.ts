@@ -10,13 +10,14 @@ export const STEP_PATHS = [
   '/onboarding/profile',
   '/onboarding/ai',
   '/onboarding/plan',
+  '/onboarding/payment',
   '/onboarding/provisioning',
   '/onboarding/success',
 ] as const;
 
 export const STEP_LABELS = [
   'Verify', 'Industry', 'Organization',
-  'Profile', 'AI', 'Plan', 'Provision', 'Done',
+  'Profile', 'AI', 'Plan', 'Payment', 'Provision', 'Done',
 ] as const;
 
 export function pathToStep(pathname: string): number {

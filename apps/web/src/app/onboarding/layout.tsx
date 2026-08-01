@@ -12,7 +12,7 @@ function OnboardingShell({ children }: { children: React.ReactNode }) {
   const wizard = useWizard();
   const sessionData = useOnboardingSession();
   const currentStep = pathToStep(pathname);
-  const isSuccess = currentStep === 7;
+  const isSuccess = currentStep === 8;
 
   return (
     <OnboardingProvider wizard={wizard} sessionData={sessionData}>
