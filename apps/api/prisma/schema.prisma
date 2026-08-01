@@ -158,6 +158,8 @@ model Organization {
   payables              Payable[]
   payments              Payment[]
   subscription          Subscription?
+  subscriptionPayments  SubscriptionPayment[]
+  subscriptionInvoices  SubscriptionInvoice[]
   settings              OrganizationSettings?
 }
 
@@ -955,9 +957,21 @@ model SubscriptionPlan {
   slug            String                @unique
   description     String?
   price           Decimal               @default(0)
+  yearlyPrice     Decimal?
   currency        String                @default("USD")
   interval        SubscriptionInterval  @default(MONTHLY)
+  freeTrialDays   Int                   @default(30)
+  aiCredits       Int                   @default(0)
+  reportsEnabled  Boolean               @default(false)
+  apiAccess       Boolean               @default(false)
+  integrations    Json?
+  prioritySupport Boolean               @default(false)
+  customBranding  Boolean               @default(false)
+  securityFeatures Json?
+  recommended     Boolean               @default(false)
+  sortOrder       Int                   @default(0)
   features        Json?
+  modules         Json?
   maxUsers        Int                   @default(5)
   maxStorage      Int                   @default(1024)
   maxCustomers    Int                   @default(100)
@@ -967,6 +981,7 @@ model SubscriptionPlan {
   updatedAt       DateTime              @updatedAt
 
   subscriptions Subscription[]
+  payments       SubscriptionPayment[]
 }
 
 model Subscription {
@@ -976,6 +991,7 @@ model Subscription {
   planId              String
   plan                SubscriptionPlan   @relation(fields: [planId], references: [id])
   status              SubscriptionStatus @default(TRIALING)
+  billingInterval     SubscriptionInterval @default(MONTHLY)
   currentPeriodStart  DateTime           @default(now())
   currentPeriodEnd    DateTime
   trialEndsAt         DateTime?
@@ -983,9 +999,94 @@ model Subscription {
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
+  payments SubscriptionPayment[]
+  invoices SubscriptionInvoice[]
+
   @@index([organizationId])
   @@index([planId])
   @@index([status])
+}
+
+enum SubscriptionPaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+enum SubscriptionInvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  OVERDUE
+  VOID
+}
+
+model SubscriptionPayment {
+  id               String                    @id @default(cuid())
+  organizationId   String
+  organization     Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscriptionId   String?
+  subscription     Subscription?             @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  planId           String?
+  plan             SubscriptionPlan?         @relation(fields: [planId], references: [id], onDelete: SetNull)
+  amount           Decimal
+  currency         String                    @default("USD")
+  billingInterval  SubscriptionInterval      @default(MONTHLY)
+  status           SubscriptionPaymentStatus @default(PENDING)
+  gateway          String?
+  transactionRef   String?
+  gatewayData      Json?
+  paidAt           DateTime?
+  createdAt        DateTime                  @default(now())
+  updatedAt        DateTime                  @updatedAt
+
+  invoices SubscriptionInvoice[]
+
+  @@index([organizationId])
+  @@index([subscriptionId])
+  @@index([status])
+}
+
+model SubscriptionInvoice {
+  id               String                      @id @default(cuid())
+  organizationId   String
+  organization     Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscriptionId   String?
+  subscription     Subscription?               @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  paymentId        String?
+  payment          SubscriptionPayment?        @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  invoiceNumber    String
+  amount           Decimal
+  currency         String                      @default("USD")
+  billingInterval  SubscriptionInterval        @default(MONTHLY)
+  status           SubscriptionInvoiceStatus   @default(DRAFT)
+  issuedAt         DateTime                    @default(now())
+  dueAt            DateTime?
+  paidAt           DateTime?
+  pdfUrl           String?
+  metadata         Json?
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @updatedAt
+
+  @@index([organizationId])
+  @@index([subscriptionId])
+  @@index([status])
+  @@unique([organizationId, invoiceNumber])
+}
+
+model PaymentGateway {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  isEnabled Boolean  @default(false)
+  config    Json?
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isEnabled])
 }
 
 model OrganizationSettings {
@@ -1078,6 +1179,7 @@ model OnboardingSession {
   aiLanguage       String?
   aiPersonality    String?
   selectedPlanId   String?
+  planInterval     String?   @default("MONTHLY")
   subscriptionId   String?
   provisionStatus  String    @default("PENDING")
   provisionData    Json?

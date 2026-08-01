@@ -56,6 +56,8 @@ const SEED_PERMISSIONS = [
   { name: 'crm.delete', module: 'crm', label: 'Delete Leads' },
   { name: 'crm.activities', module: 'crm', label: 'Manage Activities' },
   { name: 'audit.read', module: 'audit', label: 'View Audit Logs' },
+  { name: 'billing.read', module: 'billing', label: 'View Billing & Subscription' },
+  { name: 'billing.manage', module: 'billing', label: 'Manage Subscription & Payment' },
 ];
 
 const ADMIN_PERMISSIONS = [
@@ -105,6 +107,8 @@ const ADMIN_PERMISSIONS = [
   'crm.delete',
   'crm.activities',
   'audit.read',
+  'billing.read',
+  'billing.manage',
 ];
 
 async function seedPermissions() {
@@ -372,73 +376,145 @@ async function main() {
 
   // ─── Subscription Plans ────────────────────────────────────────
 
-  await prisma.subscriptionPlan.upsert({
-    where: { slug: 'free' },
-    update: {},
-    create: {
-      name: 'Free',
+  const PLAN_SEEDS: Array<Record<string, unknown>> = [
+    {
       slug: 'free',
+      name: 'Free',
       description: 'For small teams getting started',
       price: 0,
+      yearlyPrice: 0,
+      freeTrialDays: 30,
       maxUsers: 5,
       maxCustomers: 50,
       maxProducts: 50,
       maxStorage: 512,
+      sortOrder: 1,
+      recommended: false,
+      modules: ['invoicing', 'expenses', 'basicReports'],
+      integrations: [],
+      securityFeatures: [],
       features: { invoicing: true, expenses: true, basicReports: true },
     },
-  });
-
-  await prisma.subscriptionPlan.upsert({
-    where: { slug: 'starter' },
-    update: {},
-    create: {
-      name: 'Starter',
+    {
       slug: 'starter',
+      name: 'Starter',
       description: 'For growing businesses',
       price: 29,
+      yearlyPrice: 290,
+      freeTrialDays: 30,
+      aiCredits: 500,
       maxUsers: 15,
       maxCustomers: 500,
       maxProducts: 500,
       maxStorage: 2048,
+      sortOrder: 2,
+      recommended: false,
+      reportsEnabled: true,
+      modules: ['invoicing', 'expenses', 'reports', 'inventory', 'crm'],
+      integrations: ['import/export'],
+      securityFeatures: ['2FA'],
       features: { invoicing: true, expenses: true, reports: true, inventory: true, crm: true },
     },
-  });
-
-  await prisma.subscriptionPlan.upsert({
-    where: { slug: 'professional' },
-    update: {},
-    create: {
-      name: 'Professional',
-      slug: 'professional',
-      description: 'For established companies',
-      price: 99,
-      interval: 'MONTHLY',
+    {
+      slug: 'growth',
+      name: 'Growth',
+      description: 'For teams that need advanced tools',
+      price: 79,
+      yearlyPrice: 790,
+      freeTrialDays: 30,
+      aiCredits: 2000,
       maxUsers: 50,
       maxCustomers: 5000,
       maxProducts: 5000,
       maxStorage: 10240,
-      features: { all: true, api: true, advancedReports: true, multipleWarehouses: true },
+      sortOrder: 3,
+      recommended: true,
+      reportsEnabled: true,
+      apiAccess: true,
+      prioritySupport: true,
+      modules: ['invoicing', 'expenses', 'reports', 'inventory', 'crm', 'api', 'advancedReports'],
+      integrations: ['import/export', 'email sync', 'slack'],
+      securityFeatures: ['2FA', 'advanced audit'],
+      features: { all: true, api: true, advancedReports: true, multipleWarehouses: true, prioritySupport: true },
     },
-  });
-
-  await prisma.subscriptionPlan.upsert({
-    where: { slug: 'enterprise' },
-    update: {},
-    create: {
-      name: 'Enterprise',
+    {
+      slug: 'professional',
+      name: 'Professional',
+      description: 'For established companies',
+      price: 149,
+      yearlyPrice: 1490,
+      freeTrialDays: 30,
+      aiCredits: 5000,
+      maxUsers: 200,
+      maxCustomers: 50000,
+      maxProducts: 50000,
+      maxStorage: 51200,
+      sortOrder: 4,
+      recommended: false,
+      reportsEnabled: true,
+      apiAccess: true,
+      prioritySupport: true,
+      customBranding: true,
+      modules: ['invoicing', 'expenses', 'reports', 'inventory', 'crm', 'api', 'advancedReports', 'multiWarehouse'],
+      integrations: ['import/export', 'email sync', 'slack', 'quickbooks', 'xero'],
+      securityFeatures: ['2FA', 'advanced audit', 'SSO'],
+      features: { all: true, api: true, advancedReports: true, multipleWarehouses: true, customBranding: true, sso: true },
+    },
+    {
       slug: 'enterprise',
+      name: 'Enterprise',
       description: 'For large organizations',
       price: 299,
-      interval: 'YEARLY',
+      yearlyPrice: 2990,
+      freeTrialDays: 30,
+      aiCredits: 20000,
       maxUsers: 999,
       maxCustomers: 999999,
       maxProducts: 999999,
       maxStorage: 102400,
-      features: { all: true, api: true, dedicatedSupport: true, customIntegrations: true, sso: true },
+      sortOrder: 5,
+      recommended: false,
+      reportsEnabled: true,
+      apiAccess: true,
+      prioritySupport: true,
+      customBranding: true,
+      modules: ['invoicing', 'expenses', 'reports', 'inventory', 'crm', 'api', 'advancedReports', 'multiWarehouse'],
+      integrations: ['import/export', 'email sync', 'slack', 'quickbooks', 'xero', 'custom integrations'],
+      securityFeatures: ['2FA', 'advanced audit', 'SSO', 'SLA'],
+      features: { all: true, api: true, dedicatedSupport: true, customIntegrations: true, sso: true, sla: true },
     },
-  });
+  ];
+
+  for (const plan of PLAN_SEEDS) {
+    const { slug, ...data } = plan;
+    await prisma.subscriptionPlan.upsert({
+      where: { slug: slug as string },
+      update: data,
+      create: plan as never,
+    });
+  }
 
   console.log('Subscription Plans created');
+
+  // ─── Payment Gateways ──────────────────────────────────────────
+
+  const GATEWAYS = [
+    { code: 'stripe', name: 'Stripe (Cards)', sortOrder: 1 },
+    { code: 'sslcommerz', name: 'SSLCommerz', sortOrder: 2 },
+    { code: 'bkash', name: 'bKash', sortOrder: 3 },
+    { code: 'nagad', name: 'Nagad', sortOrder: 4 },
+    { code: 'card', name: 'Card', sortOrder: 5 },
+  ];
+
+  for (const gateway of GATEWAYS) {
+    await prisma.paymentGateway.upsert({
+      where: { code: gateway.code },
+      update: {},
+      create: { ...gateway, isEnabled: false },
+    });
+  }
+
+  console.log('Payment Gateways created');
   console.log('Seed completed successfully!');
 }
 
