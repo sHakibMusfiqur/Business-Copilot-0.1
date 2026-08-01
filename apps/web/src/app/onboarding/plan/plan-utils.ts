@@ -1,3 +1,4 @@
+import { convertAmount, formatCurrencyAmount } from '@/lib/currency';
 import type { BillingInterval, SubscriptionPlanResponse } from '@/lib/api';
 
 export type { BillingInterval } from '@/lib/api';
@@ -18,8 +19,18 @@ export function formatPrice(amount: number, currency = 'USD'): string {
   }).format(amount);
 }
 
-export function formatPlanPrice(plan: SubscriptionPlanResponse, interval: BillingInterval): string {
-  return formatPrice(getPlanPrice(plan, interval), plan.currency);
+/**
+ * Formats a plan's price in the given display currency. Prices are stored in
+ * `plan.currency` (USD) and converted using the centralized currency utility.
+ */
+export function formatPlanPrice(
+  plan: SubscriptionPlanResponse,
+  interval: BillingInterval,
+  currency?: string,
+): string {
+  const target = currency || plan.currency || 'USD';
+  const amount = convertAmount(getPlanPrice(plan, interval), plan.currency || 'USD', target);
+  return formatCurrencyAmount(amount, target);
 }
 
 export function formatStorage(mb: number): string {
@@ -50,4 +61,30 @@ export const MODULE_LABELS: Record<string, string> = {
 
 export function moduleLabel(module: string): string {
   return MODULE_LABELS[module] ?? module.charAt(0).toUpperCase() + module.slice(1).replace(/([A-Z])/g, ' $1');
+}
+
+const FEATURE_LABELS: Record<string, string> = {
+  all: 'All features',
+  api: 'API Access',
+  advancedReports: 'Advanced Reports',
+  basicReports: 'Basic Reports',
+  prioritySupport: 'Priority Support',
+  multipleWarehouses: 'Multiple Warehouses',
+  multiWarehouse: 'Multi-Warehouse',
+  sso: 'SSO Login',
+  customBranding: 'Custom Branding',
+  sla: 'SLA Guarantee',
+  dedicatedSupport: 'Dedicated Support',
+  customIntegrations: 'Custom Integrations',
+  invoicing: 'Invoicing',
+  expenses: 'Expense Tracking',
+  crm: 'CRM',
+  inventory: 'Inventory',
+  reports: 'Reports',
+  ai: 'AI Assistant',
+  aiAutopilot: 'AI Autopilot',
+};
+
+export function featureLabel(feature: string): string {
+  return FEATURE_LABELS[feature] ?? feature.charAt(0).toUpperCase() + feature.slice(1).replace(/([A-Z])/g, ' $1');
 }

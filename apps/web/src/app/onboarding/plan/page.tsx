@@ -3,12 +3,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
-  ArrowLeft, ArrowRight, Check, Info, Loader2, Sparkles, Shield,
-  Layers, Users, HardDrive, Zap,
+  ArrowLeft, ArrowRight, Check, Info, Layers, LayoutGrid, Loader2, Sparkles,
+  Users, HardDrive, Zap, Shield,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useOnboarding } from '../_hooks/onboarding-context';
 import { getBillingPlans, type SubscriptionPlanResponse } from '@/lib/api';
+import { detectCurrency } from '@/lib/currency';
+import { AllPlansDialog } from './all-plans-dialog';
 import { ComparePlansDialog } from './compare-plans-dialog';
 import { PlanDetailDialog } from './plan-detail-dialog';
 import {
@@ -17,76 +19,132 @@ import {
 
 type Phase = 'plans' | 'payment';
 
-function PlanCard({ plan, selected, onSelect, interval }: {
+function FeaturedPlanCard({
+  plan,
+  interval,
+  currency,
+  onSeeOtherPlans,
+  onViewDetails,
+  onContinue,
+}: {
   plan: SubscriptionPlanResponse;
-  selected: boolean;
-  onSelect: () => void;
   interval: BillingInterval;
+  currency: string;
+  onSeeOtherPlans: () => void;
+  onViewDetails: () => void;
+  onContinue: () => void;
 }) {
+  const features = plan.modules && plan.modules.length > 0 ? plan.modules.slice(0, 5) : [];
+
   return (
-    <button
-      onClick={onSelect}
-      className={`group relative flex flex-col rounded-xl border p-6 text-left transition-all ${
-        selected
-          ? 'border-blue-500 bg-blue-500/10 shadow-lg shadow-blue-500/10'
-          : 'border-slate-700 bg-slate-800/30 hover:border-slate-600'
-      }`}
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.4, ease: 'easeOut' }}
+      className="relative mx-auto w-full max-w-md"
     >
-      {plan.recommended && (
-        <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-0.5 text-xs font-medium text-white">
-          Recommended
-        </div>
-      )}
-      <div className="mb-1 flex items-center justify-between">
-        <h3 className="text-lg font-bold text-white">{plan.name}</h3>
-        {plan.freeTrialDays > 0 && (
-          <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
-            {plan.freeTrialDays}-day trial
+      <div className={`absolute -inset-px rounded-3xl bg-gradient-to-br ${
+        plan.recommended
+          ? 'from-blue-500/60 via-indigo-500/40 to-fuchsia-500/50'
+          : 'from-slate-500/40 via-slate-600/20 to-slate-500/40'
+      } blur-sm`} aria-hidden="true" />
+
+      <div className="relative overflow-hidden rounded-3xl border border-slate-700/50 bg-slate-800/40 p-8 backdrop-blur-2xl">
+        <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-blue-500/20 blur-3xl" aria-hidden="true" />
+        <div className="pointer-events-none absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-indigo-500/10 blur-3xl" aria-hidden="true" />
+
+        {plan.recommended && (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-white shadow-lg shadow-blue-500/30">
+            <Sparkles className="h-3 w-3" /> Recommended
           </span>
         )}
-      </div>
-      <p className="mb-4 text-xs text-slate-400">{plan.description}</p>
-      <p className="mb-1">
-        <span className="text-3xl font-bold text-white">{formatPlanPrice(plan, interval)}</span>
-        <span className="text-sm text-slate-400">/{interval === 'YEARLY' ? 'yr' : 'mo'}</span>
-      </p>
 
-      <div className="mb-4 grid grid-cols-2 gap-2 text-[11px] text-slate-400">
-        <span className="flex items-center gap-1"><Users className="h-3 w-3" /> {formatUsers(plan.maxUsers)} users</span>
-        <span className="flex items-center gap-1"><HardDrive className="h-3 w-3" /> {formatStorage(plan.maxStorage)}</span>
-        <span className="flex items-center gap-1"><Zap className="h-3 w-3" /> {plan.aiCredits > 0 ? `${plan.aiCredits} AI credits` : 'AI —'}</span>
-        <span className="flex items-center gap-1"><Shield className="h-3 w-3" /> {plan.reportsEnabled ? 'Reports' : 'Basic reports'}</span>
-      </div>
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <h2 className="text-2xl font-bold text-white">{plan.name}</h2>
+          {plan.freeTrialDays > 0 && (
+            <span className="shrink-0 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[10px] font-medium text-emerald-400">
+              {plan.freeTrialDays}-day free trial
+            </span>
+          )}
+        </div>
+        <p className="mt-2 text-sm leading-relaxed text-slate-400">{plan.description}</p>
 
-      <div className="mb-4 space-y-2 flex-1">
-        {(plan.modules && plan.modules.length > 0 ? plan.modules.slice(0, 4) : []).map((m) => (
-          <li key={m} className="flex items-center gap-2 text-xs text-slate-300">
-            <Check className="h-3.5 w-3.5 shrink-0 text-green-400" /> {moduleLabel(m)}
-          </li>
-        ))}
-        {plan.apiAccess && (
-          <li className="flex items-center gap-2 text-xs text-slate-300">
-            <Check className="h-3.5 w-3.5 shrink-0 text-green-400" /> API access
-          </li>
-        )}
-        {plan.prioritySupport && (
-          <li className="flex items-center gap-2 text-xs text-slate-300">
-            <Check className="h-3.5 w-3.5 shrink-0 text-green-400" /> Priority support
-          </li>
-        )}
-        {plan.customBranding && (
-          <li className="flex items-center gap-2 text-xs text-slate-300">
-            <Check className="h-3.5 w-3.5 shrink-0 text-green-400" /> Custom branding
-          </li>
-        )}
-      </div>
+        <div className="mt-6 flex items-end gap-1">
+          <span className="text-4xl font-bold tracking-tight text-white">
+            {formatPlanPrice(plan, interval, currency)}
+          </span>
+          <span className="pb-1 text-sm text-slate-400">/{interval === 'YEARLY' ? 'yr' : 'mo'}</span>
+        </div>
 
-      <div className={`mt-auto flex items-center justify-center gap-2 rounded-xl border py-2 text-xs font-semibold transition-colors ${
-        selected ? 'border-blue-500 bg-blue-600 text-white' : 'border-slate-600 text-slate-300 group-hover:border-slate-500'
-      }`}>
-        {selected ? 'Selected' : 'Select'}
+        <div className="mt-6 grid grid-cols-2 gap-3">
+          <div className="rounded-xl border border-slate-700/50 bg-slate-900/40 p-3">
+            <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+              <Users className="h-3 w-3 text-blue-400" /> Users
+            </div>
+            <p className="mt-1 text-lg font-semibold text-white">{formatUsers(plan.maxUsers)}</p>
+          </div>
+          <div className="rounded-xl border border-slate-700/50 bg-slate-900/40 p-3">
+            <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+              <HardDrive className="h-3 w-3 text-blue-400" /> Storage
+            </div>
+            <p className="mt-1 text-lg font-semibold text-white">{formatStorage(plan.maxStorage)}</p>
+          </div>
+          <div className="rounded-xl border border-slate-700/50 bg-slate-900/40 p-3">
+            <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+              <Zap className="h-3 w-3 text-amber-400" /> AI Credits
+            </div>
+            <p className="mt-1 text-lg font-semibold text-white">
+              {plan.aiCredits > 0 ? plan.aiCredits.toLocaleString() : '—'}
+            </p>
+          </div>
+          <div className="rounded-xl border border-slate-700/50 bg-slate-900/40 p-3">
+            <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+              <Shield className="h-3 w-3 text-emerald-400" /> Reports
+            </div>
+            <p className="mt-1 text-lg font-semibold text-white">{plan.reportsEnabled ? 'Advanced' : 'Basic'}</p>
+          </div>
+        </div>
+
+        <ul className="mt-6 space-y-2.5">
+          {features.map((m) => (
+            <li key={m} className="flex items-center gap-2.5 text-sm text-slate-200">
+              <Check className="h-4 w-4 shrink-0 text-emerald-400" /> {moduleLabel(m)}
+            </li>
+          ))}
+          {plan.apiAccess && (
+            <li className="flex items-center gap-2.5 text-sm text-slate-200">
+              <Check className="h-4 w-4 shrink-0 text-emerald-400" /> API access
+            </li>
+          )}
+          {plan.prioritySupport && (
+            <li className="flex items-center gap-2.5 text-sm text-slate-200">
+              <Check className="h-4 w-4 shrink-0 text-emerald-400" /> Priority support
+            </li>
+          )}
+        </ul>
+
+        <div className="mt-8 space-y-3">
+          <button
+            onClick={onContinue}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3.5 font-semibold text-white shadow-lg shadow-blue-600/25 transition-all hover:from-blue-500 hover:to-indigo-500 focus:outline-none focus:ring-2 focus:ring-blue-500/60 focus:ring-offset-2 focus:ring-offset-slate-900"
+          >
+            Continue with {plan.name} <ArrowRight className="h-4 w-4" />
+          </button>
+          <button
+            onClick={onSeeOtherPlans}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-600 px-6 py-3 font-semibold text-slate-200 transition-colors hover:border-slate-400 hover:text-white focus:outline-none focus:ring-2 focus:ring-slate-500"
+          >
+            <LayoutGrid className="h-4 w-4" /> See Other Plans
+          </button>
+          <button
+            onClick={onViewDetails}
+            className="flex w-full items-center justify-center gap-1.5 text-center text-sm text-slate-400 transition-colors hover:text-white focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+          >
+            <Info className="h-3.5 w-3.5" /> View full {plan.name} plan details
+          </button>
+        </div>
       </div>
-    </button>
+    </motion.div>
   );
 }
 
@@ -97,8 +155,11 @@ export default function PlanPage() {
     (session?.planInterval as BillingInterval) ?? 'MONTHLY',
   );
   const [phase, setPhase] = useState<Phase>('plans');
+  const [allPlansOpen, setAllPlansOpen] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
   const [detailPlan, setDetailPlan] = useState<SubscriptionPlanResponse | null>(null);
+
+  const currency = useMemo(() => detectCurrency(session), [session]);
 
   const { data: plans, isLoading } = useQuery({
     queryKey: ['billing', 'plans'],
@@ -106,24 +167,30 @@ export default function PlanPage() {
     staleTime: 60_000,
   });
 
-  const recommended = useMemo(() => plans?.find((p) => p.recommended), [plans]);
-  const activeSelected = selected ?? recommended?.id ?? plans?.[0]?.id ?? null;
-  const selectedPlan = plans?.find((p) => p.id === activeSelected) ?? null;
+  const recommended = useMemo(() => plans?.find((p) => p.recommended) ?? plans?.[0] ?? null, [plans]);
+  const selectedPlan = useMemo(() => plans?.find((p) => p.id === selected) ?? null, [plans, selected]);
+  const featured = selectedPlan ?? recommended;
 
   if (!session) {
     return <div className="flex items-center justify-center pt-20"><p className="text-slate-400">No session found.</p></div>;
   }
 
+  const handleSelect = (planId: string) => {
+    setSelected(planId);
+    saveField('selectedPlanId', planId);
+    saveField('planInterval', annual);
+  };
+
   const handleContinue = async () => {
-    if (!activeSelected) return;
-    saveField('selectedPlanId', activeSelected);
+    if (!featured) return;
+    saveField('selectedPlanId', featured.id);
     saveField('planInterval', annual);
     setPhase('payment');
   };
 
   const handleSkipToTrial = async () => {
-    if (!activeSelected) return;
-    saveField('selectedPlanId', activeSelected);
+    if (!featured) return;
+    saveField('selectedPlanId', featured.id);
     saveField('planInterval', annual);
     await persistSession();
     await completeStep(5);
@@ -156,18 +223,18 @@ export default function PlanPage() {
           <h2 className="mb-1 text-2xl font-bold text-white">Payment</h2>
           <p className="mb-6 text-sm text-slate-400">Complete your subscription setup</p>
 
-          {selectedPlan && (
+          {featured && (
             <div className="mb-6 rounded-xl border border-slate-700 bg-slate-800/50 p-4">
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-sm font-semibold text-white">{selectedPlan.name} plan</span>
+                <span className="text-sm font-semibold text-white">{featured.name} plan</span>
                 <span className="text-xs text-slate-400">{annual === 'YEARLY' ? 'Annual' : 'Monthly'}</span>
               </div>
               <div className="flex items-end justify-between">
                 <div>
-                  <span className="text-2xl font-bold text-white">{formatPlanPrice(selectedPlan, annual)}</span>
+                  <span className="text-2xl font-bold text-white">{formatPlanPrice(featured, annual, currency)}</span>
                   <span className="text-sm text-slate-400">/{annual === 'YEARLY' ? 'yr' : 'mo'}</span>
                 </div>
-                <span className="text-xs text-emerald-400">{selectedPlan.freeTrialDays}-day free trial</span>
+                <span className="text-xs text-emerald-400">{featured.freeTrialDays}-day free trial</span>
               </div>
             </div>
           )}
@@ -216,10 +283,10 @@ export default function PlanPage() {
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mx-auto max-w-5xl pt-8">
       <div className="rounded-2xl border border-slate-700/50 bg-slate-800/40 p-8 backdrop-blur-xl">
-        <div className="mb-2 flex items-center justify-between">
+        <div className="mb-2 flex items-center justify-between gap-4">
           <div>
             <h2 className="text-2xl font-bold text-white">Choose Your Plan</h2>
-            <p className="mt-1 text-sm text-slate-400">Pick the plan that fits your business — every plan includes a free trial</p>
+            <p className="mt-1 text-sm text-slate-400">Every plan includes a free trial — pricing shown in {currency}</p>
           </div>
           <button
             onClick={() => setCompareOpen(true)}
@@ -229,11 +296,11 @@ export default function PlanPage() {
           </button>
         </div>
 
-        <div className="mb-6 mt-4 flex items-center justify-center gap-3">
+        <div className="mb-8 mt-4 flex items-center justify-center gap-3">
           <span className={`text-sm ${annual === 'MONTHLY' ? 'text-white' : 'text-slate-400'}`}>Monthly</span>
           <button
             onClick={() => setAnnual(annual === 'MONTHLY' ? 'YEARLY' : 'MONTHLY')}
-            className={`relative h-6 w-11 rounded-full transition-colors ${annual === 'YEARLY' ? 'bg-blue-600' : 'bg-slate-600'}`}
+            className={`relative h-6 w-11 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/60 ${annual === 'YEARLY' ? 'bg-blue-600' : 'bg-slate-600'}`}
             aria-label="Toggle annual billing"
           >
             <div className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${annual === 'YEARLY' ? 'translate-x-5' : 'translate-x-0'}`} />
@@ -243,17 +310,16 @@ export default function PlanPage() {
           </span>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {plans.map((plan) => (
-            <PlanCard
-              key={plan.id}
-              plan={plan}
-              selected={activeSelected === plan.id}
-              onSelect={() => setSelected(plan.id)}
-              interval={annual}
-            />
-          ))}
-        </div>
+        {featured && (
+          <FeaturedPlanCard
+            plan={featured}
+            interval={annual}
+            currency={currency}
+            onSeeOtherPlans={() => setAllPlansOpen(true)}
+            onViewDetails={() => setDetailPlan(featured)}
+            onContinue={handleContinue}
+          />
+        )}
 
         <div className="mt-4 flex items-center justify-center gap-4 sm:hidden">
           <button
@@ -264,33 +330,45 @@ export default function PlanPage() {
           </button>
         </div>
 
-        {selectedPlan && (
-          <motion.button
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            onClick={() => setDetailPlan(selectedPlan)}
-            className="mt-4 flex w-full items-center justify-center gap-1.5 text-center text-sm text-slate-400 transition-colors hover:text-white"
-          >
-            <Info className="h-3.5 w-3.5" /> View full {selectedPlan.name} plan details
-          </motion.button>
-        )}
-
         <div className="mt-8 flex items-center justify-between">
           <button onClick={wizard.goBack} className="flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-white">
             <ArrowLeft className="h-4 w-4" /> Back
           </button>
-          <button
-            onClick={handleContinue}
-            disabled={!activeSelected}
-            className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 font-semibold text-white shadow-lg transition-all hover:from-blue-500 hover:to-indigo-500 disabled:opacity-50"
-          >
-            Continue <ArrowRight className="h-4 w-4" />
-          </button>
+          {featured && (
+            <button
+              onClick={handleContinue}
+              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 font-semibold text-white shadow-lg transition-all hover:from-blue-500 hover:to-indigo-500"
+            >
+              Continue <ArrowRight className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
 
-      <ComparePlansDialog plans={plans} open={compareOpen} onClose={() => setCompareOpen(false)} interval={annual} />
-      <PlanDetailDialog plan={detailPlan} open={detailPlan !== null} onClose={() => setDetailPlan(null)} interval={annual} />
+      <AllPlansDialog
+        plans={plans}
+        open={allPlansOpen}
+        onClose={() => setAllPlansOpen(false)}
+        interval={annual}
+        currency={currency}
+        selectedPlanId={selected}
+        onSelect={handleSelect}
+      />
+      <ComparePlansDialog
+        plans={plans}
+        open={compareOpen}
+        onClose={() => setCompareOpen(false)}
+        interval={annual}
+        currency={currency}
+        variant="dark"
+      />
+      <PlanDetailDialog
+        plan={detailPlan}
+        open={detailPlan !== null}
+        onClose={() => setDetailPlan(null)}
+        onSelect={(planId) => handleSelect(planId)}
+        currency={currency}
+      />
     </motion.div>
   );
 }
