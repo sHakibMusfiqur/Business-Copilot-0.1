@@ -8,7 +8,10 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useOnboarding } from '../_hooks/onboarding-context';
-import { getBillingPlans, type SubscriptionPlanResponse } from '@/lib/api';
+import {
+  getBillingPlans, getPaymentGateways, startFreeTrial,
+  type SubscriptionPlanResponse,
+} from '@/lib/api';
 import { detectCurrency } from '@/lib/currency';
 import { AllPlansDialog } from './all-plans-dialog';
 import { ComparePlansDialog } from './compare-plans-dialog';
@@ -26,6 +29,7 @@ function FeaturedPlanCard({
   onSeeOtherPlans,
   onViewDetails,
   onContinue,
+  loading,
 }: {
   plan: SubscriptionPlanResponse;
   interval: BillingInterval;
@@ -33,6 +37,7 @@ function FeaturedPlanCard({
   onSeeOtherPlans: () => void;
   onViewDetails: () => void;
   onContinue: () => void;
+  loading?: boolean;
 }) {
   const features = plan.modules && plan.modules.length > 0 ? plan.modules.slice(0, 5) : [];
 
@@ -126,9 +131,15 @@ function FeaturedPlanCard({
         <div className="mt-8 space-y-3">
           <button
             onClick={onContinue}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3.5 font-semibold text-white shadow-lg shadow-blue-600/25 transition-all hover:from-blue-500 hover:to-indigo-500 focus:outline-none focus:ring-2 focus:ring-blue-500/60 focus:ring-offset-2 focus:ring-offset-slate-900"
+            disabled={loading}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3.5 font-semibold text-white shadow-lg shadow-blue-600/25 transition-all hover:from-blue-500 hover:to-indigo-500 focus:outline-none focus:ring-2 focus:ring-blue-500/60 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Continue with {plan.name} <ArrowRight className="h-4 w-4" />
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ArrowRight className="h-4 w-4" />
+            )}
+            {loading ? 'Starting your free trial…' : `Continue with ${plan.name}`}
           </button>
           <button
             onClick={onSeeOtherPlans}
@@ -158,6 +169,7 @@ export default function PlanPage() {
   const [allPlansOpen, setAllPlansOpen] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
   const [detailPlan, setDetailPlan] = useState<SubscriptionPlanResponse | null>(null);
+  const [starting, setStarting] = useState(false);
 
   const currency = useMemo(() => detectCurrency(session), [session]);
 
@@ -166,6 +178,17 @@ export default function PlanPage() {
     queryFn: () => getBillingPlans(),
     staleTime: 60_000,
   });
+
+  const { data: gateways } = useQuery({
+    queryKey: ['billing', 'gateways'],
+    queryFn: () => getPaymentGateways(),
+    staleTime: 60_000,
+  });
+
+  const paymentEnabled = useMemo(
+    () => gateways?.some((g) => g.isEnabled) ?? false,
+    [gateways],
+  );
 
   const recommended = useMemo(() => plans?.find((p) => p.recommended) ?? plans?.[0] ?? null, [plans]);
   const selectedPlan = useMemo(() => plans?.find((p) => p.id === selected) ?? null, [plans, selected]);
@@ -181,8 +204,32 @@ export default function PlanPage() {
     saveField('planInterval', annual);
   };
 
-  const handleContinue = async () => {
+  const activateTrial = async () => {
     if (!featured) return;
+    saveField('selectedPlanId', featured.id);
+    saveField('planInterval', annual);
+    try {
+      await startFreeTrial(featured.id, annual);
+    } catch {
+      // Payment is not implemented and provisioning will create the trial
+      // subscription, so a failed trial call must not block onboarding.
+    }
+    await persistSession();
+    await completeStep(5);
+    wizard.goNext();
+  };
+
+  const handleContinue = async () => {
+    if (!featured || starting) return;
+    if (!paymentEnabled) {
+      setStarting(true);
+      try {
+        await activateTrial();
+      } finally {
+        setStarting(false);
+      }
+      return;
+    }
     saveField('selectedPlanId', featured.id);
     saveField('planInterval', annual);
     setPhase('payment');
@@ -192,6 +239,11 @@ export default function PlanPage() {
     if (!featured) return;
     saveField('selectedPlanId', featured.id);
     saveField('planInterval', annual);
+    try {
+      await startFreeTrial(featured.id, annual);
+    } catch {
+      // Non-blocking: provisioning will ensure the trial subscription exists.
+    }
     await persistSession();
     await completeStep(5);
     wizard.goNext();
@@ -318,6 +370,7 @@ export default function PlanPage() {
             onSeeOtherPlans={() => setAllPlansOpen(true)}
             onViewDetails={() => setDetailPlan(featured)}
             onContinue={handleContinue}
+            loading={starting}
           />
         )}
 
@@ -337,9 +390,16 @@ export default function PlanPage() {
           {featured && (
             <button
               onClick={handleContinue}
-              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 font-semibold text-white shadow-lg transition-all hover:from-blue-500 hover:to-indigo-500"
+              disabled={starting}
+              className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3 font-semibold text-white shadow-lg transition-all hover:from-blue-500 hover:to-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Continue <ArrowRight className="h-4 w-4" />
+              {starting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <>
+                  Continue <ArrowRight className="h-4 w-4" />
+                </>
+              )}
             </button>
           )}
         </div>
