@@ -85,6 +85,7 @@ const sidebarItems = [
     { label: 'Users', href: '/users', icon: UsersRound },
     { label: 'Roles', href: '/roles', icon: Shield },
     { label: 'Audit Log', href: '/audit', icon: History },
+    { label: 'Billing & Subscription', href: '/billing', icon: CreditCard },
   ]},
   { section: 'Intelligence', items: [
     { label: 'Reports', href: '/reports', icon: BarChart3 },

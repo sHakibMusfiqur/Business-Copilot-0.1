@@ -31,6 +31,7 @@ import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 import { QuickActions } from '@/components/dashboard/quick-actions';
 import { ActivityTimeline } from '@/components/dashboard/activity-timeline';
 import { OnboardingWidget } from '@/components/dashboard/onboarding-widget';
+import { SubscriptionBanner } from '@/components/dashboard/subscription-banner';
 import { DashboardCard, cardClass } from '@/components/ui/dashboard-card';
 import { TrendBadge } from '@/components/ui/trend-badge';
 import type { DashboardOverview } from '@/components/dashboard/types';
@@ -183,7 +184,7 @@ function AiInsightCard({ icon: Icon, text }: { icon: typeof Zap; text: string })
 export default function DashboardPage() {
   const { data, isLoading, isError, error, refetch } = useQuery<DashboardOverview>({
     queryKey: ['dashboard', 'overview'],
-    queryFn: getDashboardOverview,
+    queryFn: () => getDashboardOverview(),
   });
 
   if (isLoading) return <DashboardSkeleton />;
@@ -205,6 +206,10 @@ export default function DashboardPage() {
 
       <motion.div variants={itemVariants}>
         <OnboardingWidget />
+      </motion.div>
+
+      <motion.div variants={itemVariants}>
+        <SubscriptionBanner />
       </motion.div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

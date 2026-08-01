@@ -15,7 +15,7 @@ const PERSIST_FIELDS: (keyof OnboardingSession)[] = [
   'orgName', 'orgEmail', 'orgPhone', 'orgWebsite', 'orgCountry', 'orgState',
   'orgCity', 'orgAddress', 'orgTimezone', 'orgCurrency', 'orgLanguage',
   'businessProfile', 'selectedModules', 'aiEnabled', 'aiLanguage',
-  'aiPersonality', 'selectedPlanId',
+  'aiPersonality', 'selectedPlanId', 'planInterval',
 ];
 
 function pickPersistFields(s: OnboardingSession): Record<string, unknown> {
