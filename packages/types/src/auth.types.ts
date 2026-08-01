@@ -7,6 +7,7 @@ export interface User {
   role: 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'USER' | 'VIEWER';
   isActive: boolean;
   organizationId: string | null;
+  onboardingCompleted?: boolean;
   lastLoginAt: string | null;
   createdAt: string;
   updatedAt: string;

@@ -7,6 +7,7 @@ export interface CurrentUserPayload {
   organizationId?: string;
   tenantId?: string;
   role: string;
+  onboardingCompleted?: boolean;
 }
 
 export const CurrentUser = createParamDecorator(

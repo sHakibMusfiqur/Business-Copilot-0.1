@@ -1,4 +1,4 @@
-import { getAccessToken, refreshAccessToken } from '@/lib/api';
+import { getAccessToken, refreshAccessToken } from '@/lib/api/client';
 import { decodeJWT } from '@/lib/jwt';
 import { useAuthStore } from '@/store/auth-store';
 

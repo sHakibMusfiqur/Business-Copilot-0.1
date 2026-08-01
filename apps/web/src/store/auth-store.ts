@@ -1,7 +1,7 @@
 import type { User } from '@bc/types';
 import { create } from 'zustand';
 
-import { setAccessToken, clearAuthCookie } from '@/lib/api';
+import { setAccessToken, clearAuthCookie } from '@/lib/api/client';
 
 interface AuthState {
   user: User | null;

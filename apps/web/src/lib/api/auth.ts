@@ -1,8 +1,10 @@
-import { api, clearAuthCookie, setAccessToken, setAuthCookie } from './client';
+import { api, setAccessToken, setAuthCookie } from './client';
 import { API_ROUTES } from './routes';
+import { resetAuthSession } from '@/lib/auth-session';
 
 export async function login(email: string, password: string) {
   const response = await api.post(API_ROUTES.AUTH.LOGIN, { email, password });
+  resetAuthSession();
   const { accessToken: token, user } = response.data;
   setAccessToken(token);
   setAuthCookie(token);
@@ -11,6 +13,7 @@ export async function login(email: string, password: string) {
 
 export async function register(name: string, email: string, password: string) {
   const response = await api.post(API_ROUTES.AUTH.REGISTER, { name, email, password });
+  resetAuthSession();
   const { accessToken: token, user } = response.data;
   setAccessToken(token);
   setAuthCookie(token);
@@ -23,8 +26,7 @@ export async function logout() {
   } catch {
     // ignore server errors during logout
   } finally {
-    setAccessToken(null);
-    clearAuthCookie();
+    resetAuthSession();
   }
 }
 

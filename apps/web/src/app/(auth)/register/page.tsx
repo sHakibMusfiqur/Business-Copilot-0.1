@@ -55,7 +55,7 @@ export default function RegisterPage() {
       setUser(result.user, result.accessToken);
       const session = await createSession(data.email, data.name);
       await updateSession(session.id, { userId: result.user.id });
-      router.push(`/onboarding/verify?session=${session.id}`);
+      router.replace(`/onboarding/verify?session=${session.id}`);
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : 'Registration failed';

@@ -172,7 +172,8 @@ export class AuthService {
       });
 
       this.logger.log(`=== AUTH SERVICE register() returning successfully ===`);
-      return { user, ...tokens };
+      const onboardingCompleted = await this.getOnboardingCompleted(user);
+      return { user: { ...user, onboardingCompleted }, ...tokens };
     } catch (error) {
       this.logger.error(`=== AUTH SERVICE register() CAUGHT EXCEPTION ===`);
       this.logger.error(`error type=${typeof error} ${error instanceof Error ? error.constructor.name : 'unknown'}`);
@@ -294,7 +295,9 @@ export class AuthService {
 
     const { password: _, ...userWithoutPassword } = user;
 
-    return { user: userWithoutPassword, ...tokens };
+    const onboardingCompleted = await this.getOnboardingCompleted(user);
+
+    return { user: { ...userWithoutPassword, onboardingCompleted }, ...tokens };
   }
 
   async refreshToken(refreshToken: string, ip: string, userAgent?: string) {
@@ -400,8 +403,10 @@ export class AuthService {
         userAgent,
       });
 
+      const onboardingCompleted = await this.getOnboardingCompleted(user);
+
       return {
-        user,
+        user: { ...user, onboardingCompleted },
         ...tokens,
       };
     } catch (error) {
@@ -496,13 +501,17 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    return user;
+    const onboardingCompleted = await this.getOnboardingCompleted(user);
+
+    return { ...user, onboardingCompleted };
   }
 
   async generateTokens(payload: CurrentUserPayload): Promise<Tokens> {
+    const onboardingCompleted = await this.getOnboardingCompleted(payload);
+    const enrichedPayload: CurrentUserPayload = { ...payload, onboardingCompleted };
     const [accessToken, refreshToken] = await Promise.all([
-      this.jwtService.signAsync(payload),
-      this.jwtService.signAsync(payload, {
+      this.jwtService.signAsync(enrichedPayload),
+      this.jwtService.signAsync(enrichedPayload, {
         secret: this.configService.jwtRefreshSecret,
         expiresIn: this.configService.jwtRefreshExpiresIn as JwtSignOptions['expiresIn'],
       }),
@@ -518,5 +527,29 @@ export class AuthService {
     });
 
     return { accessToken, refreshToken };
+  }
+
+  private async getOnboardingCompleted(user: {
+    id: string;
+    email?: string | null;
+    organizationId?: string | null;
+  }): Promise<boolean> {
+    if (!user.id) return false;
+    const session = await this.prisma.onboardingSession.findFirst({
+      where: {
+        OR: [
+          { userId: user.id },
+          ...(user.email ? [{ email: user.email }] : []),
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { provisionStatus: true },
+    });
+    if (session) return session.provisionStatus === 'COMPLETED';
+    // No onboarding session on record means the user was not created through
+    // the registration flow (seeded/admin-created). A placeholder org is
+    // always paired with an onboarding session, so an org here is a real,
+    // pre-existing workspace.
+    return !!user.organizationId;
   }
 }

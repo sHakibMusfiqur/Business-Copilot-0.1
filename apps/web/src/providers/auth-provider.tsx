@@ -40,8 +40,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [user, isLoading]);
 
   useEffect(() => {
-    if (!isLoading && !user) {
+    if (isLoading) return;
+    if (!user) {
       router.replace('/login');
+      return;
+    }
+    // Dashboard/admin shells must never host a user whose onboarding is
+    // incomplete (a registration placeholder org is not a workspace).
+    if (user.role !== 'SUPER_ADMIN' && !user.onboardingCompleted) {
+      router.replace('/onboarding');
     }
   }, [isLoading, user, router]);
 

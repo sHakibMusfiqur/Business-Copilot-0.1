@@ -41,7 +41,7 @@ export default function LoginPage() {
     if (user) {
       if (user.role === 'SUPER_ADMIN') {
         router.replace('/admin');
-      } else if (user.organizationId) {
+      } else if (user.onboardingCompleted) {
         router.replace('/dashboard');
       } else {
         router.replace('/onboarding');
@@ -62,7 +62,7 @@ export default function LoginPage() {
       setUser(result.user, result.accessToken);
       if (result.user.role === 'SUPER_ADMIN') {
         router.replace('/admin');
-      } else if (result.user.organizationId) {
+      } else if (result.user.onboardingCompleted) {
         router.replace('/dashboard');
       } else {
         router.replace('/onboarding');

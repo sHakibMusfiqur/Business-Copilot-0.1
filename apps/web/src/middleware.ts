@@ -6,6 +6,10 @@ import { decodeJWT, isTokenExpired } from '@/lib/jwt';
 
 const PUBLIC_ROUTES = ['/', '/login', '/register', '/forgot-password', '/reset-password'];
 
+// An authenticated user may still start a fresh registration (consecutive
+// accounts) without being bounced to /dashboard.
+const ALLOW_AUTHENTICATED_PUBLIC_ROUTES = ['/register'];
+
 const ONBOARDING_ROUTES = ['/onboarding'];
 
 const ORG_ROUTE_PREFIXES = [
@@ -39,6 +43,10 @@ export function middleware(request: NextRequest) {
   const payload = (token ? decodeJWT(token) : null) as JwtPayload | null;
   const activePayload = payload && !isTokenExpired(payload) ? payload : null;
   const isLoggedIn = activePayload !== null;
+  const role = isLoggedIn ? activePayload.role : null;
+  // Dashboard access requires onboarding to be fully completed. A placeholder
+  // organization assigned during registration must NOT count as a workspace.
+  const onboardingCompleted = isLoggedIn ? activePayload.onboardingCompleted === true : false;
 
   // ── Public routes ──────────────────────────────────────────────
   if (PUBLIC_ROUTES.includes(pathname)) {
@@ -46,14 +54,19 @@ export function middleware(request: NextRequest) {
       return NextResponse.next();
     }
 
-    const role = activePayload.role;
-    const hasOrg = !!activePayload.organizationId;
+    if (ALLOW_AUTHENTICATED_PUBLIC_ROUTES.includes(pathname)) {
+      return NextResponse.next();
+    }
 
     if (role === 'SUPER_ADMIN') {
       return NextResponse.redirect(new URL('/admin', request.url));
     }
 
-    if (hasOrg) {
+    if (pathname === '/') {
+      return NextResponse.redirect(new URL(onboardingCompleted ? '/dashboard' : '/onboarding', request.url));
+    }
+
+    if (onboardingCompleted) {
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
 
@@ -72,20 +85,17 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  const role = activePayload.role;
-  const hasOrg = !!activePayload.organizationId;
-
   // ── Platform admin routes ──────────────────────────────────────
   if (pathname.startsWith('/admin')) {
     if (role !== 'SUPER_ADMIN') {
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+      return NextResponse.redirect(new URL(onboardingCompleted ? '/dashboard' : '/onboarding', request.url));
     }
     return NextResponse.next();
   }
 
-  // ── Organization routes (require auth + organizationId) ────────
+  // ── Organization routes (require auth + completed onboarding) ──
   if (isOrgRoute(pathname)) {
-    if (!hasOrg) {
+    if (!onboardingCompleted) {
       if (role === 'SUPER_ADMIN') {
         return NextResponse.redirect(new URL('/admin', request.url));
       }

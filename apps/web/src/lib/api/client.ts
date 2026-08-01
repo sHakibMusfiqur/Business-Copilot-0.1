@@ -107,9 +107,20 @@ function normalizeError(error: unknown): ApiError {
 
 let accessToken: string | null = null;
 let refreshPromise: Promise<string | null> | null = null;
+let sessionGeneration = 0;
 
 export function setAccessToken(token: string | null): void {
   accessToken = token;
+}
+
+/**
+ * Drops the current in-memory access token and invalidates any in-flight
+ * token refresh so a stale response can never clobber a newer session.
+ */
+export function resetClientAuthState(): void {
+  sessionGeneration++;
+  accessToken = null;
+  refreshPromise = null;
 }
 
 export function getAccessToken(): string | null {
@@ -170,6 +181,7 @@ export async function refreshAccessToken(): Promise<string | null> {
   }
 
   refreshPromise = (async () => {
+    const generation = sessionGeneration;
     try {
       const response = await axios.post<TokenResponse>(
         `${API_URL}/api/auth/refresh`,
@@ -177,10 +189,12 @@ export async function refreshAccessToken(): Promise<string | null> {
         { withCredentials: true },
       );
       const token = response.data.accessToken;
+      if (generation !== sessionGeneration) return null;
       setAccessToken(token);
       setAuthCookie(token);
       return token;
     } catch {
+      if (generation !== sessionGeneration) return null;
       setAccessToken(null);
       return null;
     } finally {
