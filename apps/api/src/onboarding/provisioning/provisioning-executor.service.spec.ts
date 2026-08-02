@@ -38,7 +38,8 @@ describe('ProvisioningExecutorService', () => {
         findMany: jest.fn().mockResolvedValue([]),
       },
       role: {
-        create: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: 'role-1' }),
       },
       rolePermission: {
         createMany: jest.fn(),
@@ -55,9 +56,10 @@ describe('ProvisioningExecutorService', () => {
       },
       department: {
         create: jest.fn(),
+        createMany: jest.fn(),
       },
       organizationSettings: {
-        create: jest.fn(),
+        upsert: jest.fn().mockResolvedValue({}),
       },
     };
 
