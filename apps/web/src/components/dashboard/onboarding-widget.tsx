@@ -15,7 +15,7 @@ export function OnboardingWidget() {
     queryFn: () => getSessionByEmail(userEmail as string),
     enabled: !!userEmail,
     retry: false,
-    staleTime: 60000,
+    staleTime: 0,
   });
 
   const session = sessionQuery.data;
@@ -25,7 +25,6 @@ export function OnboardingWidget() {
     queryKey: ['onboarding', 'checklist-progress', sessionId],
     queryFn: () => getChecklistProgress(sessionId as string),
     enabled: !!sessionId && session?.provisionStatus === 'COMPLETED',
-    staleTime: 30000,
   });
 
   if (sessionQuery.isLoading) return null;
@@ -58,8 +57,9 @@ export function OnboardingWidget() {
   }
 
   if (session.provisionStatus === 'COMPLETED' && checklistQuery.data) {
-    const { total, completed, percentage } = checklistQuery.data;
+    const { total, completed } = checklistQuery.data;
     if (total === 0) return null;
+    const percentage = Math.min(100, Math.max(0, checklistQuery.data.percentage));
 
     return (
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all duration-200 p-4 sm:p-5">
@@ -84,7 +84,7 @@ export function OnboardingWidget() {
         {percentage < 100 && (
           <div className="mt-3">
             <Link
-              href={`/onboarding/success?sessionId=${session.id}`}
+              href={`/onboarding/success?session=${session.id}`}
               className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600 hover:text-emerald-700 transition-colors"
             >
               View Checklist

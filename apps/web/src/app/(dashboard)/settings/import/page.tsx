@@ -13,6 +13,7 @@ import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { markChecklistComplete } from '@/lib/onboarding-api';
 import { getOnboardingSession } from '@/lib/session-storage';
+import { queryClient } from '@/lib/query-client';
 
 const IMPORT_TYPES = [
   { value: 'customers', label: 'Customers', desc: 'Import customer records and contact information' },
@@ -112,7 +113,10 @@ export default function ImportPage() {
 
     try {
       const session = getOnboardingSession();
-      if (session?.id) await markChecklistComplete(session.id, 'data');
+      if (session?.id) {
+        await markChecklistComplete(session.id, 'data');
+        queryClient.invalidateQueries({ queryKey: ['onboarding', 'checklist-progress'] });
+      }
     } catch {
       // best-effort
     }

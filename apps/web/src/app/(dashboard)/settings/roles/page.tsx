@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -18,6 +18,7 @@ import { SetupPageShell } from '@/components/setup/setup-page-shell';
 import { api, getRoles } from '@/lib/api';
 import { markChecklistComplete } from '@/lib/onboarding-api';
 import { getOnboardingSession } from '@/lib/session-storage';
+import { queryClient } from '@/lib/query-client';
 
 const schema = z.object({
   name: z.string().min(2, 'Role name must be at least 2 characters'),
@@ -47,6 +48,15 @@ export default function RolesSetupPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [roles, setRoles] = useState<ExistingRole[]>([]);
+  const savingRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -58,12 +68,13 @@ export default function RolesSetupPage() {
     setLoadError(null);
     try {
       const data = await getRoles();
+      if (!mountedRef.current) return;
       const list = Array.isArray(data) ? (data as ExistingRole[]) : [];
       setRoles(list.slice(0, 20));
     } catch {
-      setLoadError('Could not load existing roles.');
+      if (mountedRef.current) setLoadError('Could not load existing roles.');
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   }, []);
 
@@ -72,9 +83,12 @@ export default function RolesSetupPage() {
   }, [loadRoles]);
 
   const handleSave = async (data: FormData) => {
+    if (savingRef.current) return;
+    savingRef.current = true;
     setSaving(true);
     try {
       await api.post('/roles', { name: data.name.trim(), description: data.description?.trim() || undefined });
+      if (!mountedRef.current) return;
       const session = getOnboardingSession();
       if (session?.id) {
         try {
@@ -82,18 +96,23 @@ export default function RolesSetupPage() {
         } catch {
           // best-effort
         }
+        queryClient.invalidateQueries({ queryKey: ['onboarding', 'checklist-progress'] });
       }
+      if (!mountedRef.current) return;
       setRoles((prev) => [...prev, { id: String(Date.now()), name: data.name.trim(), description: data.description?.trim() || null }]);
       form.reset({ name: '', description: '' });
       toast({ title: 'Role created', description: `Role "${data.name.trim()}" has been created.`, variant: 'success' });
     } catch (err) {
-      toast({
-        title: 'Could not create role',
-        description: err instanceof Error ? err.message : 'Failed to create role.',
-        variant: 'destructive',
-      });
+      if (mountedRef.current) {
+        toast({
+          title: 'Could not create role',
+          description: err instanceof Error ? err.message : 'Failed to create role.',
+          variant: 'destructive',
+        });
+      }
     } finally {
-      setSaving(false);
+      savingRef.current = false;
+      if (mountedRef.current) setSaving(false);
     }
   };
 

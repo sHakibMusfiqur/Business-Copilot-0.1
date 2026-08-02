@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -19,6 +19,7 @@ import { getSettings, updateSettings, uploadSettingsFiles } from '@/lib/api';
 import { DEFAULT_BRANDING, normalizeBranding, type BrandingTheme } from '@/lib/branding';
 import { markChecklistComplete } from '@/lib/onboarding-api';
 import { getOnboardingSession } from '@/lib/session-storage';
+import { queryClient } from '@/lib/query-client';
 import { HEX_RE } from '@/lib/validation';
 import { useBrandingStore } from '@/store/branding-store';
 
@@ -57,29 +58,57 @@ export default function BrandingPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  const initialValuesRef = useRef<BrandSettings | null>(null);
+  const savingRef = useRef(false);
+  const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
+
+  const logoSectionRef = useRef<HTMLDivElement>(null);
+  const themeSectionRef = useRef<HTMLDivElement>(null);
+  const [tabScrolled, setTabScrolled] = useState(false);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (loading || tabScrolled) return;
+    const tab = new URLSearchParams(window.location.search).get('tab');
+    const el = tab === 'logo' ? logoSectionRef.current : tab === 'theme' ? themeSectionRef.current : null;
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setTabScrolled(true);
+    }
+  }, [loading, tabScrolled]);
+
   const loadBranding = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     try {
       const stored = await getSettings<Partial<BrandSettings> & { logoUrl?: string; faviconUrl?: string }>('branding');
-      if (stored) {
-        setValues({
-          brandName: typeof stored.brandName === 'string' ? stored.brandName : INITIAL.brandName,
-          tagline: typeof stored.tagline === 'string' ? stored.tagline : INITIAL.tagline,
-          primaryColor: typeof stored.primaryColor === 'string' ? stored.primaryColor : INITIAL.primaryColor,
-          secondaryColor: typeof stored.secondaryColor === 'string' ? stored.secondaryColor : INITIAL.secondaryColor,
-          accentColor: typeof stored.accentColor === 'string' ? stored.accentColor : INITIAL.accentColor,
-        });
-        setSavedLogoUrl(typeof stored.logoUrl === 'string' ? stored.logoUrl : null);
-        setSavedFaviconUrl(typeof stored.faviconUrl === 'string' ? stored.faviconUrl : null);
-      }
+      if (!mountedRef.current) return;
+      const loaded: BrandSettings = {
+        brandName: typeof stored?.brandName === 'string' ? stored.brandName : INITIAL.brandName,
+        tagline: typeof stored?.tagline === 'string' ? stored.tagline : INITIAL.tagline,
+        primaryColor: typeof stored?.primaryColor === 'string' ? stored.primaryColor : INITIAL.primaryColor,
+        secondaryColor: typeof stored?.secondaryColor === 'string' ? stored.secondaryColor : INITIAL.secondaryColor,
+        accentColor: typeof stored?.accentColor === 'string' ? stored.accentColor : INITIAL.accentColor,
+      };
+      setValues(loaded);
+      initialValuesRef.current = loaded;
+      setSavedLogoUrl(typeof stored?.logoUrl === 'string' ? stored.logoUrl : null);
+      setSavedFaviconUrl(typeof stored?.faviconUrl === 'string' ? stored.faviconUrl : null);
       setLogoRemoved(false);
       setFaviconRemoved(false);
       setSaved(false);
     } catch {
-      setLoadError('Could not load your brand settings. Please try again.');
+      if (mountedRef.current) setLoadError('Could not load your brand settings. Please try again.');
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   }, []);
 
@@ -87,15 +116,20 @@ export default function BrandingPage() {
     void loadBranding();
   }, [loadBranding]);
 
-  const dirty = useMemo(
-    () =>
-      JSON.stringify(values) !== JSON.stringify(INITIAL) ||
+  const dirty = useMemo(() => {
+    const base = initialValuesRef.current ?? INITIAL;
+    return (
+      values.brandName !== base.brandName ||
+      values.tagline !== base.tagline ||
+      values.primaryColor !== base.primaryColor ||
+      values.secondaryColor !== base.secondaryColor ||
+      values.accentColor !== base.accentColor ||
       logoFile !== null ||
       faviconFile !== null ||
       (logoRemoved && savedLogoUrl !== null) ||
-      (faviconRemoved && savedFaviconUrl !== null),
-    [values, logoFile, faviconFile, logoRemoved, faviconRemoved, savedLogoUrl, savedFaviconUrl],
-  );
+      (faviconRemoved && savedFaviconUrl !== null)
+    );
+  }, [values, logoFile, faviconFile, logoRemoved, faviconRemoved, savedLogoUrl, savedFaviconUrl]);
 
   const brandValues: BrandValues = {
     brandName: values.brandName,
@@ -123,12 +157,15 @@ export default function BrandingPage() {
   };
 
   const handleSave = async () => {
+    if (savingRef.current) return;
+
     const err = validate();
     if (err) {
       toast({ title: 'Check your settings', description: err, variant: 'destructive' });
       return;
     }
 
+    savingRef.current = true;
     setSaving(true);
     setSaved(false);
     try {
@@ -140,6 +177,7 @@ export default function BrandingPage() {
           logo: logoFile?.file,
           favicon: faviconFile?.file,
         });
+        if (!mountedRef.current) return;
         if (uploaded.logoUrl) logoUrl = uploaded.logoUrl;
         if (uploaded.faviconUrl) faviconUrl = uploaded.faviconUrl;
       }
@@ -153,6 +191,7 @@ export default function BrandingPage() {
         ...(logoUrl ? { logoUrl } : logoRemoved ? { logoUrl } : {}),
         ...(faviconUrl ? { faviconUrl } : faviconRemoved ? { faviconUrl } : {}),
       });
+      if (!mountedRef.current) return;
 
       useBrandingStore.getState().setBrand(
         normalizeBranding({
@@ -168,13 +207,22 @@ export default function BrandingPage() {
 
       const session = getOnboardingSession();
       if (session?.id) {
-        try {
-          await markChecklistComplete(session.id, 'branding');
-        } catch {
-          // best-effort
+        const completions: Promise<unknown>[] = [markChecklistComplete(session.id, 'branding')];
+        if (logoUrl) completions.push(markChecklistComplete(session.id, 'logo'));
+        const results = await Promise.allSettled(completions);
+        // Branding save must succeed regardless of checklist completion; the
+        // latter is best-effort, so failures are surfaced only for ops.
+        for (const result of results) {
+          if (result.status === 'rejected') {
+            console.error('Checklist completion failed after branding save', result.reason);
+          }
         }
+        // Keep the dashboard checklist widget fresh without touching the
+        // onboarding session query.
+        queryClient.invalidateQueries({ queryKey: ['onboarding', 'checklist-progress'] });
       }
 
+      initialValuesRef.current = { ...values };
       setSaved(true);
       setLogoFile(null);
       setFaviconFile(null);
@@ -185,7 +233,8 @@ export default function BrandingPage() {
       toast({ title: 'Branding saved', description: 'Your brand settings have been updated successfully.', variant: 'success' });
 
       if (session?.id) {
-        setTimeout(() => router.push(`/onboarding/success?session=${session.id}`), 900);
+        if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current);
+        redirectTimerRef.current = setTimeout(() => router.push(`/onboarding/success?session=${session.id}`), 900);
       }
     } catch (saveErr) {
       toast({
@@ -194,6 +243,7 @@ export default function BrandingPage() {
         variant: 'destructive',
       });
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -263,23 +313,25 @@ export default function BrandingPage() {
             transition={{ duration: 0.35, delay: 0.05 }}
             className="min-w-0 space-y-6"
           >
-            <SectionCard
-              title="Company Logo"
-              description="Upload the logo shown across your workspace, emails, and login page."
-              icon={<Eye className="h-4 w-4" />}
-            >
-              <FileUpload
-                variant="logo"
-                preview={logoRemoved ? null : (logoFile?.preview ?? savedLogoUrl)}
-                onChange={(file, preview) => {
-                  setLogoFile(file ? { file, preview } : null);
-                  if (file) setLogoRemoved(false);
-                  else setLogoRemoved(true);
-                  setSaved(false);
-                }}
-                disabled={saving}
-              />
-            </SectionCard>
+            <div ref={logoSectionRef} className="scroll-mt-28">
+              <SectionCard
+                title="Company Logo"
+                description="Upload the logo shown across your workspace, emails, and login page."
+                icon={<Eye className="h-4 w-4" />}
+              >
+                <FileUpload
+                  variant="logo"
+                  preview={logoRemoved ? null : (logoFile?.preview ?? savedLogoUrl)}
+                  onChange={(file, preview) => {
+                    setLogoFile(file ? { file, preview } : null);
+                    if (file) setLogoRemoved(false);
+                    else setLogoRemoved(true);
+                    setSaved(false);
+                  }}
+                  disabled={saving}
+                />
+              </SectionCard>
+            </div>
 
             <SectionCard
               title="Favicon"
@@ -317,11 +369,12 @@ export default function BrandingPage() {
               </div>
             </SectionCard>
 
-            <SectionCard
-              title="Brand Identity"
-              description="Define your brand name and color palette used throughout the product."
-              icon={<Eye className="h-4 w-4" />}
-            >
+            <div ref={themeSectionRef} className="scroll-mt-28">
+              <SectionCard
+                title="Brand Identity"
+                description="Define your brand name and color palette used throughout the product."
+                icon={<Eye className="h-4 w-4" />}
+              >
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="brandName" className="text-sm font-medium">Company Name *</Label>
@@ -369,6 +422,7 @@ export default function BrandingPage() {
                 </div>
               </div>
             </SectionCard>
+            </div>
 
             {/* Save bar */}
             <motion.div

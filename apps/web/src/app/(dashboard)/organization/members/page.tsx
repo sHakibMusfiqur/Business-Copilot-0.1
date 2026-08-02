@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -16,6 +16,7 @@ import { api } from '@/lib/api';
 import { generateInitials } from '@/lib/utils';
 import { markChecklistComplete } from '@/lib/onboarding-api';
 import { getOnboardingSession } from '@/lib/session-storage';
+import { queryClient } from '@/lib/query-client';
 
 const schema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -38,6 +39,15 @@ export default function MembersPage() {
   const { toast } = useToast();
   const [sending, setSending] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
+  const sendingRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const form = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -47,33 +57,46 @@ export default function MembersPage() {
   const { register, handleSubmit, reset, formState } = form;
 
   const handleInvite = async (data: FormData) => {
+    if (sendingRef.current) return;
+    sendingRef.current = true;
     setSending(true);
     try {
       await api.post('/invitations', { name: data.name.trim(), email: data.email.trim(), role: data.role });
     } catch (err) {
-      toast({
-        title: 'Could not send invitation',
-        description: err instanceof Error ? err.message : 'Failed to send invitation.',
-        variant: 'destructive',
-      });
-      setSending(false);
+      if (mountedRef.current) {
+        toast({
+          title: 'Could not send invitation',
+          description: err instanceof Error ? err.message : 'Failed to send invitation.',
+          variant: 'destructive',
+        });
+      }
+      sendingRef.current = false;
+      if (mountedRef.current) setSending(false);
       return;
     }
 
-    try {
-      const session = getOnboardingSession();
-      if (session?.id) await markChecklistComplete(session.id, 'team');
-    } catch {
-      // best-effort
+    const session = getOnboardingSession();
+    if (session?.id) {
+      try {
+        await markChecklistComplete(session.id, 'team');
+      } catch {
+        // best-effort
+      }
+      queryClient.invalidateQueries({ queryKey: ['onboarding', 'checklist-progress'] });
     }
 
+    if (!mountedRef.current) {
+      sendingRef.current = false;
+      return;
+    }
     setMembers((prev) => [
       ...prev,
       { name: data.name.trim(), email: data.email.trim(), role: data.role, status: 'sent' },
     ]);
     reset({ name: '', email: '', role: 'Member' });
     toast({ title: 'Invitation sent', description: `An invitation has been sent to ${data.email.trim()}.`, variant: 'success' });
-    setSending(false);
+    sendingRef.current = false;
+    if (mountedRef.current) setSending(false);
   };
 
   return (

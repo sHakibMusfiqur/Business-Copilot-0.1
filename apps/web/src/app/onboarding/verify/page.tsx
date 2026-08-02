@@ -83,7 +83,7 @@ export default function VerifyPage() {
         </div>
 
         {localError && (
-          <p className="mb-4 rounded-lg bg-red-500/10 px-4 py-2 text-sm text-red-400">{localError}</p>
+          <p role="alert" className="mb-4 rounded-lg bg-red-500/10 px-4 py-2 text-sm text-red-400">{localError}</p>
         )}
 
         <div className="flex justify-center gap-3">
@@ -93,7 +93,10 @@ export default function VerifyPage() {
               id={`code-${i}`}
               type="text"
               inputMode="numeric"
+              autoComplete="one-time-code"
               maxLength={1}
+              aria-label={`Digit ${i + 1} of 6`}
+              aria-invalid={localError ? 'true' : undefined}
               value={digit}
               onChange={(e) => handleCodeChange(i, e.target.value)}
               onKeyDown={(e) => handleKeyDown(i, e)}

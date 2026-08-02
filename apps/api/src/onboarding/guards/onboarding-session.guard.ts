@@ -38,6 +38,20 @@ export class OnboardingSessionGuard implements CanActivate {
       throw new UnauthorizedException('Onboarding session token required');
     }
 
+    const authHeader = request.headers.authorization;
+    const bearer = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
+    const payload = bearer ? this.decodeJwt(bearer) : null;
+
+    // Expose the authenticated caller to handlers even when the session-bound
+    // onboarding token is used (e.g. registration), so the service can verify
+    // that account-affecting fields belong to the caller.
+    if (payload) {
+      (request as Request & { user?: { id?: string; role?: string } }).user = {
+        id: payload.id,
+        role: payload.role,
+      };
+    }
+
     const onboardingToken =
       (request.headers['x-onboarding-token'] as string | undefined) ??
       (request.query.token as string | undefined);
@@ -49,13 +63,7 @@ export class OnboardingSessionGuard implements CanActivate {
       throw new UnauthorizedException('Invalid or expired onboarding session');
     }
 
-    const authHeader = request.headers.authorization;
-    const bearer = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
-    if (bearer) {
-      const payload = this.decodeJwt(bearer);
-      if (!payload) {
-        throw new UnauthorizedException('Invalid or expired token');
-      }
+    if (payload) {
       const session = await this.prisma.onboardingSession.findUnique({
         where: { id: sessionId },
         select: { userId: true },
@@ -73,6 +81,8 @@ export class OnboardingSessionGuard implements CanActivate {
     try {
       const payload = this.jwtService.verify(token, {
         secret: this.configService.jwtSecret,
+        issuer: 'bc-onboarding',
+        audience: 'bc-onboarding-session',
       }) as { purpose?: string; sub?: string };
       return payload?.purpose === 'onboarding' && payload.sub === sessionId;
     } catch {
@@ -80,12 +90,12 @@ export class OnboardingSessionGuard implements CanActivate {
     }
   }
 
-  private decodeJwt(token: string): { id: string } | null {
+  private decodeJwt(token: string): { id: string; role?: string } | null {
     try {
       const payload = this.jwtService.verify(token, {
         secret: this.configService.jwtSecret,
-      }) as { id?: string };
-      return payload?.id ? { id: payload.id } : null;
+      }) as { id?: string; role?: string };
+      return payload?.id ? { id: payload.id, role: payload.role } : null;
     } catch {
       return null;
     }

@@ -18,7 +18,16 @@ async function bootstrap() {
   app.enableShutdownHooks();
   app.setGlobalPrefix('api');
 
-  app.useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/' });
+  app.useStaticAssets(join(process.cwd(), 'uploads'), {
+    prefix: '/uploads/',
+    // Hardening: serves uploaded files as inert assets. `sandbox` blocks any
+    // script/HTML execution if a user-uploaded SVG/HTML were opened directly,
+    // and `nosniff` prevents MIME sniffing of the byte stream.
+    setHeaders: (res: Response) => {
+      res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+    },
+  });
 
   app.enableCors({
     origin(origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {

@@ -518,6 +518,15 @@ export class AuthService {
     ]);
 
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    // SECURITY NOTE: refresh tokens are persisted as-is (plaintext) rather than
+    // as a hash. A refresh token is high-entropy, opaque, short-lived (7d) and is
+    // only matched on exact value, so at-rest storage does not need to be
+    // reversible anywhere. Hashing would require storing the hash and matching
+    // on lookup (which already returns the raw token for rotation), so it would
+    // add no protection unless the DB were gained-secrets-alongside-hashes;
+    // a thorough design (opaque uuid stored hashed + server-side rotation) is
+    // tracked as hardening debt. Tokens rotate on every refresh, bounding
+    // exposure. Access tokens are never persisted.
     await this.prisma.refreshToken.create({
       data: {
         token: refreshToken,

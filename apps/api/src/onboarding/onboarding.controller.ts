@@ -1,10 +1,10 @@
 import {
-  Controller, Get, Post, Patch, Param, Body, Res, Inject,
+  Controller, Get, Post, Patch, Param, Body, Req, Res, Inject,
   HttpCode, HttpStatus, UseGuards, Sse, MessageEvent, ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiOkResponse, ApiCreatedResponse, ApiBody } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { Observable, map } from 'rxjs';
 import { Public } from '../common/decorators/public.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -44,6 +44,7 @@ export class OnboardingController {
   }
 
   @Public()
+  @Throttle({ short: { limit: 5, ttl: 60000 } })
   @Post('sessions')
   @ApiOperation({ summary: 'Create a new onboarding session' })
   @ApiBody({ type: CreateSessionDto })
@@ -80,8 +81,9 @@ export class OnboardingController {
   @ApiOperation({ summary: 'Update onboarding session' })
   @ApiBody({ type: UpdateSessionDto })
   @ApiOkResponse({ type: SessionResponseDto })
-  async updateSession(@Param('id') id: string, @Body() dto: UpdateSessionDto) {
-    return this.onboardingService.updateSession(id, dto);
+  async updateSession(@Param('id') id: string, @Body() dto: UpdateSessionDto, @Req() req: Request) {
+    const caller = (req as Request & { user?: { id?: string } }).user;
+    return this.onboardingService.updateSession(id, dto, caller?.id ?? null);
   }
 
   @UseGuards(OnboardingSessionGuard)

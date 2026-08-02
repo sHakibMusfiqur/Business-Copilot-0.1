@@ -5,7 +5,7 @@ import { motion } from 'framer-motion';
 import { AxiosError } from 'axios';
 import { Building2, ArrowRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -35,6 +35,15 @@ export default function CreateOrganizationPage() {
   const { user, setUser } = useAuthStore();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const {
     register,
@@ -45,11 +54,14 @@ export default function CreateOrganizationPage() {
   });
 
   async function onSubmit(data: CreateOrganizationFormData) {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setIsSubmitting(true);
     setError(null);
 
     try {
       const response = await createOrganization(data.name);
+      if (!mountedRef.current) return;
       const { organization, accessToken: newToken } = response;
       setAccessToken(newToken);
       if (user) {
@@ -68,9 +80,10 @@ export default function CreateOrganizationPage() {
       } else if (err instanceof Error) {
         message = err.message;
       }
-      setError(message);
+      if (mountedRef.current) setError(message);
     } finally {
-      setIsSubmitting(false);
+      submittingRef.current = false;
+      if (mountedRef.current) setIsSubmitting(false);
     }
   }
 

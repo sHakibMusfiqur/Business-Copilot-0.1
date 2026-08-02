@@ -10,6 +10,7 @@ import { SectionCard } from '@/components/setup/section-card';
 import { SetupPageShell } from '@/components/setup/setup-page-shell';
 import { markChecklistComplete } from '@/lib/onboarding-api';
 import { getOnboardingSession } from '@/lib/session-storage';
+import { queryClient } from '@/lib/query-client';
 import { useSettings } from '@/lib/use-settings';
 
 const NOTIFICATION_OPTIONS = [
@@ -69,7 +70,10 @@ export default function NotificationsPage() {
     }
     try {
       const session = getOnboardingSession();
-      if (session?.id) await markChecklistComplete(session.id, 'notifications');
+      if (session?.id) {
+        await markChecklistComplete(session.id, 'notifications');
+        queryClient.invalidateQueries({ queryKey: ['onboarding', 'checklist-progress'] });
+      }
     } catch {
       // best-effort
     }

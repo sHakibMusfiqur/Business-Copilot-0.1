@@ -12,6 +12,7 @@ import {
   type ChecklistItem, type ChecklistProgress,
 } from '@/lib/onboarding-api';
 import { setOnboardingSession } from '@/lib/session-storage';
+import { queryClient } from '@/lib/query-client';
 
 export default function SuccessPage() {
   const { session } = useOnboarding();
@@ -22,6 +23,13 @@ export default function SuccessPage() {
   const [skipping, setSkipping] = useState<string | null>(null);
   const loadingRef = useRef(loading);
   loadingRef.current = loading;
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const fetchData = useCallback(async () => {
     if (!session) return;
@@ -31,12 +39,13 @@ export default function SuccessPage() {
         getChecklist(session.id),
         getChecklistProgress(session.id),
       ]);
+      if (!mountedRef.current) return;
       setItems(checklist);
       setProgress(p);
     } catch {
       /* intentional */
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   }, [session]);
 
@@ -67,18 +76,26 @@ export default function SuccessPage() {
     setSkipping(item.itemId);
     try {
       const updated = await skipChecklistItem(session.id, item.itemId);
+      if (!mountedRef.current) return;
       setItems((prev) => prev.map((i) => i.itemId === updated.itemId ? updated : i));
       const p = await getChecklistProgress(session.id);
+      if (!mountedRef.current) return;
       setProgress(p);
+      // Only the checklist progress changed; invalidate that scope, not the
+      // onboarding session query.
+      queryClient.invalidateQueries({ queryKey: ['onboarding', 'checklist-progress'] });
     } catch {
       /* empty - network errors ignored */
     } finally {
-      setSkipping(null);
+      if (mountedRef.current) setSkipping(null);
     }
   };
 
   const completedCount = items.filter((i) => i.completed).length;
-  const pct = progress?.percentage ?? (items.length > 0 ? Math.round((completedCount / items.length) * 100) : 0);
+  const pct = Math.min(
+    100,
+    Math.max(0, progress?.percentage ?? (items.length > 0 ? Math.round((completedCount / items.length) * 100) : 0)),
+  );
 
   return (
     <motion.div
@@ -114,7 +131,7 @@ export default function SuccessPage() {
           </div>
           {!loading && (
             <div className="flex h-14 w-14 items-center justify-center">
-              <svg className="h-14 w-14 -rotate-90" viewBox="0 0 36 36">
+              <svg className="h-14 w-14 -rotate-90" viewBox="0 0 36 36" aria-hidden="true" focusable="false">
                 <circle cx="18" cy="18" r="15" fill="none" stroke="rgb(51 65 85)" strokeWidth="3" />
                 <circle
                   cx="18" cy="18" r="15" fill="none" stroke="rgb(34 197 94)" strokeWidth="3"
@@ -166,6 +183,7 @@ export default function SuccessPage() {
                   {item.href && !item.completed && (
                     <Link
                       href={item.href}
+                      aria-label={`Go to ${item.label}`}
                       className="rounded-lg bg-blue-500/10 px-2.5 py-1 text-xs text-blue-400 transition-colors hover:bg-blue-500/20"
                     >
                       Go
@@ -175,6 +193,7 @@ export default function SuccessPage() {
                     <button
                       onClick={() => handleSkip(item)}
                       disabled={skipping === item.itemId}
+                      aria-label={`Skip ${item.label}`}
                       className="rounded-lg p-1 text-slate-500 transition-colors hover:text-slate-300"
                       title="Skip"
                     >

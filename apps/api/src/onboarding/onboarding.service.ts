@@ -1,5 +1,5 @@
 import {
-  Injectable, NotFoundException, ConflictException, BadRequestException,
+  Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException,
 } from '@nestjs/common';
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
@@ -108,12 +108,22 @@ export class OnboardingService {
     return this.mapSessionWithToken(session);
   }
 
-  async updateSession(sessionId: string, dto: UpdateSessionDto) {
+  async updateSession(sessionId: string, dto: UpdateSessionDto, authenticatedUserId: string | null = null) {
     const session = await this.prisma.onboardingSession.findUnique({
       where: { id: sessionId },
     });
     if (!session) throw new NotFoundException('Onboarding session not found');
     if (session.provisionStatus === 'EXPIRED') throw new ConflictException('Session expired');
+
+    // The session owner is bound during registration, at which point the caller
+    // is authenticated. Never allow an arbitrary/forged userId to be written via
+    // the anonymous onboarding-token path — provisioning would otherwise
+    // reassign the target account and tenant.
+    if (dto.userId !== undefined) {
+      if (!authenticatedUserId || authenticatedUserId !== dto.userId) {
+        throw new ForbiddenException('You can only bind this onboarding session to your own account');
+      }
+    }
 
     const data: Record<string, unknown> = {};
     const fields: (keyof UpdateSessionDto)[] = [
@@ -276,6 +286,8 @@ export class OnboardingService {
         {
           secret: this.configService.jwtSecret,
           expiresIn: SESSION_TTL_SECONDS as JwtSignOptions['expiresIn'],
+          issuer: 'bc-onboarding',
+          audience: 'bc-onboarding-session',
         },
       ),
     };

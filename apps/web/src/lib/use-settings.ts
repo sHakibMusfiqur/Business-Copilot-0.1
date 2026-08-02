@@ -26,12 +26,22 @@ export function useSettings<T extends object>(
 
   const valuesRef = useRef(values);
   valuesRef.current = values;
+  const savingRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
 
   const reload = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     try {
       const stored = await getSettings<Partial<T>>(namespace);
+      if (!mountedRef.current) return;
       if (stored && Object.keys(stored).length > 0) {
         const normalized = normalizeRef.current ? normalizeRef.current(stored) : stored;
         setValues({ ...defaultsRef.current, ...normalized });
@@ -41,9 +51,9 @@ export function useSettings<T extends object>(
       setDirty(false);
       setSaved(false);
     } catch {
-      setLoadError('Could not load your settings. Please try again.');
+      if (mountedRef.current) setLoadError('Could not load your settings. Please try again.');
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   }, [namespace]);
 
@@ -65,16 +75,20 @@ export function useSettings<T extends object>(
 
   const save = useCallback(
     async (payloadOverride?: T) => {
+      if (savingRef.current) return;
       const payload = payloadOverride ?? valuesRef.current;
+      savingRef.current = true;
       setSaving(true);
       setSaved(false);
       try {
         const updated = await updateSettings<T>(namespace, payload);
+        if (!mountedRef.current) return;
         setValues((prev) => ({ ...prev, ...updated }));
         setDirty(false);
         setSaved(true);
       } finally {
-        setSaving(false);
+        savingRef.current = false;
+        if (mountedRef.current) setSaving(false);
       }
     },
     [namespace],

@@ -45,8 +45,8 @@ services:
       NODE_ENV: development
       DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/business_copilot?schema=public"
       REDIS_URL: "redis://redis:6379"
-      JWT_SECRET: "${JWT_SECRET:-dev-jwt-secret-change-in-production}"
-      JWT_REFRESH_SECRET: "${JWT_REFRESH_SECRET:-dev-refresh-secret-change-in-production}"
+      JWT_SECRET: "${JWT_SECRET:?Set JWT_SECRET to a strong random secret (required, e.g. openssl rand -hex 32)}"
+      JWT_REFRESH_SECRET: "${JWT_REFRESH_SECRET:?Set JWT_REFRESH_SECRET to a strong random secret (required, e.g. openssl rand -hex 32)}"
       JWT_EXPIRES_IN: "15m"
       JWT_REFRESH_EXPIRES_IN: "7d"
       PORT: 4000

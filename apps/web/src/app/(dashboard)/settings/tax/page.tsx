@@ -12,6 +12,7 @@ import { SectionCard } from '@/components/setup/section-card';
 import { SetupPageShell } from '@/components/setup/setup-page-shell';
 import { markChecklistComplete } from '@/lib/onboarding-api';
 import { getOnboardingSession } from '@/lib/session-storage';
+import { queryClient } from '@/lib/query-client';
 import { useSettings } from '@/lib/use-settings';
 
 interface TaxValues {
@@ -75,7 +76,10 @@ export default function TaxPage() {
     }
     try {
       const session = getOnboardingSession();
-      if (session?.id) await markChecklistComplete(session.id, 'tax');
+      if (session?.id) {
+        await markChecklistComplete(session.id, 'tax');
+        queryClient.invalidateQueries({ queryKey: ['onboarding', 'checklist-progress'] });
+      }
     } catch {
       // best-effort
     }
