@@ -61,7 +61,7 @@ export class OnboardingChecklistService {
    */
   async initChecklist(sessionId: string): Promise<ChecklistItemDto[]> {
     const items = await this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${sessionId}))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${sessionId}))`;
       const existing = await tx.checklistItem.findMany({ where: { sessionId } });
       if (existing.length > 0) {
         return existing;

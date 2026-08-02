@@ -24,6 +24,12 @@ export class CompensationManager {
   async rollback(sessionId: string): Promise<void> {
     this.logger.warn(`Rolling back provisioning for session ${sessionId}`);
 
+    const session = await this.prisma.onboardingSession.findUnique({
+      where: { id: sessionId },
+      select: { provisionData: true },
+    });
+    const existingProvisionData = (session?.provisionData as Record<string, unknown> | null) ?? {};
+
     await this.auditService.record({
       action: 'ROLLBACK_STARTED',
       status: 'SUCCESS',
@@ -49,6 +55,7 @@ export class CompensationManager {
       data: {
         provisionStatus: 'FAILED',
         provisionData: {
+          ...existingProvisionData,
           rolledBack: true,
           rollbackErrors: errors.length > 0 ? errors : undefined,
           rolledBackAt: new Date().toISOString(),

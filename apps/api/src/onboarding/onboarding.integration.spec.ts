@@ -41,7 +41,9 @@ const mockPrisma = {
   checklistItem: {
     findMany: jest.fn().mockResolvedValue([]),
     create: jest.fn(),
+    createManyAndReturn: jest.fn(),
     update: jest.fn(),
+    deleteMany: jest.fn(),
     count: jest.fn().mockResolvedValue(0),
   },
   organization: {
@@ -65,6 +67,7 @@ const mockPrisma = {
   auditLog: { findFirst: jest.fn() },
   $transaction: jest.fn(),
   $executeRawUnsafe: jest.fn().mockResolvedValue(1),
+  $executeRaw: jest.fn().mockResolvedValue(1),
   $queryRaw: jest.fn().mockResolvedValue([1]),
 };
 

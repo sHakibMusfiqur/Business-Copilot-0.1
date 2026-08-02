@@ -82,6 +82,31 @@ export class ProvisioningExecutorService {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     tx: any,
   ): Promise<{ org: { id: string } }> {
+    if (session.organizationId) {
+      const existingBySession = await tx.organization.findUnique({
+        where: { id: session.organizationId as string },
+      });
+      if (existingBySession) {
+        tasks.push('Organization created');
+        return { org: existingBySession };
+      }
+    }
+
+    const existingByName = await tx.organization.findUnique({
+      where: { name: session.orgName as string },
+    });
+    if (existingByName) {
+      if (session.id) {
+        await tx.onboardingSession.update({
+          where: { id: session.id as string },
+          data: { organizationId: existingByName.id },
+        });
+      }
+      session.organizationId = existingByName.id;
+      tasks.push('Organization created');
+      return { org: existingByName };
+    }
+
     const slug = await this.generateSlug(tx, session);
     const org = await tx.organization.create({
       data: {
@@ -162,23 +187,33 @@ export class ProvisioningExecutorService {
     const org = await this.resolveOrg(tx, session);
     if (!org) return;
     const allPerms: { id: string }[] = await tx.permission.findMany({ select: { id: true } });
-    const ownerRole = await tx.role.create({
-      data: {
-        name: 'Owner',
-        description: 'Full access to all organization features',
-        isSystem: true,
-        organizationId: org.id,
-      },
-    });
+    const ownerRole =
+      (await tx.role.findFirst({
+        where: { organizationId: org.id, name: 'Owner' },
+      })) ??
+      (await tx.role.create({
+        data: {
+          name: 'Owner',
+          description: 'Full access to all organization features',
+          isSystem: true,
+          organizationId: org.id,
+        },
+      }));
     if (allPerms.length > 0) {
       await tx.rolePermission.createMany({
         data: allPerms.map((p) => ({ roleId: ownerRole.id, permissionId: p.id })),
+        skipDuplicates: true,
       });
     }
     if (session.userId) {
-      await tx.userRoleAssignment.create({
-        data: { userId: session.userId as string, roleId: ownerRole.id },
+      const existingAssignment = await tx.userRoleAssignment.findFirst({
+        where: { userId: session.userId as string, roleId: ownerRole.id },
       });
+      if (!existingAssignment) {
+        await tx.userRoleAssignment.create({
+          data: { userId: session.userId as string, roleId: ownerRole.id },
+        });
+      }
     }
     tasks.push('Owner role created');
   }
@@ -192,11 +227,14 @@ export class ProvisioningExecutorService {
   ): Promise<void> {
     const org = await this.resolveOrg(tx, session);
     if (!org) return;
-    for (const dept of config.departments) {
+    const departments = config.departments.map((dept) => {
       const code = dept.name
         .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 16)
         + `_${org.id.slice(0, 8)}`;
-      await tx.department.create({ data: { name: dept.name, code, isActive: true } });
+      return { name: dept.name, code, isActive: true };
+    });
+    if (departments.length > 0) {
+      await tx.department.createMany({ data: departments, skipDuplicates: true });
     }
     tasks.push('Departments configured');
   }
@@ -259,20 +297,20 @@ export class ProvisioningExecutorService {
   ): Promise<void> {
     const org = await this.resolveOrg(tx, session);
     if (!org) return;
-    await tx.organizationSettings.create({
-      data: {
-        organizationId: org.id,
-        settings: {
-          industry: session.selectedIndustry,
-          industryCategory: session.selectedCategory ?? null,
-          businessProfile: session.businessProfile ?? null,
-          aiEnabled: session.aiEnabled ?? false,
-          aiLanguage: session.aiLanguage ?? null,
-          aiPersonality: session.aiPersonality ?? null,
-          provisioningConfig: JSON.parse(JSON.stringify(config)),
-          defaults: config.defaults ?? null,
-        },
-      },
+    const settings = {
+      industry: session.selectedIndustry,
+      industryCategory: session.selectedCategory ?? null,
+      businessProfile: session.businessProfile ?? null,
+      aiEnabled: session.aiEnabled ?? false,
+      aiLanguage: session.aiLanguage ?? null,
+      aiPersonality: session.aiPersonality ?? null,
+      provisioningConfig: JSON.parse(JSON.stringify(config)),
+      defaults: config.defaults ?? null,
+    };
+    await tx.organizationSettings.upsert({
+      where: { organizationId: org.id },
+      create: { organizationId: org.id, settings },
+      update: { settings },
     });
     tasks.push('Settings applied');
   }

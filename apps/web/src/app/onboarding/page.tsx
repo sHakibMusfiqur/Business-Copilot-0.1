@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-import { getMe } from '@/lib/api';
+import { getMe, refreshAccessToken } from '@/lib/api';
 import { getSessionByEmail } from '@/lib/onboarding-api';
 import { useAuthStore } from '@/store/auth-store';
 
@@ -28,16 +28,32 @@ export default function OnboardingRedirect() {
       // Otherwise try to restore the authenticated user's existing session so we
       // never render Verify without a valid session id.
       let email: string | null = storeEmail ?? null;
-      if (!email) {
-        try {
-          const me = await getMe();
-          email = me?.email ?? null;
-        } catch {
-          email = null;
-        }
+      let onboardingCompleted = false;
+      try {
+        const me = await getMe();
+        email = me?.email ?? email;
+        onboardingCompleted = me?.onboardingCompleted === true;
+      } catch {
+        // Fall back to the store email (if any) when the API call fails.
       }
 
       if (cancelled) return;
+
+      // The access_token claim can be stale: it is minted as `true` at register
+      // (a placeholder org exists but no session row yet), flips to `false` on
+      // the first refresh while the session is still PENDING, and only becomes
+      // `true` again once the session is COMPLETED. getMe() recomputes
+      // `onboardingCompleted` from the DB (via the 401->refresh round trip), so
+      // it is the authoritative state here. If onboarding is actually complete
+      // the middleware may still have routed us to /onboarding from a stale
+      // claim; go to the dashboard instead of dead-ending on
+      // "No onboarding session was found." (getSessionByEmail only matches
+      // PENDING sessions and 404s for a COMPLETED one).
+      if (onboardingCompleted) {
+        await refreshAccessToken().catch(() => null);
+        if (!cancelled) router.replace('/dashboard');
+        return;
+      }
 
       if (email) {
         try {

@@ -26,8 +26,8 @@ type ProgressInput = {
   error?: string | null;
 };
 
-function isCompleted(p: { status?: string; progress?: number }): boolean {
-  return p.status === 'COMPLETED' || (p.status !== 'FAILED' && typeof p.progress === 'number' && p.progress >= 100);
+function isCompleted(p: { status?: string }): boolean {
+  return p.status === 'COMPLETED';
 }
 
 export default function ProvisioningPage() {
