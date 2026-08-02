@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
-  ArrowLeft, CalendarClock, CreditCard, Loader2, ShieldCheck, Sparkles,
+  ArrowLeft, ArrowRight, CalendarClock, Check, CreditCard, Loader2, ShieldCheck, Sparkles,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useOnboarding } from '../_hooks/onboarding-context';
@@ -14,8 +14,11 @@ import {
 import { detectCurrency } from '@/lib/currency';
 import { formatPlanPrice, type BillingInterval } from '../plan/plan-utils';
 
+type PaymentOption = 'payNow' | 'trial';
+
 export default function PaymentPage() {
   const { wizard, session, saveField, completeStep, persistSession } = useOnboarding();
+  const [selectedOption, setSelectedOption] = useState<PaymentOption>('trial');
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -83,6 +86,16 @@ export default function PaymentPage() {
       setError((e as Error).message ?? 'Could not start secure checkout. Please try again or use the free trial.');
       startingRef.current = false;
       setStarting(false);
+    }
+  };
+
+  const handleContinue = async () => {
+    if (!plan || starting || startingRef.current) return;
+    if (selectedOption === 'payNow') {
+      if (!paymentEnabled) return;
+      await handlePayNow();
+    } else {
+      await handleStartTrial();
     }
   };
 
@@ -164,45 +177,102 @@ export default function PaymentPage() {
     );
   }
 
-  const trialLabel = `Start ${plan.freeTrialDays}-Day Free Trial`;
+  const trialDays = plan.freeTrialDays ?? 30;
+  const priceLabel = formatPlanPrice(plan, interval, currency);
+  const priceUnit = interval === 'YEARLY' ? '/yr' : '/mo';
+  const subscriptionLabel = interval === 'YEARLY' ? 'Annual subscription' : 'Monthly subscription';
+  const payNowDisabled = !paymentEnabled;
+
+  const optionCardClass = (selected: boolean, disabled = false) =>
+    `group relative flex w-full cursor-pointer items-start gap-3 rounded-xl border-2 p-4 text-left transition-all ${
+      disabled
+        ? 'cursor-not-allowed border-slate-700/50 bg-slate-800/20 opacity-50'
+        : selected
+          ? 'border-blue-500 bg-blue-500/10'
+          : 'border-slate-700 bg-slate-800/40 hover:border-slate-500'
+    }`;
+
+  const optionDotClass = (selected: boolean) =>
+    `mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
+      selected ? 'border-blue-500 bg-blue-500 text-white' : 'border-slate-500 text-transparent'
+    }`;
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mx-auto max-w-xl pt-8">
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mx-auto max-w-2xl pt-8">
       <div className="rounded-2xl border border-slate-700/50 bg-slate-800/40 p-8 backdrop-blur-xl">
         <h2 className="mb-1 text-2xl font-bold text-white">Payment</h2>
-        <p className="mb-6 text-sm text-slate-400">Complete your subscription setup</p>
+        <p className="mb-6 text-sm text-slate-400">Choose how you would like to start — no charges until you decide.</p>
 
-        <div className="mb-6 rounded-xl border border-slate-700 bg-slate-800/50 p-4">
-          <div className="mb-3 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold text-white">{plan.name} plan</span>
+        <div className="mb-4 flex items-center justify-between gap-2 rounded-xl border border-slate-700 bg-slate-800/50 px-4 py-3">
+          <span className="text-sm font-semibold text-white">{plan.name} plan</span>
+          <span className="text-xs text-slate-400">{interval === 'YEARLY' ? 'Annual billing' : 'Monthly billing'}</span>
+        </div>
+
+        <div role="radiogroup" aria-label="Payment options" className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {/* Option A — Pay Now */}
+          <button
+            type="button"
+            role="radio"
+            aria-checked={selectedOption === 'payNow'}
+            disabled={payNowDisabled}
+            onClick={() => setSelectedOption('payNow')}
+            className={optionCardClass(selectedOption === 'payNow', payNowDisabled)}
+          >
+            <span className={optionDotClass(selectedOption === 'payNow')}>
+              <Check className="h-3 w-3" strokeWidth={3} />
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="flex items-center gap-1.5 text-sm font-semibold text-white">
+                  <CreditCard className="h-4 w-4 text-blue-400" /> Pay Now
+                </span>
+                {plan.recommended && (
+                  <span className="rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-400">Recommended</span>
+                )}
+              </span>
+              <span className="text-xs text-slate-400">{subscriptionLabel}</span>
+              <span className="mt-1 flex items-baseline gap-0.5">
+                <span className="text-xl font-bold text-white">{priceLabel}</span>
+                <span className="text-xs text-slate-400">{priceUnit}</span>
+              </span>
               {plan.recommended && (
-                <span className="rounded-full bg-blue-500/10 px-2 py-0.5 text-[10px] font-medium text-blue-400">Recommended</span>
+                <span className="text-[11px] font-medium text-blue-300">Recommended for production</span>
               )}
-            </div>
-            <span className="text-xs text-slate-400">{interval === 'YEARLY' ? 'Annual' : 'Monthly'}</span>
-          </div>
+            </span>
+          </button>
 
-          <div className="flex items-end justify-between">
-            <div>
-              <span className="text-2xl font-bold text-white">{formatPlanPrice(plan, interval, currency)}</span>
-              <span className="text-sm text-slate-400">/{interval === 'YEARLY' ? 'yr' : 'mo'}</span>
-            </div>
-            <span className="text-xs text-emerald-400">{currency}</span>
-          </div>
-
-          {plan.freeTrialDays > 0 && (
-            <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-emerald-500/10 px-3 py-2 text-xs text-emerald-400">
-              <Sparkles className="h-3.5 w-3.5" /> {plan.freeTrialDays}-day free trial included
-            </div>
-          )}
-
-          {activated && activated.status === 'TRIALING' && activated.trialEndsAt && (
-            <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-blue-500/10 px-3 py-2 text-xs text-blue-400">
-              <CalendarClock className="h-3.5 w-3.5" />
-              Trial active until {new Date(activated.trialEndsAt).toLocaleDateString()}
-            </div>
-          )}
+          {/* Option B — Free Trial */}
+          <button
+            type="button"
+            role="radio"
+            aria-checked={selectedOption === 'trial'}
+            onClick={() => setSelectedOption('trial')}
+            className={optionCardClass(selectedOption === 'trial')}
+          >
+            <span className={optionDotClass(selectedOption === 'trial')}>
+              <Check className="h-3 w-3" strokeWidth={3} />
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="flex items-center gap-1.5 text-sm font-semibold text-white">
+                  <Sparkles className="h-4 w-4 text-emerald-400" /> Start Free Trial
+                </span>
+                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+                  {trialDays} days free
+                </span>
+              </span>
+              <span className="text-xs text-slate-400">{trialDays}-day free trial · full access</span>
+              <span className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-white">
+                <Check className="h-3.5 w-3.5 text-emerald-400" strokeWidth={3} /> No charge today
+              </span>
+              {activated && activated.status === 'TRIALING' && activated.trialEndsAt && (
+                <span className="flex items-center gap-1.5 rounded-lg bg-blue-500/10 px-2 py-1 text-xs text-blue-400">
+                  <CalendarClock className="h-3.5 w-3.5" />
+                  Trial active until {new Date(activated.trialEndsAt).toLocaleDateString()}
+                </span>
+              )}
+            </span>
+          </button>
         </div>
 
         {error && (
@@ -213,39 +283,19 @@ export default function PaymentPage() {
           <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-300">{notice}</div>
         )}
 
-        {paymentEnabled ? (
-          <button
-            onClick={handlePayNow}
-            disabled={starting}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3.5 font-semibold text-white shadow-lg shadow-blue-600/25 transition-all hover:from-blue-500 hover:to-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <CreditCard className="h-4 w-4" /> Pay Now
-          </button>
-        ) : (
-          <button
-            onClick={handleStartTrial}
-            disabled={starting}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 px-6 py-3.5 font-semibold text-white shadow-lg shadow-emerald-600/25 transition-all hover:from-emerald-500 hover:to-green-500 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {starting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-            {starting ? 'Starting your free trial…' : trialLabel}
-          </button>
-        )}
+        <button
+          onClick={handleContinue}
+          disabled={starting || (selectedOption === 'payNow' && !paymentEnabled)}
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3.5 font-semibold text-white shadow-lg shadow-blue-600/25 transition-all hover:from-blue-500 hover:to-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {starting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+          {starting ? 'Processing…' : 'Continue'}
+        </button>
 
         {!paymentEnabled && (
           <p className="mt-3 text-center text-xs text-slate-500">
             No payment is required to start. You can add a payment method later from Billing.
           </p>
-        )}
-
-        {paymentEnabled && (
-          <button
-            onClick={handleStartTrial}
-            disabled={starting}
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-600 px-6 py-3 text-sm font-semibold text-slate-300 transition-colors hover:border-slate-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Sparkles className="h-4 w-4" /> Start free trial instead
-          </button>
         )}
 
         <div className="mt-6 flex items-center justify-between border-t border-slate-700/50 pt-4">
