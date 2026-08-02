@@ -40,9 +40,15 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const token = request.cookies.get('access_token')?.value;
+  const refreshToken = request.cookies.get('refresh_token')?.value;
   const payload = (token ? decodeJWT(token) : null) as JwtPayload | null;
   const activePayload = payload && !isTokenExpired(payload) ? payload : null;
-  const isLoggedIn = activePayload !== null;
+  // The API authenticates only via the Authorization: Bearer header, which on a
+  // fresh page load can be restored solely through the refresh_token cookie.
+  // An access_token cookie without a matching refresh_token is a stale/ghost
+  // session the client cannot back up with any API request, so treating it as
+  // logged in routes / -> /onboarding and dead-ends there.
+  const isLoggedIn = activePayload !== null && Boolean(refreshToken);
   const role = isLoggedIn ? activePayload.role : null;
   // Dashboard access requires onboarding to be fully completed. A placeholder
   // organization assigned during registration must NOT count as a workspace.
