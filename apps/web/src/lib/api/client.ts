@@ -212,5 +212,18 @@ export function setAuthCookie(token: string): void {
 
 export function clearAuthCookie(): void {
   if (typeof document === 'undefined') return;
-  document.cookie = 'access_token=; path=/; max-age=0';
+  // Clear BOTH auth cookies (access + refresh). The backend sets access_token
+  // as HttpOnly and refresh_token as HttpOnly/7-day; if the /auth/logout
+  // request is interrupted (or a 401-triggered refresh previously rewrote the
+  // cookie), only clearing access_token leaves the 7-day refresh_token behind,
+  // which the interceptor can use to silently re-issue an access_token and make
+  // the next navigation appear authenticated. Deleting by name+path works for
+  // HttpOnly cookies too; include the `secure` variant so HTTPS/localhost-leak
+  // cookies are removed as well.
+  const clear = (name: string) => {
+    document.cookie = `${name}=; path=/; max-age=0; samesite=lax`;
+    document.cookie = `${name}=; path=/; max-age=0; samesite=lax; secure`;
+  };
+  clear('access_token');
+  clear('refresh_token');
 }
