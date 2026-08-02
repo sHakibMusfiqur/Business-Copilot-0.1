@@ -46,7 +46,6 @@ export default function AccountPage() {
       if (alreadyRegistered) {
         saveField('userId', authUser.id);
       } else {
-        console.trace('[TRACE] registerUser called from AccountPage.handleSubmit (alreadyRegistered=' + alreadyRegistered + ', authUser=' + (authUser ? authUser.email : 'null') + ')');
         const result = await registerUser(session.name, session.email, password);
         setUser(result.user, result.accessToken);
         saveField('userId', result.user.id);
