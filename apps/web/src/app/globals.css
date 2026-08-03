@@ -4,6 +4,10 @@
 
 @layer base {
   :root {
+    --font-body: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --font-heading: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    --brand-secondary: 250 92% 60%;
+    --brand-accent: 160 84% 39%;
     --background: 220 50% 98%;
     --foreground: 221 39% 11%;
     --card: 0 0% 100%;
@@ -66,6 +70,42 @@
 
   body {
     @apply bg-background text-foreground antialiased;
+    font-family: var(--font-body);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-heading);
+  }
+}
+
+/* Branded documents: used for PDF / invoice / report / letterhead printing.
+   The letterhead + footer are rendered at the top and bottom of each printed
+   page; body content scrolls normally on screen. */
+@media print {
+  @page {
+    margin: 16mm 14mm 18mm;
+  }
+  body * {
+    visibility: hidden;
+  }
+  .branded-doc,
+  .branded-doc * {
+    visibility: visible;
+  }
+  .branded-doc {
+    position: absolute;
+    inset: 0;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+  }
+  .branded-doc-footer {
+    position: running(brandedFooter);
   }
 }
 
@@ -77,6 +117,20 @@
   .glass-card {
     @apply bg-card/80 backdrop-blur-xl border border-border shadow-[0_8px_30px_-12px_rgba(15,23,42,0.15)]
            dark:shadow-[0_8px_30px_-12px_rgba(0,0,0,0.5)];
+  }
+
+  /* Brand logo image that swaps to the dark variant when the OS/UI theme is dark. */
+  .brand-logo {
+    background-image: var(--brand-logo);
+    background-size: contain;
+    background-position: center;
+    background-repeat: no-repeat;
+  }
+
+  .dark .brand-logo {
+    /* The first layer is the dark logo; if unset ("none") it is ignored and the
+       light logo underneath is used as a fallback. */
+    background-image: var(--brand-logo-dark), var(--brand-logo);
   }
 
   .glass-sidebar {

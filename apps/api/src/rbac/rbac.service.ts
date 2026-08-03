@@ -12,6 +12,8 @@ import type { CreateRoleDto } from './dto/create-role.dto';
 import type { UpdateRoleDto } from './dto/update-role.dto';
 import type { AssignPermissionsDto } from './dto/assign-permissions.dto';
 import type { AssignUserRolesDto } from './dto/assign-user-roles.dto';
+import type { DuplicateRoleDto } from './dto/duplicate-role.dto';
+import type { ClonePermissionsDto } from './dto/clone-permissions.dto';
 
 @Injectable()
 export class RbacService {
@@ -163,6 +165,117 @@ export class RbacService {
     this.logger.log(`Role deleted: ${role.name} (${role.id})`);
   }
 
+  async duplicateRole(orgId: string, roleId: string, dto: DuplicateRoleDto) {
+    const source = await this.prisma.role.findFirst({
+      where: { id: roleId, organizationId: orgId },
+      include: { rolePermissions: { select: { permissionId: true } } },
+    });
+
+    if (!source) {
+      throw new NotFoundException('Role not found');
+    }
+
+    const name = (dto.name ?? `${source.name} Copy`).trim();
+
+    const existing = await this.prisma.role.findUnique({
+      where: { organizationId_name: { organizationId: orgId, name } },
+    });
+
+    if (existing) {
+      throw new ConflictException(`Role "${name}" already exists in this organization`);
+    }
+
+    const copyPermissions = dto.copyPermissions ?? true;
+
+    const created = await this.prisma.$transaction(async (tx) => {
+      const role = await tx.role.create({
+        data: {
+          name,
+          description: source.description,
+          isSystem: false,
+          organizationId: orgId,
+        },
+      });
+
+      if (copyPermissions && source.rolePermissions.length > 0) {
+        await tx.rolePermission.createMany({
+          data: source.rolePermissions.map((rp) => ({
+            roleId: role.id,
+            permissionId: rp.permissionId,
+          })),
+        });
+      }
+
+      return role;
+    });
+
+    this.logger.log(`Role duplicated: ${source.name} -> ${created.name} (${created.id})`);
+
+    return {
+      id: created.id,
+      name: created.name,
+      description: created.description,
+      isSystem: created.isSystem,
+      organizationId: created.organizationId,
+      createdAt: created.createdAt,
+      updatedAt: created.updatedAt,
+      userCount: 0,
+      permissionCount: copyPermissions ? source.rolePermissions.length : 0,
+    };
+  }
+
+  async clonePermissions(orgId: string, roleId: string, dto: ClonePermissionsDto) {
+    const [target, source] = await Promise.all([
+      this.prisma.role.findFirst({ where: { id: roleId, organizationId: orgId } }),
+      this.prisma.role.findFirst({ where: { id: dto.sourceRoleId, organizationId: orgId } }),
+    ]);
+
+    if (!target) {
+      throw new NotFoundException('Role not found');
+    }
+
+    if (!source) {
+      throw new NotFoundException('Source role not found');
+    }
+
+    if (target.isSystem) {
+      throw new BadRequestException('System roles cannot be modified');
+    }
+
+    if (source.id === target.id) {
+      throw new BadRequestException('Source and target roles must be different');
+    }
+
+    const sourcePermissionIds = (
+      await this.prisma.rolePermission.findMany({
+        where: { roleId: source.id },
+        select: { permissionId: true },
+      })
+    ).map((rp) => rp.permissionId);
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.rolePermission.deleteMany({ where: { roleId: target.id } });
+
+      if (sourcePermissionIds.length > 0) {
+        await tx.rolePermission.createMany({
+          data: sourcePermissionIds.map((permissionId) => ({
+            roleId: target.id,
+            permissionId,
+          })),
+        });
+      }
+    });
+
+    this.logger.log(
+      `Permissions cloned from role ${source.name} to ${target.name}: ${sourcePermissionIds.length} permissions`,
+    );
+
+    return {
+      message: `Permissions copied from "${source.name}" to "${target.name}"`,
+      permissionCount: sourcePermissionIds.length,
+    };
+  }
+
   // ─── Role-Permission Assignment ────────────────────────────────
 
   async assignPermissions(orgId: string, roleId: string, dto: AssignPermissionsDto) {
@@ -296,5 +409,9 @@ export class RbacService {
   async userHasAnyPermission(userId: string, orgId: string, permissionNames: string[]): Promise<boolean> {
     const userPerms = new Set(await this.getUserPermissions(userId, orgId));
     return permissionNames.some((p) => userPerms.has(p));
+  }
+
+  async getMyPermissions(userId: string, orgId: string): Promise<string[]> {
+    return this.getUserPermissions(userId, orgId);
   }
 }

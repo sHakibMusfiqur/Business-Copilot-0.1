@@ -7,23 +7,41 @@ import { UploadCloud, RefreshCw, X, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
-const ALLOWED_EXT: Record<'logo' | 'favicon', string[]> = {
+export type BrandAssetVariant =
+  | 'logo'
+  | 'darkLogo'
+  | 'favicon'
+  | 'loginBackground'
+  | 'loginIllustration'
+  | 'documentLogo';
+
+const ALLOWED_EXT: Record<BrandAssetVariant, string[]> = {
   logo: ['png', 'jpg', 'jpeg', 'svg'],
+  darkLogo: ['png', 'jpg', 'jpeg', 'svg'],
   favicon: ['ico', 'png'],
+  loginBackground: ['png', 'jpg', 'jpeg', 'webp'],
+  loginIllustration: ['png', 'jpg', 'jpeg', 'svg', 'webp'],
+  documentLogo: ['png', 'jpg', 'jpeg', 'svg'],
 };
 
-const EXT_LABEL: Record<'logo' | 'favicon', string> = {
+const EXT_LABEL: Record<BrandAssetVariant, string> = {
   logo: 'PNG, JPG, SVG',
+  darkLogo: 'PNG, JPG, SVG',
   favicon: 'ICO, PNG',
+  loginBackground: 'PNG, JPG, WEBP',
+  loginIllustration: 'PNG, JPG, SVG, WEBP',
+  documentLogo: 'PNG, JPG, SVG',
 };
 
 const MAX_SIZE = 2 * 1024 * 1024;
 
 interface FileUploadProps {
-  variant: 'logo' | 'favicon';
+  variant: BrandAssetVariant;
   preview: string | null;
   onChange: (file: File | null, preview: string | null) => void;
   disabled?: boolean;
+  compact?: boolean;
+  label?: string;
 }
 
 export function FileUpload({ variant, preview, onChange, disabled }: FileUploadProps) {
@@ -71,7 +89,16 @@ export function FileUpload({ variant, preview, onChange, disabled }: FileUploadP
     if (file) readFile(file);
   };
 
-  const isLogo = variant === 'logo';
+  const isLogo = variant === 'logo' || variant === 'darkLogo' || variant === 'documentLogo';
+
+  const assetLabel: Record<BrandAssetVariant, string> = {
+    logo: 'logo',
+    darkLogo: 'dark logo',
+    favicon: 'favicon',
+    loginBackground: 'login background',
+    loginIllustration: 'login illustration',
+    documentLogo: 'document logo',
+  };
 
   return (
     <div className="space-y-2">
@@ -153,7 +180,7 @@ export function FileUpload({ variant, preview, onChange, disabled }: FileUploadP
             <UploadCloud className="h-6 w-6 text-primary" />
           </motion.div>
           <p className="mt-3 text-sm font-medium text-foreground">
-            Drag & drop your {variant === 'logo' ? 'logo' : 'favicon'} here
+            Drag & drop your {assetLabel[variant]} here
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             or <span className="font-medium text-primary underline underline-offset-2">browse files</span>

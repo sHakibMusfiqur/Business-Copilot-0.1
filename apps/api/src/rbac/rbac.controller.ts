@@ -25,6 +25,8 @@ import { CreateRoleDto } from './dto/create-role.dto';
 import { UpdateRoleDto } from './dto/update-role.dto';
 import { AssignPermissionsDto } from './dto/assign-permissions.dto';
 import { AssignUserRolesDto } from './dto/assign-user-roles.dto';
+import { DuplicateRoleDto } from './dto/duplicate-role.dto';
+import { ClonePermissionsDto } from './dto/clone-permissions.dto';
 
 @ApiTags('RBAC')
 @Controller()
@@ -57,6 +59,15 @@ export class RbacController {
   async getPermissionsGrouped(@CurrentUser() user: CurrentUserPayload) {
     const orgId = this.requireOrg(user);
     return this.rbacService.findPermissionsGrouped(orgId);
+  }
+
+  @Get('permissions/me')
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ description: 'Current user permissions retrieved' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  async getMyPermissions(@CurrentUser() user: CurrentUserPayload) {
+    const orgId = this.requireOrg(user);
+    return this.rbacService.getMyPermissions(user.id, orgId);
   }
 
   // ─── Roles ─────────────────────────────────────────────────────
@@ -115,6 +126,23 @@ export class RbacController {
     await this.rbacService.deleteRole(orgId, roleId);
   }
 
+  @Post('roles/:id/duplicate')
+  @HttpCode(HttpStatus.CREATED)
+  @Permissions(['organization.manage'])
+  @ApiBearerAuth('access-token')
+  @ApiCreatedResponse({ description: 'Role duplicated' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiNotFoundResponse({ description: 'Role not found' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  async duplicateRole(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id') roleId: string,
+    @Body() dto: DuplicateRoleDto,
+  ) {
+    const orgId = this.requireOrg(user);
+    return this.rbacService.duplicateRole(orgId, roleId, dto);
+  }
+
   // ─── Role Permissions ──────────────────────────────────────────
 
   @Get('roles/:id/permissions')
@@ -144,6 +172,22 @@ export class RbacController {
     const orgId = this.requireOrg(user);
     await this.rbacService.assignPermissions(orgId, roleId, dto);
     return { message: 'Permissions updated successfully' };
+  }
+
+  @Put('roles/:id/permissions/clone')
+  @Permissions(['organization.manage'])
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ description: 'Permissions copied from another role' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiNotFoundResponse({ description: 'Role not found' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  async clonePermissions(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id') roleId: string,
+    @Body() dto: ClonePermissionsDto,
+  ) {
+    const orgId = this.requireOrg(user);
+    return this.rbacService.clonePermissions(orgId, roleId, dto);
   }
 
   // ─── User Roles ────────────────────────────────────────────────

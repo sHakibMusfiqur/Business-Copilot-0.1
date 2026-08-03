@@ -13,7 +13,10 @@ import { ConfigModule } from './config/config.module';
 import { CrmModule } from './crm/crm.module';
 import { CustomersModule } from './customers/customers.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { DepartmentsModule } from './departments/departments.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { InvitationsModule } from './invitations/invitations.module';
+import { MailModule } from './mail/mail.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { OrganizationModule } from './organization/organization.module';
 import { PlatformAdminModule } from './platform-admin/platform-admin.module';
@@ -45,6 +48,9 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
     SystemModule,
     CategoriesModule,
     CustomersModule,
+    DepartmentsModule,
+    InvitationsModule,
+    MailModule,
     OnboardingModule,
     OrganizationModule,
     PlatformAdminModule,

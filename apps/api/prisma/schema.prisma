@@ -27,6 +27,13 @@ enum OrganizationMemberRole {
   MEMBER
 }
 
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
 enum Gender {
   MALE
   FEMALE
@@ -161,6 +168,8 @@ model Organization {
   subscriptionPayments  SubscriptionPayment[]
   subscriptionInvoices  SubscriptionInvoice[]
   settings              OrganizationSettings?
+  invitations           Invitation[]
+  departments           Department[]
 }
 
 model OrganizationMember {
@@ -189,6 +198,11 @@ model User {
   isActive       Boolean    @default(true)
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id])
+  departmentId   String?
+  department     Department? @relation(fields: [departmentId], references: [id])
+  designation    String?
+  managerId      String?
+  manager        User?        @relation("DirectReports", fields: [managerId], references: [id])
   lastLoginAt    DateTime?
   deletedAt      DateTime?
   createdAt      DateTime   @default(now())
@@ -210,6 +224,9 @@ model User {
   memberOf             OrganizationMember[]
   roleAssignments      UserRoleAssignment[]
   systemSettingChanges SystemSettingVersion[]
+  reports               User[]      @relation("DirectReports")
+  inviteeInvitations    Invitation[] @relation("InvitedReportingManager")
+  acceptedInvitation    Invitation? @relation("AcceptedInvitation")
 }
 
 model Permission {
@@ -747,15 +764,46 @@ model PaymentAllocation {
 }
 
 model Department {
-  id        String     @id @default(cuid())
-  name      String
-  code      String     @unique
-  managerId String?
-  isActive  Boolean    @default(true)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id             String     @id @default(cuid())
+  name           String
+  code           String     @unique
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  managerId      String?
+  isActive       Boolean    @default(true)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 
-  employees Employee[]
+  employees    Employee[]
+  users        User[]
+  invitations  Invitation[]
+}
+
+model Invitation {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedById    String
+  email          String
+  name           String
+  departmentId   String?
+  department     Department?      @relation(fields: [departmentId], references: [id])
+  designation    String?
+  managerId      String?
+  manager        User?            @relation("InvitedReportingManager", fields: [managerId], references: [id])
+  roleIds        String[]
+  tokenExpiresAt DateTime
+  status         InvitationStatus @default(PENDING)
+  acceptedAt     DateTime?
+  acceptedUserId String?       @unique
+  acceptedUser   User?         @relation("AcceptedInvitation", fields: [acceptedUserId], references: [id])
+  resendCount    Int              @default(0)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([status])
 }
 
 model Employee {

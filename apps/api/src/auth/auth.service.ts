@@ -2,6 +2,7 @@ import {
   Injectable,
   UnauthorizedException,
   ConflictException,
+  BadRequestException,
   Logger,
 } from '@nestjs/common';
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
@@ -12,6 +13,8 @@ import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { ConfigService } from '../config/config.service';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
+import { syncSystemRolesForOrg } from '../rbac/permission-catalog';
+import { MailService } from '../mail/mail.service';
 
 import { AuditService } from '../audit/audit.service';
 import { AuthRateLimiterService } from './auth-rate-limiter.service';
@@ -23,6 +26,10 @@ interface Tokens {
   refreshToken: string;
 }
 
+const PASSWORD_RESET_ISSUER = 'bc-password-reset';
+const PASSWORD_RESET_AUDIENCE = 'bc-password-reset-consume';
+const PASSWORD_RESET_TTL = 60 * 60; // seconds
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -33,6 +40,7 @@ export class AuthService {
     private readonly configService: ConfigService,
     private readonly rateLimiter: AuthRateLimiterService,
     private readonly auditService: AuditService,
+    private readonly mailService: MailService,
   ) {}
 
   async register(dto: RegisterDto, ip: string, userAgent?: string) {
@@ -53,6 +61,29 @@ export class AuthService {
         userAgent,
       });
       throw new ConflictException('Email already registered');
+    }
+
+    // Employees join through invitations, never public registration. If a
+    // pending invitation exists for this email, reject the signup and point
+    // the user to their invitation link instead.
+    const pendingInvitation = await this.prisma.invitation.findFirst({
+      where: { email: dto.email, status: 'PENDING' },
+      select: { id: true },
+    });
+    if (pendingInvitation) {
+      await this.rateLimiter.recordAttempt(`email:${dto.email}`);
+      await this.rateLimiter.recordAttempt(`ip:${ip}`);
+      await this.auditService.record({
+        action: 'REGISTER',
+        status: 'FAILURE',
+        entity: 'User',
+        metadata: { email: dto.email, reason: 'Invitation pending; public registration blocked' },
+        ipAddress: ip,
+        userAgent,
+      });
+      throw new ConflictException(
+        'This email has a pending invitation. Use your invitation link to join your organization instead.',
+      );
     }
 
     this.logger.log(`=== AUTH SERVICE about to hash password ===`);
@@ -105,25 +136,7 @@ export class AuthService {
           },
         });
 
-        const allPermissions = await tx.permission.findMany({ select: { id: true } });
-
-        const ownerRole = await tx.role.create({
-          data: {
-            name: 'Owner',
-            description: 'Full access to all organization features',
-            isSystem: true,
-            organizationId: org.id,
-          },
-        });
-
-        if (allPermissions.length > 0) {
-          await tx.rolePermission.createMany({
-            data: allPermissions.map((perm) => ({
-              roleId: ownerRole.id,
-              permissionId: perm.id,
-            })),
-          });
-        }
+        const { ownerRole } = await syncSystemRolesForOrg(tx, org.id);
 
         await tx.userRoleAssignment.create({
           data: {
@@ -437,6 +450,30 @@ export class AuthService {
     if (user) {
       await this.rateLimiter.clearAttempts(`email:${email}`);
       this.logger.log(`Password reset requested for ${email}`);
+
+      try {
+        const resetToken = this.jwtService.sign(
+          { sub: user.id, purpose: 'password-reset' },
+          {
+            secret: this.configService.jwtSecret,
+            expiresIn: PASSWORD_RESET_TTL,
+            issuer: PASSWORD_RESET_ISSUER,
+            audience: PASSWORD_RESET_AUDIENCE,
+          },
+        );
+        const resetUrl = `${this.configService.webUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
+        const result = await this.mailService.sendOrgEmail(user.organizationId, {
+          to: user.email,
+          type: 'passwordReset',
+          data: { passwordReset: { resetUrl } },
+        });
+        if (!result.sent) {
+          this.logger.warn(`Password reset email not delivered for ${email} (${result.reason})`);
+        }
+      } catch (error) {
+        this.logger.error(`Failed to send password reset email for ${email}: ${(error as Error).message}`);
+      }
+
       await this.auditService.record({
         userId: user.id,
         organizationId: user.organizationId ?? undefined,
@@ -458,6 +495,57 @@ export class AuthService {
         userAgent,
       });
     }
+  }
+
+  async resetPassword(token: string, newPassword: string, ip?: string, userAgent?: string): Promise<{ message: string }> {
+    let payload: { sub?: string; purpose?: string };
+    try {
+      payload = this.jwtService.verify<{ sub?: string; purpose?: string }>(token, {
+        secret: this.configService.jwtSecret,
+        issuer: PASSWORD_RESET_ISSUER,
+        audience: PASSWORD_RESET_AUDIENCE,
+      });
+    } catch {
+      throw new BadRequestException('This reset link is invalid or has expired');
+    }
+
+    if (payload.purpose !== 'password-reset' || !payload.sub) {
+      throw new BadRequestException('This reset link is invalid or has expired');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { id: true, email: true, organizationId: true, deletedAt: true, isActive: true },
+    });
+
+    if (!user || user.deletedAt) {
+      throw new BadRequestException('This reset link is invalid or has expired');
+    }
+    if (!user.isActive) {
+      throw new BadRequestException('This account has been deactivated');
+    }
+
+    const hashedPassword = await argon2.hash(newPassword);
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { password: hashedPassword },
+    });
+
+    // Invalidate all existing sessions so a leaked token cannot be reused.
+    await this.prisma.refreshToken.deleteMany({ where: { userId: user.id } });
+
+    await this.auditService.record({
+      userId: user.id,
+      organizationId: user.organizationId ?? undefined,
+      action: 'PASSWORD_RESET',
+      status: 'SUCCESS',
+      entity: 'User',
+      entityId: user.id,
+      ipAddress: ip,
+      userAgent,
+    });
+
+    return { message: 'Password reset successfully. You can now sign in.' };
   }
 
   async logout(userId: string, ip?: string, userAgent?: string) {

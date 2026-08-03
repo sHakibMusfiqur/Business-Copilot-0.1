@@ -110,6 +110,16 @@ export class SettingsController {
     return this.settingsService.upsert(orgId, 'email', { ...dto });
   }
 
+  @Post('email/preview')
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ description: 'Branded email preview rendered' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiForbiddenResponse({ description: 'User does not belong to an organization' })
+  async previewEmail(@CurrentUser() user: CurrentUserPayload) {
+    const orgId = this.requireOrg(user);
+    return this.settingsService.renderEmailPreview(orgId);
+  }
+
   @Put('billing')
   @ApiBearerAuth('access-token')
   @ApiOkResponse({ description: 'Billing settings updated' })
@@ -160,6 +170,9 @@ export class SettingsController {
       [
         { name: 'logo', maxCount: 1 },
         { name: 'favicon', maxCount: 1 },
+        { name: 'darkLogo', maxCount: 1 },
+        { name: 'loginBackground', maxCount: 1 },
+        { name: 'loginIllustration', maxCount: 1 },
       ],
       settingsMulterOptions,
     ),

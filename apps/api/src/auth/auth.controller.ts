@@ -32,6 +32,7 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -144,6 +145,22 @@ export class AuthController {
     const userAgent = request.headers['user-agent'] ?? '';
     await this.authService.forgotPassword(email, ip, userAgent);
     return { message: 'If the email exists, a reset link has been sent' };
+  }
+
+  @Public()
+  @UseGuards(AuthThrottleGuard)
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiBody({ type: ResetPasswordDto })
+  @ApiOkResponse({ description: 'Password reset successfully' })
+  @ApiTooManyRequestsResponse({ description: 'Too many reset attempts' })
+  async resetPassword(
+    @Body() dto: ResetPasswordDto,
+    @Req() request: Request,
+  ) {
+    const ip = request.ip ?? '';
+    const userAgent = request.headers['user-agent'] ?? '';
+    return this.authService.resetPassword(dto.token, dto.password, ip, userAgent);
   }
 
   @UseGuards(JwtAuthGuard)

@@ -4,7 +4,10 @@ import type { NextRequest } from 'next/server';
 import type { JwtPayload } from '@/lib/jwt';
 import { decodeJWT, isTokenExpired } from '@/lib/jwt';
 
-const PUBLIC_ROUTES = ['/', '/login', '/register', '/forgot-password', '/reset-password'];
+const PUBLIC_ROUTES = ['/', '/login', '/register', '/forgot-password', '/reset-password', '/accept-invite'];
+
+// Organization-aware login via URL path: businesscopilot.com/company/:slug/login
+const PUBLIC_PREFIXES = ['/company/'];
 
 // An authenticated user may still start a fresh registration (consecutive
 // accounts) without being bounced to /dashboard.
@@ -55,7 +58,7 @@ export function middleware(request: NextRequest) {
   const onboardingCompleted = isLoggedIn ? activePayload.onboardingCompleted === true : false;
 
   // ── Public routes ──────────────────────────────────────────────
-  if (PUBLIC_ROUTES.includes(pathname)) {
+  if (PUBLIC_ROUTES.includes(pathname) || PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
     if (!isLoggedIn) {
       return NextResponse.next();
     }

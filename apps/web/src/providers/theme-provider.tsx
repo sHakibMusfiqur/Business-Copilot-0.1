@@ -9,12 +9,14 @@ interface ThemeProviderProps {
 }
 
 export function ThemeProvider({ children }: ThemeProviderProps) {
-  const { theme } = useThemeStore();
+  const { theme, orgTheme } = useThemeStore();
 
   useEffect(() => {
     const root = document.documentElement;
+    const effective: 'light' | 'dark' | 'system' =
+      theme === 'system' ? (orgTheme ?? 'system') : theme;
 
-    if (theme === 'system') {
+    if (effective === 'system') {
       const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
       root.classList.toggle('dark', mediaQuery.matches);
 
@@ -25,8 +27,8 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       return () => mediaQuery.removeEventListener('change', handler);
     }
 
-    root.classList.toggle('dark', theme === 'dark');
-  }, [theme]);
+    root.classList.toggle('dark', effective === 'dark');
+  }, [theme, orgTheme]);
 
   return <>{children}</>;
 }

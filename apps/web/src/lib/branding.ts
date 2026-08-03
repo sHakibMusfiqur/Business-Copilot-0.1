@@ -7,7 +7,19 @@ export interface BrandingTheme {
   secondaryColor: string;
   accentColor: string;
   logoUrl: string | null;
+  darkLogoUrl: string | null;
   faviconUrl: string | null;
+  loginBackgroundUrl: string | null;
+  loginIllustrationUrl: string | null;
+  fontFamily: string;
+  headingFont: string;
+  dashboardTheme: 'light' | 'dark' | 'system' | 'default';
+  letterheadEnabled: boolean;
+  letterheadText: string;
+  documentFooterText: string;
+  invoiceFooterText: string;
+  reportFooterText: string;
+  emailFooterText: string;
 }
 
 export const DEFAULT_BRANDING: BrandingTheme = {
@@ -17,8 +29,23 @@ export const DEFAULT_BRANDING: BrandingTheme = {
   secondaryColor: '#8B5CF6',
   accentColor: '#10B981',
   logoUrl: null,
+  darkLogoUrl: null,
   faviconUrl: null,
+  loginBackgroundUrl: null,
+  loginIllustrationUrl: null,
+  fontFamily: '',
+  headingFont: '',
+  dashboardTheme: 'default',
+  letterheadEnabled: false,
+  letterheadText: '',
+  documentFooterText: '',
+  invoiceFooterText: '',
+  reportFooterText: '',
+  emailFooterText: '',
 };
+
+export const SYSTEM_DEFAULT_FONT =
+  "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
 
 export function normalizeBranding(stored: Record<string, unknown> | null | undefined): BrandingTheme {
   const s = stored ?? {};
@@ -26,6 +53,8 @@ export function normalizeBranding(stored: Record<string, unknown> | null | undef
     typeof value === 'string' && HEX_RE.test(value) ? value : fallback;
   const url = (value: unknown): string | null =>
     typeof value === 'string' && value.trim() ? value.trim() : null;
+  const text = (value: unknown): string =>
+    typeof value === 'string' ? value.trim() : '';
 
   return {
     brandName:
@@ -37,7 +66,103 @@ export function normalizeBranding(stored: Record<string, unknown> | null | undef
     secondaryColor: color(s.secondaryColor, DEFAULT_BRANDING.secondaryColor),
     accentColor: color(s.accentColor, DEFAULT_BRANDING.accentColor),
     logoUrl: url(s.logoUrl),
+    darkLogoUrl: url(s.darkLogoUrl),
     faviconUrl: url(s.faviconUrl),
+    loginBackgroundUrl: url(s.loginBackgroundUrl),
+    loginIllustrationUrl: url(s.loginIllustrationUrl),
+    fontFamily: text(s.fontFamily),
+    headingFont: text(s.headingFont),
+    dashboardTheme:
+      s.dashboardTheme === 'light' ||
+      s.dashboardTheme === 'dark' ||
+      s.dashboardTheme === 'system'
+        ? s.dashboardTheme
+        : 'default',
+    letterheadEnabled: s.letterheadEnabled === true,
+    letterheadText: text(s.letterheadText),
+    documentFooterText: text(s.documentFooterText),
+    invoiceFooterText: text(s.invoiceFooterText),
+    reportFooterText: text(s.reportFooterText),
+    emailFooterText: text(s.emailFooterText),
+  };
+}
+
+/** A plain app-default font stack with the chosen brand family first. */
+export function brandFontStack(family: string): string {
+  const trimmed = family.trim().replace(/["']/g, '');
+  if (!trimmed) return SYSTEM_DEFAULT_FONT;
+  return `'${trimmed}', ${SYSTEM_DEFAULT_FONT}`;
+}
+
+const GOOGLE_FONT_RE = /^[A-Za-z0-9][A-Za-z0-9 _'-]{0,60}$/;
+
+/** True when the value is a safe Google Fonts family name (can be injected). */
+export function isGoogleFont(name: string): boolean {
+  const trimmed = name.trim().replace(/["']/g, '');
+  if (!trimmed || trimmed.includes(',')) return false;
+  return GOOGLE_FONT_RE.test(trimmed);
+}
+
+export function fontCssUrl(family: string): string | null {
+  const trimmed = family.trim().replace(/["']/g, '');
+  if (!isGoogleFont(family)) return null;
+  return `https://fonts.googleapis.com/css2?family=${encodeURIComponent(trimmed)}&display=swap`;
+}
+
+/** Returns the logo to use on a light or dark surface. */
+export function resolveLogo(
+  brand: Pick<BrandingTheme, 'logoUrl' | 'darkLogoUrl'>,
+  opts?: { dark?: boolean },
+): string | null {
+  if (opts?.dark && brand.darkLogoUrl) return brand.darkLogoUrl;
+  return brand.logoUrl;
+}
+
+/** Document brand context used by PDF / invoice / report / letterhead surfaces. */
+export function documentBrand(brand: BrandingTheme): {
+  logoUrl: string | null;
+  primaryColor: string;
+  secondaryColor: string;
+  accentColor: string;
+  fontFamily: string;
+  headingFont: string;
+  letterheadEnabled: boolean;
+  letterheadText: string;
+  footerText: string;
+} {
+  return {
+    logoUrl: brand.logoUrl,
+    primaryColor: brand.primaryColor,
+    secondaryColor: brand.secondaryColor,
+    accentColor: brand.accentColor,
+    fontFamily: brandFontStack(brand.fontFamily),
+    headingFont: brand.headingFont.trim() ? brandFontStack(brand.headingFont) : brandFontStack(brand.fontFamily),
+    letterheadEnabled: brand.letterheadEnabled,
+    letterheadText: brand.letterheadText,
+    footerText: brand.documentFooterText,
+  };
+}
+
+/** Email brand context used by the branded email template. */
+export function emailBrand(brand: BrandingTheme): {
+  primaryColor: string;
+  secondaryColor: string;
+  accentColor: string;
+  logoUrl: string | null;
+  companyName: string;
+  tagline: string;
+  fontFamily: string;
+  footerText: string;
+} {
+  return {
+    companyName: brand.brandName,
+    tagline: brand.tagline,
+    primaryColor: brand.primaryColor,
+    secondaryColor: brand.secondaryColor,
+    accentColor: brand.accentColor,
+    logoUrl: brand.logoUrl,
+    fontFamily: brand.fontFamily,
+    footerText: brand.emailFooterText,
   };
 }
 

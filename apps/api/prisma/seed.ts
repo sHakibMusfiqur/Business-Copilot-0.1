@@ -1,5 +1,6 @@
 import { PrismaClient, UserRole, OrganizationMemberRole } from '@prisma/client';
 import * as argon2 from 'argon2';
+import { upsertPermissions, syncSystemRolesForOrg } from '../src/rbac/permission-catalog';
 
 const prisma = new PrismaClient();
 
@@ -33,176 +34,6 @@ function requireSeedCredentials(): void {
       'Set them before running `npm run db:seed`.',
     );
   }
-}
-
-const SEED_PERMISSIONS = [
-  { name: 'users.read', module: 'users', label: 'View Users' },
-  { name: 'users.create', module: 'users', label: 'Create Users' },
-  { name: 'users.update', module: 'users', label: 'Update Users' },
-  { name: 'users.delete', module: 'users', label: 'Delete Users' },
-  { name: 'customers.read', module: 'customers', label: 'View Customers' },
-  { name: 'customers.create', module: 'customers', label: 'Create Customers' },
-  { name: 'customers.update', module: 'customers', label: 'Update Customers' },
-  { name: 'customers.delete', module: 'customers', label: 'Delete Customers' },
-  { name: 'suppliers.read', module: 'suppliers', label: 'View Suppliers' },
-  { name: 'suppliers.create', module: 'suppliers', label: 'Create Suppliers' },
-  { name: 'suppliers.update', module: 'suppliers', label: 'Update Suppliers' },
-  { name: 'suppliers.delete', module: 'suppliers', label: 'Delete Suppliers' },
-  { name: 'products.read', module: 'products', label: 'View Products' },
-  { name: 'products.create', module: 'products', label: 'Create Products' },
-  { name: 'products.update', module: 'products', label: 'Update Products' },
-  { name: 'products.delete', module: 'products', label: 'Delete Products' },
-  { name: 'inventory.read', module: 'inventory', label: 'View Inventory' },
-  { name: 'inventory.manage', module: 'inventory', label: 'Manage Inventory' },
-  { name: 'inventory.adjust', module: 'inventory', label: 'Adjust Stock' },
-  { name: 'purchase.read', module: 'purchase', label: 'View Purchase Orders' },
-  { name: 'purchase.create', module: 'purchase', label: 'Create Purchase Orders' },
-  { name: 'purchase.update', module: 'purchase', label: 'Update Purchase Orders' },
-  { name: 'purchase.receive', module: 'purchase', label: 'Receive Purchase Orders' },
-  { name: 'purchase.delete', module: 'purchase', label: 'Delete Purchase Orders' },
-  { name: 'sales.read', module: 'sales', label: 'View Sales Orders' },
-  { name: 'sales.create', module: 'sales', label: 'Create Sales Orders' },
-  { name: 'sales.update', module: 'sales', label: 'Update Sales Orders' },
-  { name: 'sales.deliver', module: 'sales', label: 'Deliver Sales Orders' },
-  { name: 'sales.delete', module: 'sales', label: 'Delete Sales Orders' },
-  { name: 'reports.read', module: 'reports', label: 'View Reports' },
-  { name: 'reports.finance', module: 'reports', label: 'View Financial Reports' },
-  { name: 'dashboard.read', module: 'dashboard', label: 'View Dashboard' },
-  { name: 'organization.manage', module: 'organization', label: 'Manage Organization' },
-  { name: 'settings.manage', module: 'settings', label: 'Manage Settings' },
-  { name: 'accounting.accounts.read', module: 'accounting', label: 'View Chart of Accounts' },
-  { name: 'accounting.accounts.create', module: 'accounting', label: 'Create Accounts' },
-  { name: 'accounting.accounts.update', module: 'accounting', label: 'Update Accounts' },
-  { name: 'accounting.accounts.delete', module: 'accounting', label: 'Delete Accounts' },
-  { name: 'accounting.journal.read', module: 'accounting', label: 'View Journal Entries' },
-  { name: 'accounting.journal.create', module: 'accounting', label: 'Create Journal Entries' },
-  { name: 'accounting.journal.post', module: 'accounting', label: 'Post Journal Entries' },
-  { name: 'accounting.journal.delete', module: 'accounting', label: 'Delete Journal Entries' },
-  { name: 'accounting.receivables.read', module: 'accounting', label: 'View Receivables' },
-  { name: 'accounting.payables.read', module: 'accounting', label: 'View Payables' },
-  { name: 'payments.create', module: 'payments', label: 'Create Payments' },
-  { name: 'payments.read', module: 'payments', label: 'View Payments' },
-  { name: 'crm.read', module: 'crm', label: 'View CRM' },
-  { name: 'crm.create', module: 'crm', label: 'Create Leads' },
-  { name: 'crm.update', module: 'crm', label: 'Update Leads' },
-  { name: 'crm.delete', module: 'crm', label: 'Delete Leads' },
-  { name: 'crm.activities', module: 'crm', label: 'Manage Activities' },
-  { name: 'audit.read', module: 'audit', label: 'View Audit Logs' },
-  { name: 'billing.read', module: 'billing', label: 'View Billing & Subscription' },
-  { name: 'billing.manage', module: 'billing', label: 'Manage Subscription & Payment' },
-];
-
-const ADMIN_PERMISSIONS = [
-  'users.read',
-  'users.create',
-  'users.update',
-  'users.delete',
-  'customers.read',
-  'customers.create',
-  'customers.update',
-  'suppliers.read',
-  'suppliers.create',
-  'suppliers.update',
-  'products.read',
-  'products.create',
-  'products.update',
-  'inventory.read',
-  'inventory.manage',
-  'inventory.adjust',
-  'purchase.read',
-  'purchase.create',
-  'purchase.update',
-  'purchase.receive',
-  'purchase.delete',
-  'sales.read',
-  'sales.create',
-  'sales.update',
-  'sales.deliver',
-  'sales.delete',
-  'reports.read',
-  'reports.finance',
-  'dashboard.read',
-  'settings.manage',
-  'accounting.accounts.read',
-  'accounting.accounts.create',
-  'accounting.accounts.update',
-  'accounting.journal.read',
-  'accounting.journal.create',
-  'accounting.journal.post',
-  'accounting.receivables.read',
-  'accounting.payables.read',
-  'payments.create',
-  'payments.read',
-  'crm.read',
-  'crm.create',
-  'crm.update',
-  'crm.delete',
-  'crm.activities',
-  'audit.read',
-  'billing.read',
-  'billing.manage',
-];
-
-async function seedPermissions() {
-  const results: Array<{ name: string; id: string }> = [];
-  for (const perm of SEED_PERMISSIONS) {
-    const created = await prisma.permission.upsert({
-      where: { name: perm.name },
-      update: { label: perm.label, module: perm.module },
-      create: perm,
-    });
-    results.push({ name: created.name, id: created.id });
-  }
-  console.log(`  Permissions: ${results.length} seeded`);
-  return results;
-}
-
-async function seedRoles(orgId: string, permissionIds: string[], adminPermissionIds: string[]) {
-  const ownerRole = await prisma.role.upsert({
-    where: { organizationId_name: { organizationId: orgId, name: 'Owner' } },
-    update: {},
-    create: {
-      name: 'Owner',
-      description: 'Full access to all organization features',
-      isSystem: true,
-      organizationId: orgId,
-    },
-  });
-
-  await prisma.rolePermission.deleteMany({ where: { roleId: ownerRole.id } });
-  if (permissionIds.length > 0) {
-    await prisma.rolePermission.createMany({
-      data: permissionIds.map((permissionId) => ({
-        roleId: ownerRole.id,
-        permissionId,
-      })),
-    });
-  }
-  console.log(`  Role: Owner (${ownerRole.id}) — ${permissionIds.length} permissions`);
-
-  const adminRole = await prisma.role.upsert({
-    where: { organizationId_name: { organizationId: orgId, name: 'Admin' } },
-    update: {},
-    create: {
-      name: 'Admin',
-      description: 'Administrative access with some restrictions',
-      isSystem: true,
-      organizationId: orgId,
-    },
-  });
-
-  await prisma.rolePermission.deleteMany({ where: { roleId: adminRole.id } });
-  if (adminPermissionIds.length > 0) {
-    await prisma.rolePermission.createMany({
-      data: adminPermissionIds.map((permissionId) => ({
-        roleId: adminRole.id,
-        permissionId,
-      })),
-    });
-  }
-  console.log(`  Role: Admin (${adminRole.id}) — ${adminPermissionIds.length} permissions`);
-
-  return { ownerRole, adminRole };
 }
 
 async function assignRolesToUser(userId: string, roleIds: string[]) {
@@ -314,14 +145,12 @@ async function main() {
   // ─── RBAC ──────────────────────────────────────────────────────
 
   console.log('Seeding RBAC...');
-  const permissions = await seedPermissions();
-  const permissionMap = new Map(permissions.map((p) => [p.name, p.id]));
-  const allPermissionIds = permissions.map((p) => p.id);
-  const adminPermissionIds = ADMIN_PERMISSIONS
-    .map((name) => permissionMap.get(name))
-    .filter((id): id is string => id !== undefined);
+  const permissions = await upsertPermissions(prisma);
+  console.log(`  Permissions: ${permissions.length} seeded`);
 
-  const { ownerRole, adminRole } = await seedRoles(org.id, allPermissionIds, adminPermissionIds);
+  const { ownerRole, adminRole } = await syncSystemRolesForOrg(prisma, org.id);
+  console.log(`  Role: Owner (${ownerRole.id})`);
+  console.log(`  Role: Admin (${adminRole.id})`);
 
   await assignRolesToUser(admin.id, [ownerRole.id]);
   console.log(`  Assigned Owner role to ${admin.email}`);

@@ -4,6 +4,7 @@ import { PassportModule } from '@nestjs/passport';
 
 import { ConfigService } from '../config/config.service';
 import { AuthThrottleGuard } from '../common/guards/auth-throttle.guard';
+import { MailModule } from '../mail/mail.module';
 
 import { AuditModule } from '../audit/audit.module';
 import { AuthRateLimiterService } from './auth-rate-limiter.service';
@@ -31,6 +32,7 @@ let _redisHealth: RedisHealthService | null = null;
       }),
     }),
     AuditModule,
+    MailModule,
   ],
   controllers: [AuthController],
   providers: [

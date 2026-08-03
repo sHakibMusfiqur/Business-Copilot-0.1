@@ -3,18 +3,25 @@ import { ApiTags, ApiBearerAuth, ApiOkResponse, ApiUnauthorizedResponse, ApiForb
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
+import { Permissions } from '../common/decorators/permissions.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { PermissionGuard } from '../common/guards/permission.guard';
 
 import { DashboardService } from './dashboard.service';
+import { RbacService } from '../rbac/rbac.service';
 
 @ApiTags('Dashboard')
 @Controller('dashboard')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionGuard)
 export class DashboardController {
-  constructor(private readonly dashboardService: DashboardService) {}
+  constructor(
+    private readonly dashboardService: DashboardService,
+    private readonly rbacService: RbacService,
+  ) {}
 
   @Get('overview')
   @HttpCode(HttpStatus.OK)
+  @Permissions(['dashboard.read'])
   @ApiBearerAuth('access-token')
   @ApiOkResponse({ description: 'Dashboard overview retrieved successfully' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
@@ -23,6 +30,7 @@ export class DashboardController {
     if (!user.organizationId) {
       throw new ForbiddenException('User does not belong to an organization');
     }
-    return this.dashboardService.getOverview(user.organizationId, user.id);
+    const permissions = await this.rbacService.getUserPermissions(user.id, user.organizationId);
+    return this.dashboardService.getOverview(user.organizationId, user.id, permissions);
   }
 }

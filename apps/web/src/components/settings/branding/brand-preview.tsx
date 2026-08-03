@@ -4,7 +4,7 @@ import { useState, type ComponentType } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Users, Package, ShoppingCart, Search, Bell,
-  Mail, PanelsTopLeft, PanelTop, LogIn, Inbox,
+  Mail, PanelsTopLeft, PanelTop, LogIn, Inbox, FileText,
 } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
@@ -17,6 +17,7 @@ const TABS = [
   { id: 'navbar', label: 'Navbar', icon: PanelTop },
   { id: 'login', label: 'Login', icon: LogIn },
   { id: 'email', label: 'Email', icon: Inbox },
+  { id: 'documents', label: 'Documents', icon: FileText },
 ] as const;
 
 type TabId = (typeof TABS)[number]['id'];
@@ -185,11 +186,72 @@ function EmailPreview({ brand }: { brand: BrandValues }) {
   );
 }
 
+function DocumentsPreview({ brand }: { brand: BrandValues }) {
+  const headingFont = brand.headingFont.trim() ? brand.headingFont : brand.fontFamily;
+  const letterhead = brand.letterheadEnabled && brand.letterheadText.trim();
+  return (
+    <div className="overflow-hidden rounded-xl border border-border bg-background shadow-inner">
+      {letterhead && (
+        <div
+          className="border-b border-border px-4 py-2.5"
+          style={{ fontFamily: headingFont ? `'${headingFont}', sans-serif` : undefined }}
+        >
+          <div className="flex items-center gap-2">
+            {brand.logoUrl ? (
+              <div
+                className="h-5 w-5 shrink-0 bg-contain bg-center bg-no-repeat"
+                style={{ backgroundImage: `url(${brand.logoUrl})` }}
+              />
+            ) : (
+              <div
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[8px] font-bold text-white"
+                style={{ backgroundColor: brand.primaryColor }}
+              >
+                {(brand.brandName.trim().slice(0, 2) || 'BC').toUpperCase()}
+              </div>
+            )}
+            <span className="text-[10px] font-semibold text-foreground">{brand.brandName || 'Company'}</span>
+          </div>
+          <p className="mt-1 text-[8px] leading-relaxed text-muted-foreground">{brand.letterheadText}</p>
+        </div>
+      )}
+      <div className="px-4 py-3">
+        <div className="h-2.5 w-1/3 rounded bg-muted" style={{ fontFamily: headingFont ? `'${headingFont}', sans-serif` : undefined }} />
+        <div className="mt-2.5 space-y-1.5">
+          <div className="h-1.5 rounded bg-muted" />
+          <div className="h-1.5 w-5/6 rounded bg-muted" />
+          <div className="h-1.5 w-4/6 rounded bg-muted" />
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <div className="rounded-lg border border-border p-2">
+            <p className="text-[7px] text-muted-foreground">Subtotal</p>
+            <div className="mt-1 h-1.5 w-2/3 rounded" style={{ backgroundColor: brand.primaryColor }} />
+          </div>
+          <div className="rounded-lg border border-border p-2">
+            <p className="text-[7px] text-muted-foreground">Total</p>
+            <div className="mt-1 h-1.5 w-2/3 rounded" style={{ backgroundColor: brand.accentColor }} />
+          </div>
+        </div>
+      </div>
+      {brand.documentFooterText.trim() ? (
+        <div className="flex items-center gap-1.5 border-t border-border px-4 py-2">
+          <div
+            className="h-2.5 w-10 rounded-sm"
+            style={{ background: `linear-gradient(90deg, ${brand.primaryColor}, ${brand.secondaryColor})` }}
+          />
+          <p className="truncate text-[7px] text-muted-foreground">{brand.documentFooterText}</p>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 const PREVIEWS: Record<TabId, ComponentType<{ brand: BrandValues }>> = {
   sidebar: SidebarPreview,
   navbar: NavbarPreview,
   login: LoginPreview,
   email: EmailPreview,
+  documents: DocumentsPreview,
 };
 
 export function BrandPreview({ brand }: { brand: BrandValues }) {

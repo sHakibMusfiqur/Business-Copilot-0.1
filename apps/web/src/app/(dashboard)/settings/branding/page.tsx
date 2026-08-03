@@ -4,11 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronRight, Save, Loader2, Eye, Check, AlertTriangle } from 'lucide-react';
+import { ChevronRight, Save, Loader2, Eye, Check, AlertTriangle, Type, Palette, FileText, LogIn, Layers } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/use-toast';
 import { FileUpload } from '@/components/settings/branding/file-upload';
@@ -20,21 +22,52 @@ import { DEFAULT_BRANDING, normalizeBranding, type BrandingTheme } from '@/lib/b
 import { markChecklistComplete } from '@/lib/onboarding-api';
 import { getOnboardingSession } from '@/lib/session-storage';
 import { queryClient } from '@/lib/query-client';
-import { HEX_RE } from '@/lib/validation';
+import { HEX_RE, FONT_RE } from '@/lib/validation';
 import { useBrandingStore } from '@/store/branding-store';
+import { cn } from '@/lib/utils';
 
 const PRESET_PRIMARY = ['#3B82F6', '#6366F1', '#F59E0B', '#EF4444', '#10B981', '#8B5CF6'];
 const PRESET_SECONDARY = ['#8B5CF6', '#6366F1', '#0EA5E9', '#EC4899', '#F97316', '#14B8A6'];
 const PRESET_ACCENT = ['#10B981', '#22C55E', '#EAB308', '#F43F5E', '#38BDF8', '#84CC16'];
 
-type BrandSettings = Pick<BrandingTheme, 'brandName' | 'tagline' | 'primaryColor' | 'secondaryColor' | 'accentColor'>;
+type FormValues = Omit<
+  BrandingTheme,
+  'logoUrl' | 'darkLogoUrl' | 'faviconUrl' | 'loginBackgroundUrl' | 'loginIllustrationUrl'
+>;
 
-const INITIAL: BrandSettings = {
+const INITIAL: FormValues = {
   brandName: '',
   tagline: '',
   primaryColor: DEFAULT_BRANDING.primaryColor,
   secondaryColor: DEFAULT_BRANDING.secondaryColor,
   accentColor: DEFAULT_BRANDING.accentColor,
+  fontFamily: '',
+  headingFont: '',
+  dashboardTheme: 'default',
+  letterheadEnabled: false,
+  letterheadText: '',
+  documentFooterText: '',
+  invoiceFooterText: '',
+  reportFooterText: '',
+  emailFooterText: '',
+};
+
+type AssetKey = 'logo' | 'favicon' | 'darkLogo' | 'loginBackground' | 'loginIllustration';
+
+const ASSETS: Array<{ key: AssetKey; urlKey: string }> = [
+  { key: 'logo', urlKey: 'logoUrl' },
+  { key: 'favicon', urlKey: 'faviconUrl' },
+  { key: 'darkLogo', urlKey: 'darkLogoUrl' },
+  { key: 'loginBackground', urlKey: 'loginBackgroundUrl' },
+  { key: 'loginIllustration', urlKey: 'loginIllustrationUrl' },
+];
+
+const EMPTY_ASSETS: Record<AssetKey, null> = {
+  logo: null,
+  favicon: null,
+  darkLogo: null,
+  loginBackground: null,
+  loginIllustration: null,
 };
 
 interface PendingFile {
@@ -42,29 +75,40 @@ interface PendingFile {
   preview: string | null;
 }
 
+const THEME_OPTIONS = [
+  { value: 'default', label: 'Default', description: 'Follow the app default' },
+  { value: 'light', label: 'Light', description: 'Always light' },
+  { value: 'dark', label: 'Dark', description: 'Always dark' },
+  { value: 'system', label: 'System', description: 'Follow device setting' },
+] as const;
+
 export default function BrandingPage() {
   const router = useRouter();
   const { toast } = useToast();
 
-  const [values, setValues] = useState<BrandSettings>(INITIAL);
-  const [logoFile, setLogoFile] = useState<PendingFile | null>(null);
-  const [faviconFile, setFaviconFile] = useState<PendingFile | null>(null);
-  const [savedLogoUrl, setSavedLogoUrl] = useState<string | null>(null);
-  const [savedFaviconUrl, setSavedFaviconUrl] = useState<string | null>(null);
-  const [logoRemoved, setLogoRemoved] = useState(false);
-  const [faviconRemoved, setFaviconRemoved] = useState(false);
+  const [values, setValues] = useState<FormValues>(INITIAL);
+  const [pendingFiles, setPendingFiles] = useState<Record<AssetKey, PendingFile | null>>(EMPTY_ASSETS);
+  const [savedUrls, setSavedUrls] = useState<Record<AssetKey, string | null>>(EMPTY_ASSETS);
+  const [removed, setRemoved] = useState<Record<AssetKey, boolean>>({
+    logo: false,
+    favicon: false,
+    darkLogo: false,
+    loginBackground: false,
+    loginIllustration: false,
+  });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const initialValuesRef = useRef<BrandSettings | null>(null);
+  const initialValuesRef = useRef<FormValues | null>(null);
   const savingRef = useRef(false);
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
 
   const logoSectionRef = useRef<HTMLDivElement>(null);
   const themeSectionRef = useRef<HTMLDivElement>(null);
+  const documentsSectionRef = useRef<HTMLDivElement>(null);
   const [tabScrolled, setTabScrolled] = useState(false);
 
   useEffect(() => {
@@ -78,7 +122,14 @@ export default function BrandingPage() {
   useEffect(() => {
     if (loading || tabScrolled) return;
     const tab = new URLSearchParams(window.location.search).get('tab');
-    const el = tab === 'logo' ? logoSectionRef.current : tab === 'theme' ? themeSectionRef.current : null;
+    const el =
+      tab === 'logo'
+        ? logoSectionRef.current
+        : tab === 'theme'
+          ? themeSectionRef.current
+          : tab === 'documents'
+            ? documentsSectionRef.current
+            : null;
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'start' });
       setTabScrolled(true);
@@ -89,21 +140,45 @@ export default function BrandingPage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const stored = await getSettings<Partial<BrandSettings> & { logoUrl?: string; faviconUrl?: string }>('branding');
+      const stored = await getSettings<Partial<BrandingTheme>>('branding');
       if (!mountedRef.current) return;
-      const loaded: BrandSettings = {
-        brandName: typeof stored?.brandName === 'string' ? stored.brandName : INITIAL.brandName,
-        tagline: typeof stored?.tagline === 'string' ? stored.tagline : INITIAL.tagline,
-        primaryColor: typeof stored?.primaryColor === 'string' ? stored.primaryColor : INITIAL.primaryColor,
-        secondaryColor: typeof stored?.secondaryColor === 'string' ? stored.secondaryColor : INITIAL.secondaryColor,
-        accentColor: typeof stored?.accentColor === 'string' ? stored.accentColor : INITIAL.accentColor,
+      const normalized = normalizeBranding(stored);
+
+      const loaded: FormValues = {
+        brandName: normalized.brandName,
+        tagline: normalized.tagline,
+        primaryColor: normalized.primaryColor,
+        secondaryColor: normalized.secondaryColor,
+        accentColor: normalized.accentColor,
+        fontFamily: normalized.fontFamily,
+        headingFont: normalized.headingFont,
+        dashboardTheme: normalized.dashboardTheme,
+        letterheadEnabled: normalized.letterheadEnabled,
+        letterheadText: normalized.letterheadText,
+        documentFooterText: normalized.documentFooterText,
+        invoiceFooterText: normalized.invoiceFooterText,
+        reportFooterText: normalized.reportFooterText,
+        emailFooterText: normalized.emailFooterText,
       };
       setValues(loaded);
       initialValuesRef.current = loaded;
-      setSavedLogoUrl(typeof stored?.logoUrl === 'string' ? stored.logoUrl : null);
-      setSavedFaviconUrl(typeof stored?.faviconUrl === 'string' ? stored.faviconUrl : null);
-      setLogoRemoved(false);
-      setFaviconRemoved(false);
+
+      const nextSaved = {
+        logo: normalized.logoUrl,
+        favicon: normalized.faviconUrl,
+        darkLogo: normalized.darkLogoUrl,
+        loginBackground: normalized.loginBackgroundUrl,
+        loginIllustration: normalized.loginIllustrationUrl,
+      };
+      setSavedUrls(nextSaved);
+      setPendingFiles(EMPTY_ASSETS);
+      setRemoved({
+        logo: false,
+        favicon: false,
+        darkLogo: false,
+        loginBackground: false,
+        loginIllustration: false,
+      });
       setSaved(false);
     } catch {
       if (mountedRef.current) setLoadError('Could not load your brand settings. Please try again.');
@@ -118,31 +193,44 @@ export default function BrandingPage() {
 
   const dirty = useMemo(() => {
     const base = initialValuesRef.current ?? INITIAL;
-    return (
-      values.brandName !== base.brandName ||
-      values.tagline !== base.tagline ||
-      values.primaryColor !== base.primaryColor ||
-      values.secondaryColor !== base.secondaryColor ||
-      values.accentColor !== base.accentColor ||
-      logoFile !== null ||
-      faviconFile !== null ||
-      (logoRemoved && savedLogoUrl !== null) ||
-      (faviconRemoved && savedFaviconUrl !== null)
+    const baseUrls = savedUrls;
+    const valuesChanged =
+      (Object.keys(values) as Array<keyof FormValues>).some(
+        (key) => values[key] !== base[key],
+      ) || values.brandName !== base.brandName;
+    const assetsChanged = ASSETS.some(
+      (a) =>
+        pendingFiles[a.key] !== null ||
+        (removed[a.key] && baseUrls[a.key] !== null),
     );
-  }, [values, logoFile, faviconFile, logoRemoved, faviconRemoved, savedLogoUrl, savedFaviconUrl]);
+    return valuesChanged || assetsChanged;
+  }, [values, pendingFiles, removed, savedUrls]);
 
-  const brandValues: BrandValues = {
-    brandName: values.brandName,
-    tagline: values.tagline,
-    primaryColor: values.primaryColor,
-    secondaryColor: values.secondaryColor,
-    accentColor: values.accentColor,
-    logoUrl: logoRemoved ? null : (logoFile?.preview ?? savedLogoUrl),
-    faviconUrl: faviconRemoved ? null : (faviconFile?.preview ?? savedFaviconUrl),
+  const brandValues: BrandValues = useMemo(
+    () =>
+      normalizeBranding({
+        ...values,
+        logoUrl: removed.logo ? null : (pendingFiles.logo?.preview ?? savedUrls.logo),
+        faviconUrl: removed.favicon ? null : (pendingFiles.favicon?.preview ?? savedUrls.favicon),
+        darkLogoUrl: removed.darkLogo ? null : (pendingFiles.darkLogo?.preview ?? savedUrls.darkLogo),
+        loginBackgroundUrl: removed.loginBackground
+          ? null
+          : (pendingFiles.loginBackground?.preview ?? savedUrls.loginBackground),
+        loginIllustrationUrl: removed.loginIllustration
+          ? null
+          : (pendingFiles.loginIllustration?.preview ?? savedUrls.loginIllustration),
+      }),
+    [values, pendingFiles, savedUrls, removed],
+  );
+
+  const setField = <K extends keyof FormValues>(key: K, value: FormValues[K]) => {
+    setValues((prev) => ({ ...prev, [key]: value }));
+    setSaved(false);
   };
 
-  const setField = <K extends keyof BrandSettings>(key: K, value: BrandSettings[K]) => {
-    setValues((prev) => ({ ...prev, [key]: value }));
+  const handleAssetChange = (key: AssetKey) => (file: File | null, preview: string | null) => {
+    setPendingFiles((prev) => ({ ...prev, [key]: file ? { file, preview } : null }));
+    setRemoved((prev) => ({ ...prev, [key]: file ? false : true }));
     setSaved(false);
   };
 
@@ -150,8 +238,18 @@ export default function BrandingPage() {
     if (values.brandName.trim().length < 2) {
       return 'Company name must be at least 2 characters.';
     }
-    if (!HEX_RE.test(values.primaryColor) || !HEX_RE.test(values.secondaryColor) || !HEX_RE.test(values.accentColor)) {
+    if (
+      !HEX_RE.test(values.primaryColor) ||
+      !HEX_RE.test(values.secondaryColor) ||
+      !HEX_RE.test(values.accentColor)
+    ) {
       return 'All colors must be valid 6-digit hex values.';
+    }
+    for (const field of ['fontFamily', 'headingFont'] as const) {
+      const value = values[field].trim().replace(/["']/g, '');
+      if (value && !FONT_RE.test(value)) {
+        return `Font names may only contain letters, numbers, spaces, hyphens, underscores, and commas.`;
+      }
     }
     return null;
   };
@@ -169,67 +267,78 @@ export default function BrandingPage() {
     setSaving(true);
     setSaved(false);
     try {
-      let logoUrl = logoRemoved ? '' : savedLogoUrl;
-      let faviconUrl = faviconRemoved ? '' : savedFaviconUrl;
+      const urls: Record<AssetKey, string | null> = { ...savedUrls };
 
-      if (logoFile || faviconFile) {
-        const uploaded = await uploadSettingsFiles({
-          logo: logoFile?.file,
-          favicon: faviconFile?.file,
-        });
+      const pending = ASSETS.filter((a) => pendingFiles[a.key]);
+      if (pending.length > 0) {
+        const uploadPayload: Partial<Record<AssetKey, File>> = {};
+        for (const a of pending) {
+          const pendingFile = pendingFiles[a.key];
+          if (pendingFile) uploadPayload[a.key] = pendingFile.file;
+        }
+        const uploaded = await uploadSettingsFiles(uploadPayload);
         if (!mountedRef.current) return;
-        if (uploaded.logoUrl) logoUrl = uploaded.logoUrl;
-        if (uploaded.faviconUrl) faviconUrl = uploaded.faviconUrl;
+        for (const a of pending) {
+          const uploadedUrl = uploaded[a.urlKey as keyof typeof uploaded];
+          if (uploadedUrl) urls[a.key] = uploadedUrl;
+        }
       }
 
-      await updateSettings('branding', {
+      for (const a of ASSETS) {
+        if (removed[a.key]) urls[a.key] = null;
+      }
+
+      const payload: Partial<BrandingTheme> = {
         brandName: values.brandName.trim(),
         tagline: values.tagline.trim(),
         primaryColor: values.primaryColor,
         secondaryColor: values.secondaryColor,
         accentColor: values.accentColor,
-        ...(logoUrl ? { logoUrl } : logoRemoved ? { logoUrl } : {}),
-        ...(faviconUrl ? { faviconUrl } : faviconRemoved ? { faviconUrl } : {}),
-      });
+        fontFamily: values.fontFamily.trim().replace(/["']/g, ''),
+        headingFont: values.headingFont.trim().replace(/["']/g, ''),
+        dashboardTheme: values.dashboardTheme,
+        letterheadEnabled: values.letterheadEnabled,
+        letterheadText: values.letterheadText.trim(),
+        documentFooterText: values.documentFooterText.trim(),
+        invoiceFooterText: values.invoiceFooterText.trim(),
+        reportFooterText: values.reportFooterText.trim(),
+        emailFooterText: values.emailFooterText.trim(),
+      };
+      payload.logoUrl = urls.logo;
+      payload.faviconUrl = urls.favicon;
+      payload.darkLogoUrl = urls.darkLogo;
+      payload.loginBackgroundUrl = urls.loginBackground;
+      payload.loginIllustrationUrl = urls.loginIllustration;
+
+      await updateSettings('branding', payload);
       if (!mountedRef.current) return;
 
-      useBrandingStore.getState().setBrand(
-        normalizeBranding({
-          brandName: values.brandName.trim(),
-          tagline: values.tagline.trim(),
-          primaryColor: values.primaryColor,
-          secondaryColor: values.secondaryColor,
-          accentColor: values.accentColor,
-          logoUrl: logoUrl || null,
-          faviconUrl: faviconUrl || null,
-        }),
-      );
+      useBrandingStore.getState().setBrand(normalizeBranding(payload));
 
       const session = getOnboardingSession();
       if (session?.id) {
         const completions: Promise<unknown>[] = [markChecklistComplete(session.id, 'branding')];
-        if (logoUrl) completions.push(markChecklistComplete(session.id, 'logo'));
+        if (urls.logo) completions.push(markChecklistComplete(session.id, 'logo'));
         const results = await Promise.allSettled(completions);
-        // Branding save must succeed regardless of checklist completion; the
-        // latter is best-effort, so failures are surfaced only for ops.
         for (const result of results) {
           if (result.status === 'rejected') {
             console.error('Checklist completion failed after branding save', result.reason);
           }
         }
-        // Keep the dashboard checklist widget fresh without touching the
-        // onboarding session query.
         queryClient.invalidateQueries({ queryKey: ['onboarding', 'checklist-progress'] });
       }
 
       initialValuesRef.current = { ...values };
       setSaved(true);
-      setLogoFile(null);
-      setFaviconFile(null);
-      setSavedLogoUrl(logoRemoved ? null : logoUrl);
-      setSavedFaviconUrl(faviconRemoved ? null : faviconUrl);
-      setLogoRemoved(false);
-      setFaviconRemoved(false);
+      setPendingFiles(EMPTY_ASSETS);
+      setSavedUrls(urls);
+      setRemoved({
+        logo: false,
+        favicon: false,
+        darkLogo: false,
+        loginBackground: false,
+        loginIllustration: false,
+      });
       toast({ title: 'Branding saved', description: 'Your brand settings have been updated successfully.', variant: 'success' });
 
       if (session?.id) {
@@ -247,6 +356,23 @@ export default function BrandingPage() {
       setSaving(false);
     }
   };
+
+  const renderField = (label: string, id: string) => ({ field, placeholder, hint }: {
+    field: keyof FormValues;
+    placeholder?: string;
+    hint?: string;
+  }) => (
+    <div className="space-y-2">
+      <Label htmlFor={id} className="text-sm font-medium">{label}</Label>
+      <Input
+        id={id}
+        value={values[field] as string}
+        onChange={(e) => setField(field, e.target.value)}
+        placeholder={placeholder}
+      />
+      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    </div>
+  );
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -301,6 +427,7 @@ export default function BrandingPage() {
             <Skeleton className="h-48 w-full rounded-2xl" />
             <Skeleton className="h-36 w-full rounded-2xl" />
             <Skeleton className="h-64 w-full rounded-2xl" />
+            <Skeleton className="h-64 w-full rounded-2xl" />
           </div>
           <Skeleton className="h-96 w-full rounded-2xl" />
         </div>
@@ -316,20 +443,29 @@ export default function BrandingPage() {
             <div ref={logoSectionRef} className="scroll-mt-28">
               <SectionCard
                 title="Company Logo"
-                description="Upload the logo shown across your workspace, emails, and login page."
+                description="Primary and dark-mode logos shown across your workspace, emails, and login page."
                 icon={<Eye className="h-4 w-4" />}
               >
-                <FileUpload
-                  variant="logo"
-                  preview={logoRemoved ? null : (logoFile?.preview ?? savedLogoUrl)}
-                  onChange={(file, preview) => {
-                    setLogoFile(file ? { file, preview } : null);
-                    if (file) setLogoRemoved(false);
-                    else setLogoRemoved(true);
-                    setSaved(false);
-                  }}
-                  disabled={saving}
-                />
+                <div className="grid gap-6 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">Light logo</p>
+                    <FileUpload
+                      variant="logo"
+                      preview={removed.logo ? null : (pendingFiles.logo?.preview ?? savedUrls.logo)}
+                      onChange={handleAssetChange('logo')}
+                      disabled={saving}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground">Dark logo</p>
+                    <FileUpload
+                      variant="darkLogo"
+                      preview={removed.darkLogo ? null : (pendingFiles.darkLogo?.preview ?? savedUrls.darkLogo)}
+                      onChange={handleAssetChange('darkLogo')}
+                      disabled={saving}
+                    />
+                  </div>
+                </div>
               </SectionCard>
             </div>
 
@@ -342,13 +478,8 @@ export default function BrandingPage() {
                 <div className="flex-1">
                   <FileUpload
                     variant="favicon"
-                    preview={faviconRemoved ? null : (faviconFile?.preview ?? savedFaviconUrl)}
-                    onChange={(file, preview) => {
-                      setFaviconFile(file ? { file, preview } : null);
-                      if (file) setFaviconRemoved(false);
-                      else setFaviconRemoved(true);
-                      setSaved(false);
-                    }}
+                    preview={removed.favicon ? null : (pendingFiles.favicon?.preview ?? savedUrls.favicon)}
+                    onChange={handleAssetChange('favicon')}
                     disabled={saving}
                   />
                 </div>
@@ -369,59 +500,193 @@ export default function BrandingPage() {
               </div>
             </SectionCard>
 
-            <div ref={themeSectionRef} className="scroll-mt-28">
-              <SectionCard
-                title="Brand Identity"
-                description="Define your brand name and color palette used throughout the product."
-                icon={<Eye className="h-4 w-4" />}
-              >
-              <div className="grid gap-4 sm:grid-cols-2">
+            <SectionCard
+              title="Login Appearance"
+              description="Background image and illustration shown on your branded login and invitation pages."
+              icon={<LogIn className="h-4 w-4" />}
+            >
+              <div className="grid gap-6 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="brandName" className="text-sm font-medium">Company Name *</Label>
-                  <Input
-                    id="brandName"
-                    value={values.brandName}
-                    onChange={(e) => setField('brandName', e.target.value)}
-                    placeholder="Acme Corporation"
+                  <p className="text-xs font-medium text-muted-foreground">Background image</p>
+                  <FileUpload
+                    variant="loginBackground"
+                    preview={removed.loginBackground ? null : (pendingFiles.loginBackground?.preview ?? savedUrls.loginBackground)}
+                    onChange={handleAssetChange('loginBackground')}
+                    disabled={saving}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="tagline" className="text-sm font-medium">Tagline</Label>
-                  <Input
-                    id="tagline"
-                    value={values.tagline}
-                    onChange={(e) => setField('tagline', e.target.value)}
-                    placeholder="Enterprise Business Copilot"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-6 grid gap-6 sm:grid-cols-1">
-                <div className="grid gap-6 md:grid-cols-3">
-                  <ColorField
-                    label="Primary Color"
-                    description="Main brand color"
-                    value={values.primaryColor}
-                    onChange={(hex) => setField('primaryColor', hex)}
-                    presets={PRESET_PRIMARY}
-                  />
-                  <ColorField
-                    label="Secondary Color"
-                    description="Gradients & accents"
-                    value={values.secondaryColor}
-                    onChange={(hex) => setField('secondaryColor', hex)}
-                    presets={PRESET_SECONDARY}
-                  />
-                  <ColorField
-                    label="Accent Color"
-                    description="Call-to-actions"
-                    value={values.accentColor}
-                    onChange={(hex) => setField('accentColor', hex)}
-                    presets={PRESET_ACCENT}
+                  <p className="text-xs font-medium text-muted-foreground">Illustration</p>
+                  <FileUpload
+                    variant="loginIllustration"
+                    preview={removed.loginIllustration ? null : (pendingFiles.loginIllustration?.preview ?? savedUrls.loginIllustration)}
+                    onChange={handleAssetChange('loginIllustration')}
+                    disabled={saving}
                   />
                 </div>
               </div>
             </SectionCard>
+
+            <div ref={themeSectionRef} className="scroll-mt-28">
+              <SectionCard
+                title="Brand Identity"
+                description="Define your brand name, color palette, and typography used throughout the product."
+                icon={<Palette className="h-4 w-4" />}
+              >
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="brandName" className="text-sm font-medium">Company Name *</Label>
+                    <Input
+                      id="brandName"
+                      value={values.brandName}
+                      onChange={(e) => setField('brandName', e.target.value)}
+                      placeholder="Acme Corporation"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="tagline" className="text-sm font-medium">Tagline</Label>
+                    <Input
+                      id="tagline"
+                      value={values.tagline}
+                      onChange={(e) => setField('tagline', e.target.value)}
+                      placeholder="Enterprise Business Copilot"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-6 grid gap-6 sm:grid-cols-1">
+                  <div className="grid gap-6 md:grid-cols-3">
+                    <ColorField
+                      label="Primary Color"
+                      description="Main brand color"
+                      value={values.primaryColor}
+                      onChange={(hex) => setField('primaryColor', hex)}
+                      presets={PRESET_PRIMARY}
+                    />
+                    <ColorField
+                      label="Secondary Color"
+                      description="Gradients & accents"
+                      value={values.secondaryColor}
+                      onChange={(hex) => setField('secondaryColor', hex)}
+                      presets={PRESET_SECONDARY}
+                    />
+                    <ColorField
+                      label="Accent Color"
+                      description="Call-to-actions"
+                      value={values.accentColor}
+                      onChange={(hex) => setField('accentColor', hex)}
+                      presets={PRESET_ACCENT}
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-6 flex items-start gap-2 rounded-xl border border-border bg-muted/20 p-3">
+                  <Type className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div className="w-full space-y-4">
+                    {renderField('Body Font', 'fontFamily')({
+                      field: 'fontFamily',
+                      placeholder: 'Inter, Roboto, etc.',
+                      hint: 'Google Fonts family name, e.g. "Inter" or "Source Sans 3". Applies to all text.',
+                    })}
+                    {renderField('Heading Font', 'headingFont')({
+                      field: 'headingFont',
+                      placeholder: 'Same as body by default',
+                      hint: 'Optional. Applies to titles, headings, and document letterheads.',
+                    })}
+                  </div>
+                </div>
+              </SectionCard>
+            </div>
+
+            <SectionCard
+              title="Dashboard Theme"
+              description="Default appearance of your team's dashboards. Team members can still override it themselves."
+              icon={<Layers className="h-4 w-4" />}
+            >
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                {THEME_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setField('dashboardTheme', opt.value)}
+                    disabled={saving}
+                    className={cn(
+                      'flex flex-col items-start gap-1 rounded-xl border p-3 text-left transition-all',
+                      values.dashboardTheme === opt.value
+                        ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                        : 'border-border bg-background hover:border-primary/40',
+                    )}
+                  >
+                    <span className="text-sm font-medium text-foreground">{opt.label}</span>
+                    <span className="text-[11px] leading-tight text-muted-foreground">{opt.description}</span>
+                  </button>
+                ))}
+              </div>
+            </SectionCard>
+
+            <div ref={documentsSectionRef} className="scroll-mt-28">
+              <SectionCard
+                title="Documents & Emails"
+                description="Letterhead and footer text applied to invoices, reports, documents, and outgoing emails."
+                icon={<FileText className="h-4 w-4" />}
+              >
+                <div className="flex items-center justify-between gap-4 rounded-xl border border-border bg-muted/20 p-3">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">Letterhead</p>
+                    <p className="text-xs text-muted-foreground">Show company letterhead on printed documents.</p>
+                  </div>
+                  <Switch
+                    checked={values.letterheadEnabled}
+                    onCheckedChange={(checked) => setField('letterheadEnabled', checked)}
+                    disabled={saving}
+                  />
+                </div>
+
+                <AnimatePresence>
+                  {values.letterheadEnabled && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="pt-4">
+                        <Label htmlFor="letterheadText" className="text-sm font-medium">Letterhead Text</Label>
+                        <Textarea
+                          id="letterheadText"
+                          value={values.letterheadText}
+                          onChange={(e) => setField('letterheadText', e.target.value)}
+                          placeholder="123 Enterprise Ave, Suite 400, San Francisco, CA 94107 · hello@acme.com"
+                          className="mt-2 min-h-20"
+                          maxLength={500}
+                        />
+                        <p className="mt-1 text-xs text-muted-foreground">Max 500 characters.</p>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                  {renderField('Document Footer', 'documentFooterText')({
+                    field: 'documentFooterText',
+                    placeholder: 'Terms · Confidential',
+                    hint: 'Appears on reports, contracts, and general documents.',
+                  })}
+                  {renderField('Invoice Footer', 'invoiceFooterText')({
+                    field: 'invoiceFooterText',
+                    placeholder: 'Payment due within 30 days',
+                  })}
+                  {renderField('Report Footer', 'reportFooterText')({
+                    field: 'reportFooterText',
+                    placeholder: 'Generated by Acme Business Copilot',
+                  })}
+                  {renderField('Email Footer', 'emailFooterText')({
+                    field: 'emailFooterText',
+                    placeholder: 'You are receiving this because...',
+                    hint: 'Appears on all branded emails.',
+                  })}
+                </div>
+              </SectionCard>
             </div>
 
             {/* Save bar */}

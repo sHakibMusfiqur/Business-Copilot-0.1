@@ -6,6 +6,8 @@ import {
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
+import { syncSystemRolesForOrg } from '../rbac/permission-catalog';
 
 import type { CreateOrganizationDto } from './dto/create-organization.dto';
 
@@ -13,7 +15,10 @@ import type { CreateOrganizationDto } from './dto/create-organization.dto';
 export class OrganizationService {
   private readonly logger = new Logger(OrganizationService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly settingsService: SettingsService,
+  ) {}
 
   async create(dto: CreateOrganizationDto, userId: string) {
     const user = await this.prisma.user.findUnique({
@@ -68,6 +73,12 @@ export class OrganizationService {
           data: { organizationId: org.id },
         });
 
+        const { ownerRole } = await syncSystemRolesForOrg(tx, org.id);
+
+        await tx.userRoleAssignment.createMany({
+          data: [{ userId, roleId: ownerRole.id }],
+        });
+
         return org;
       });
 
@@ -83,5 +94,47 @@ export class OrganizationService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Resolves an active organization by slug (subdomain or /company/:slug path)
+   * plus its branding for the public org-aware login page.
+   */
+  async findPublicBySlug(slug: string) {
+    const org = await this.prisma.organization.findFirst({
+      where: { slug, isActive: true, deletedAt: null, suspendedAt: null },
+      select: { id: true, slug: true, name: true },
+    });
+    if (!org) return null;
+    return this.resolvePublicOrg(org);
+  }
+
+  /**
+   * Resolves the organization a user belongs to from their email address.
+   * Returns null when the email is unknown or the organization is not active.
+   */
+  async findPublicByEmail(email: string) {
+    const user = await this.prisma.user.findUnique({
+      where: { email: email.toLowerCase().trim() },
+      select: { organizationId: true },
+    });
+    if (!user?.organizationId) return null;
+
+    const org = await this.prisma.organization.findFirst({
+      where: {
+        id: user.organizationId,
+        isActive: true,
+        deletedAt: null,
+        suspendedAt: null,
+      },
+      select: { id: true, slug: true, name: true },
+    });
+    if (!org) return null;
+    return this.resolvePublicOrg(org);
+  }
+
+  private async resolvePublicOrg(org: { id: string; slug: string; name: string }) {
+    const brand = await this.settingsService.getBranding(org.id);
+    return { id: org.id, slug: org.slug, name: org.name, brand };
   }
 }

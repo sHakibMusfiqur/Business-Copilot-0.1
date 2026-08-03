@@ -5,8 +5,10 @@ import type { Request } from 'express';
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
+import { Permissions } from '../common/decorators/permissions.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { PermissionGuard } from '../common/guards/permission.guard';
 
 import { BillingService } from './billing.service';
 import { PaymentProcessingService } from './payment-processing.service';
@@ -36,8 +38,9 @@ export class BillingController {
   }
 
   @Get('subscription')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
   @HttpCode(HttpStatus.OK)
+  @Permissions(['billing.read'])
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get current organization subscription' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
@@ -48,8 +51,9 @@ export class BillingController {
   }
 
   @Post('trial')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
   @HttpCode(HttpStatus.OK)
+  @Permissions(['billing.manage'])
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Start a free trial on a plan' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
@@ -60,8 +64,9 @@ export class BillingController {
   }
 
   @Post('change-plan')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
   @HttpCode(HttpStatus.OK)
+  @Permissions(['billing.manage'])
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Change subscription plan' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
@@ -72,8 +77,9 @@ export class BillingController {
   }
 
   @Get('payments')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
   @HttpCode(HttpStatus.OK)
+  @Permissions(['billing.read'])
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get subscription payment history' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
@@ -84,8 +90,9 @@ export class BillingController {
   }
 
   @Get('invoices')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
   @HttpCode(HttpStatus.OK)
+  @Permissions(['billing.read'])
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get subscription invoices' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
@@ -96,8 +103,9 @@ export class BillingController {
   }
 
   @Post('checkout')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
   @HttpCode(HttpStatus.OK)
+  @Permissions(['billing.manage'])
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Create a payment gateway checkout session' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
@@ -108,8 +116,9 @@ export class BillingController {
   }
 
   @Post('verify')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
   @HttpCode(HttpStatus.OK)
+  @Permissions(['billing.manage'])
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Verify a payment and activate the subscription' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
@@ -120,8 +129,9 @@ export class BillingController {
   }
 
   @Post('refund')
-  @UseGuards(JwtAuthGuard, RefundGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard, RefundGuard)
   @HttpCode(HttpStatus.OK)
+  @Permissions(['billing.manage'])
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Refund a succeeded payment' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })

@@ -8,6 +8,8 @@ export const API_ROUTES = {
   },
   ORGANIZATIONS: {
     ROOT: '/organizations',
+    BY_SLUG: '/organizations/by-slug/{slug}',
+    BY_EMAIL: '/organizations/by-email',
   },
   DASHBOARD: {
     OVERVIEW: '/dashboard/overview',
@@ -43,10 +45,19 @@ export const API_ROUTES = {
   ROLES: {
     ROOT: '/roles',
     PERMISSIONS_GROUPED: '/permissions/grouped',
+    PERMISSIONS_ME: '/permissions/me',
   },
   USERS: {
     ROOT: '/users',
     ASSIGNABLE: '/users/assignable',
+  },
+  INVITATIONS: {
+    ROOT: '/invitations',
+    VERIFY: '/invitations/verify',
+    ACCEPT: '/invitations/accept',
+  },
+  DEPARTMENTS: {
+    ROOT: '/departments',
   },
   CUSTOMERS: {
     ROOT: '/customers',

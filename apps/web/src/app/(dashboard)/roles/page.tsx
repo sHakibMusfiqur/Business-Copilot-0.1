@@ -2,18 +2,22 @@
 
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { Shield, Plus } from 'lucide-react';
 
 import { DashboardError } from '@/components/dashboard/dashboard-error';
 import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 import { AssignUserRolesModal } from '@/components/rbac/assign-user-roles-modal';
+import { ClonePermissionsDialog } from '@/components/rbac/clone-permissions-dialog';
 import { CreateRoleDialog } from '@/components/rbac/create-role-dialog';
+import { DuplicateRoleDialog } from '@/components/rbac/duplicate-role-dialog';
 import { PermissionAssignmentDialog } from '@/components/rbac/permission-assignment-dialog';
+import { RequirePermission } from '@/components/rbac/require-permission';
 import { RoleDetailsDrawer } from '@/components/rbac/role-details-drawer';
 import { RoleList } from '@/components/rbac/role-list';
 import type { Role, RoleDetails, OrganizationUser, GroupedPermissions } from '@/components/rbac/rbac-types';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/components/ui/use-toast';
+import { usePermissions } from '@/hooks/use-permissions';
 import {
   getRoles,
   getRoleById,
@@ -27,12 +31,16 @@ import {
 export default function RolesPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { hasPermission, isLoaded } = usePermissions();
+  const canManageRoles = isLoaded ? hasPermission('organization.manage') : true;
 
   const [selectedRole, setSelectedRole] = useState<RoleDetails | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [permDialogOpen, setPermDialogOpen] = useState(false);
   const [assignModalOpen, setAssignModalOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [duplicateTarget, setDuplicateTarget] = useState<Role | null>(null);
+  const [cloneTarget, setCloneTarget] = useState<Role | null>(null);
 
   const rolesQuery = useQuery<Role[]>({
     queryKey: ['roles'],
@@ -100,6 +108,21 @@ export default function RolesPage() {
     setTimeout(() => setAssignModalOpen(true), 150);
   }, []);
 
+  if (isLoaded && !hasPermission('organization.manage')) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
+          <Shield className="h-7 w-7 text-muted-foreground" />
+        </div>
+        <h1 className="mt-4 text-lg font-semibold">You don&apos;t have access</h1>
+        <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+          Only organization owners can manage roles and permissions. Contact your organization owner to
+          request access.
+        </p>
+      </div>
+    );
+  }
+
   if (rolesQuery.isLoading) {
     return <DashboardSkeleton />;
   }
@@ -122,16 +145,20 @@ export default function RolesPage() {
             Manage roles and control access to features
           </p>
         </div>
-        <Button onClick={() => setCreateDialogOpen(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Create Role
-        </Button>
+        <RequirePermission permission="organization.manage">
+          <Button onClick={() => setCreateDialogOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Create Role
+          </Button>
+        </RequirePermission>
       </div>
 
       <RoleList
         roles={rolesQuery.data ?? []}
         onSelect={openRoleDrawer}
-        onDelete={(role) => deleteMutation.mutate(role.id)}
+        onDelete={canManageRoles ? (role) => deleteMutation.mutate(role.id) : undefined}
+        onDuplicate={canManageRoles ? (role) => setDuplicateTarget(role) : undefined}
+        onClonePermissions={canManageRoles ? (role) => setCloneTarget(role) : undefined}
       />
 
       <RoleDetailsDrawer
@@ -173,6 +200,30 @@ export default function RolesPage() {
         onClose={() => setCreateDialogOpen(false)}
         onCreated={() => queryClient.invalidateQueries({ queryKey: ['roles'] })}
       />
+
+      {duplicateTarget && (
+        <DuplicateRoleDialog
+          open={!!duplicateTarget}
+          onClose={() => setDuplicateTarget(null)}
+          role={duplicateTarget}
+          onDuplicated={() => queryClient.invalidateQueries({ queryKey: ['roles'] })}
+        />
+      )}
+
+      {cloneTarget && (
+        <ClonePermissionsDialog
+          open={!!cloneTarget}
+          onClose={() => setCloneTarget(null)}
+          targetRole={cloneTarget}
+          roles={rolesQuery.data ?? []}
+          onCloned={() => {
+            queryClient.invalidateQueries({ queryKey: ['roles'] });
+            if (selectedRole) {
+              queryClient.invalidateQueries({ queryKey: ['roles', selectedRole.id] });
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

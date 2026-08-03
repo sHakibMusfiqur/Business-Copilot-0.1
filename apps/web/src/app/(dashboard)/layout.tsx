@@ -43,6 +43,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { usePermissions } from '@/hooks/use-permissions';
 import { logout as apiLogout } from '@/lib/api';
 import { brandInitials } from '@/lib/branding';
 import { cn, generateInitials } from '@/lib/utils';
@@ -55,6 +56,7 @@ interface SidebarItem {
   label: string;
   href: string;
   icon: LucideIcon;
+  permission?: string;
 }
 
 interface SidebarSection {
@@ -64,42 +66,42 @@ interface SidebarSection {
 
 const sidebarItems: SidebarSection[] = [
   { section: 'Main', items: [
-    { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, permission: 'dashboard.read' },
   ]},
   { section: 'Management', items: [
-    { label: 'Customers', href: '/customers', icon: UsersRound },
-    { label: 'Suppliers', href: '/suppliers', icon: Building2 },
-    { label: 'Products', href: '/products', icon: Package },
-    { label: 'Inventory', href: '/inventory', icon: Warehouse },
-    { label: 'Employees', href: '/employees', icon: Users2 },
+    { label: 'Customers', href: '/customers', icon: UsersRound, permission: 'customers.read' },
+    { label: 'Suppliers', href: '/suppliers', icon: Building2, permission: 'suppliers.read' },
+    { label: 'Products', href: '/products', icon: Package, permission: 'products.read' },
+    { label: 'Inventory', href: '/inventory', icon: Warehouse, permission: 'inventory.read' },
+    { label: 'Employees', href: '/employees', icon: Users2, permission: 'employees.read' },
   ]},
   { section: 'CRM', items: [
-    { label: 'CRM Dashboard', href: '/crm', icon: Contact },
-    { label: 'Leads', href: '/crm/leads', icon: Users2 },
+    { label: 'CRM Dashboard', href: '/crm', icon: Contact, permission: 'crm.read' },
+    { label: 'Leads', href: '/crm/leads', icon: Users2, permission: 'crm.read' },
   ]},
   { section: 'Sales', items: [
-    { label: 'Sales Orders', href: '/sales', icon: ShoppingCart },
-    { label: 'Invoices', href: '/invoices', icon: Receipt },
-    { label: 'Purchases', href: '/purchases', icon: ShoppingBag },
+    { label: 'Sales Orders', href: '/sales', icon: ShoppingCart, permission: 'sales.read' },
+    { label: 'Invoices', href: '/invoices', icon: Receipt, permission: 'invoices.read' },
+    { label: 'Purchases', href: '/purchases', icon: ShoppingBag, permission: 'purchase.read' },
   ]},
   { section: 'Finance', items: [
-    { label: 'Accounting', href: '/accounting', icon: Calculator },
-    { label: 'Chart of Accounts', href: '/accounting/accounts', icon: BookOpen },
-    { label: 'Journal Entries', href: '/accounting/journal', icon: FileText },
-    { label: 'General Ledger', href: '/accounting/ledger', icon: BookOpenCheck },
-    { label: 'Trial Balance', href: '/accounting/trial-balance', icon: Scale },
-    { label: 'Receivables', href: '/accounting/receivables', icon: Receipt },
-    { label: 'Payables', href: '/accounting/payables', icon: CreditCard },
-    { label: 'Payments', href: '/accounting/payments', icon: DollarSign },
-    { label: 'Payroll', href: '/payroll', icon: Wallet },
+    { label: 'Accounting', href: '/accounting', icon: Calculator, permission: 'accounting.read' },
+    { label: 'Chart of Accounts', href: '/accounting/accounts', icon: BookOpen, permission: 'accounting.accounts.read' },
+    { label: 'Journal Entries', href: '/accounting/journal', icon: FileText, permission: 'accounting.journal.read' },
+    { label: 'General Ledger', href: '/accounting/ledger', icon: BookOpenCheck, permission: 'accounting.journal.read' },
+    { label: 'Trial Balance', href: '/accounting/trial-balance', icon: Scale, permission: 'accounting.journal.read' },
+    { label: 'Receivables', href: '/accounting/receivables', icon: Receipt, permission: 'accounting.receivables.read' },
+    { label: 'Payables', href: '/accounting/payables', icon: CreditCard, permission: 'accounting.payables.read' },
+    { label: 'Payments', href: '/accounting/payments', icon: DollarSign, permission: 'payments.read' },
+    { label: 'Payroll', href: '/payroll', icon: Wallet, permission: 'payroll.read' },
   ]},
   { section: 'Settings', items: [
-    { label: 'Users', href: '/users', icon: UsersRound },
-    { label: 'Roles', href: '/roles', icon: Shield },
-    { label: 'Audit Log', href: '/audit', icon: History },
-    { label: 'Billing & Subscription', href: '/billing', icon: CreditCard },
-    { label: 'Reports', href: '/reports', icon: BarChart3 },
-    { label: 'AI Copilot', href: '/copilot', icon: Bot },
+    { label: 'Users', href: '/users', icon: UsersRound, permission: 'users.read' },
+    { label: 'Roles', href: '/roles', icon: Shield, permission: 'organization.manage' },
+    { label: 'Audit Log', href: '/audit', icon: History, permission: 'audit.read' },
+    { label: 'Billing & Subscription', href: '/billing', icon: CreditCard, permission: 'billing.read' },
+    { label: 'Reports', href: '/reports', icon: BarChart3, permission: 'reports.read' },
+    { label: 'AI Copilot', href: '/copilot', icon: Bot, permission: 'ai.read' },
   ]},
 ];
 
@@ -116,6 +118,16 @@ export default function DashboardLayout({
   const router = useRouter();
   const { user, logout } = useAuthStore();
   const brand = useBrandingStore((s) => s.brand);
+  const { hasPermission, isLoading: permissionsLoading } = usePermissions();
+
+  const visibleSidebarItems = sidebarItems
+    .map((section) => ({
+      ...section,
+      items: section.items.filter(
+        (item) => permissionsLoading || !item.permission || hasPermission(item.permission),
+      ),
+    }))
+    .filter((section) => section.items.length > 0);
 
   async function handleLogout() {
     await apiLogout();
@@ -154,10 +166,7 @@ export default function DashboardLayout({
           <div className={cn('flex h-14 items-center border-b border-border', collapsed ? 'justify-center gap-0 px-0' : 'gap-2 px-4')}>
             <Link href="/dashboard" className={cn('flex min-w-0 items-center gap-2.5', collapsed ? 'shrink-0' : 'flex-1')}>
               {brand.logoUrl ? (
-                <div
-                  className="h-8 w-8 shrink-0 rounded-lg bg-slate-100 bg-contain bg-center bg-no-repeat dark:bg-white/[0.06]"
-                  style={{ backgroundImage: `url(${brand.logoUrl})` }}
-                />
+                <div className="brand-logo h-8 w-8 shrink-0 rounded-lg bg-slate-100 dark:bg-white/[0.06]" />
               ) : (
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground">
                   {brandInitials(brand.brandName)}
@@ -195,7 +204,7 @@ export default function DashboardLayout({
 
           {/* Navigation */}
           <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-4">
-            {sidebarItems.map((section) => (
+            {visibleSidebarItems.map((section) => (
               <div key={section.section} className="mb-4">
                 {!collapsed && (
                   <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">

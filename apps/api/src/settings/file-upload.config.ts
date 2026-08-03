@@ -33,7 +33,7 @@ export const settingsMulterOptions: MulterOptions = {
   }),
   limits: {
     fileSize: 2 * 1024 * 1024, // 2 MB
-    files: 2,
+    files: 5,
   },
   fileFilter: (
     _req: Request,

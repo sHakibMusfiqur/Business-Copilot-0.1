@@ -1,5 +1,6 @@
 import { api } from './client';
 import { API_ROUTES } from './routes';
+import type { OrganizationUser } from '@/components/rbac/rbac-types';
 
 export interface UserListParams {
   page?: number;
@@ -50,8 +51,8 @@ export async function updateUserStatus(id: string, isActive: boolean) {
   return response.data;
 }
 
-export async function getOrganizationUsers(signal?: AbortSignal) {
-  const response = await api.get(API_ROUTES.USERS.ASSIGNABLE, { signal });
+export async function getOrganizationUsers(signal?: AbortSignal): Promise<OrganizationUser[]> {
+  const response = await api.get<OrganizationUser[]>(API_ROUTES.USERS.ASSIGNABLE, { signal });
   return response.data;
 }
 

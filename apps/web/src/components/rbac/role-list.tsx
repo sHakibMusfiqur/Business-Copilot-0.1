@@ -19,10 +19,12 @@ import type { Role } from './rbac-types';
 interface RoleListProps {
   roles: Role[];
   onSelect: (role: Role) => void;
-  onDelete: (role: Role) => void;
+  onDelete?: (role: Role) => void;
+  onDuplicate?: (role: Role) => void;
+  onClonePermissions?: (role: Role) => void;
 }
 
-export function RoleList({ roles, onSelect, onDelete }: RoleListProps) {
+export function RoleList({ roles, onSelect, onDelete, onDuplicate, onClonePermissions }: RoleListProps) {
   if (roles.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
@@ -82,7 +84,27 @@ export function RoleList({ roles, onSelect, onDelete }: RoleListProps) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => onSelect(role)}>View Details</DropdownMenuItem>
-              {!role.isSystem && (
+              {onDuplicate && (
+                <DropdownMenuItem
+                  onClick={(e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    onDuplicate(role);
+                  }}
+                >
+                  Duplicate
+                </DropdownMenuItem>
+              )}
+              {onClonePermissions && !role.isSystem && (
+                <DropdownMenuItem
+                  onClick={(e: React.MouseEvent) => {
+                    e.stopPropagation();
+                    onClonePermissions(role);
+                  }}
+                >
+                  Clone Permissions
+                </DropdownMenuItem>
+              )}
+              {!role.isSystem && onDelete && (
                 <>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem

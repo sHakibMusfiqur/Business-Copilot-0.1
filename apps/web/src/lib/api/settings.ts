@@ -28,14 +28,30 @@ export async function updateSettings<T extends object>(
 export async function uploadSettingsFiles(files: {
   logo?: File;
   favicon?: File;
-}): Promise<{ logoUrl?: string; faviconUrl?: string }> {
+  darkLogo?: File;
+  loginBackground?: File;
+  loginIllustration?: File;
+}): Promise<{
+  logoUrl?: string;
+  faviconUrl?: string;
+  darkLogoUrl?: string;
+  loginBackgroundUrl?: string;
+  loginIllustrationUrl?: string;
+}> {
   const formData = new FormData();
   if (files.logo) formData.append('logo', files.logo);
   if (files.favicon) formData.append('favicon', files.favicon);
-  const response = await api.post<{ logoUrl?: string; faviconUrl?: string }>(
-    API_ROUTES.SETTINGS.FILES,
-    formData,
-    { headers: { 'Content-Type': 'multipart/form-data' } },
-  );
+  if (files.darkLogo) formData.append('darkLogo', files.darkLogo);
+  if (files.loginBackground) formData.append('loginBackground', files.loginBackground);
+  if (files.loginIllustration) formData.append('loginIllustration', files.loginIllustration);
+  const response = await api.post<{
+    logoUrl?: string;
+    faviconUrl?: string;
+    darkLogoUrl?: string;
+    loginBackgroundUrl?: string;
+    loginIllustrationUrl?: string;
+  }>(API_ROUTES.SETTINGS.FILES, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
   return response.data;
 }
