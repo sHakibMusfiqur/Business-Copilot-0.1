@@ -1,6 +1,6 @@
 import type { ReactNode, HTMLAttributes } from 'react';
 
-export const cardClass = 'bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-all duration-200';
+export const cardClass = 'panel-card';
 
 interface DashboardCardProps extends HTMLAttributes<HTMLDivElement> {
   children: ReactNode;

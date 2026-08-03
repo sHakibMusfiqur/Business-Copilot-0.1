@@ -5,9 +5,9 @@ import {
   LayoutDashboard,
   UsersRound,
   Building2,
-  ShoppingCart,
   Package,
   Warehouse,
+  ShoppingCart,
   Receipt,
   ShoppingBag,
   Calculator,
@@ -34,21 +34,35 @@ import {
   DollarSign,
   Contact,
   History,
+  Command,
+  Sparkles,
+  type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { logout as apiLogout } from '@/lib/api';
 import { brandInitials } from '@/lib/branding';
-import { generateInitials } from '@/lib/utils';
+import { cn, generateInitials } from '@/lib/utils';
 import { AuthProvider } from '@/providers/auth-provider';
 import { OrganizationThemeProvider } from '@/providers/organization-theme-provider';
 import { useAuthStore } from '@/store/auth-store';
 import { useBrandingStore } from '@/store/branding-store';
 
+interface SidebarItem {
+  label: string;
+  href: string;
+  icon: LucideIcon;
+}
 
-const sidebarItems = [
+interface SidebarSection {
+  section: string;
+  items: SidebarItem[];
+}
+
+const sidebarItems: SidebarSection[] = [
   { section: 'Main', items: [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   ]},
@@ -57,9 +71,10 @@ const sidebarItems = [
     { label: 'Suppliers', href: '/suppliers', icon: Building2 },
     { label: 'Products', href: '/products', icon: Package },
     { label: 'Inventory', href: '/inventory', icon: Warehouse },
+    { label: 'Employees', href: '/employees', icon: Users2 },
   ]},
   { section: 'CRM', items: [
-    { label: 'Dashboard', href: '/crm', icon: Contact },
+    { label: 'CRM Dashboard', href: '/crm', icon: Contact },
     { label: 'Leads', href: '/crm/leads', icon: Users2 },
   ]},
   { section: 'Sales', items: [
@@ -78,16 +93,11 @@ const sidebarItems = [
     { label: 'Payments', href: '/accounting/payments', icon: DollarSign },
     { label: 'Payroll', href: '/payroll', icon: Wallet },
   ]},
-  { section: 'People', items: [
-    { label: 'Employees', href: '/employees', icon: Users2 },
-  ]},
-  { section: 'Administration', items: [
+  { section: 'Settings', items: [
     { label: 'Users', href: '/users', icon: UsersRound },
     { label: 'Roles', href: '/roles', icon: Shield },
     { label: 'Audit Log', href: '/audit', icon: History },
     { label: 'Billing & Subscription', href: '/billing', icon: CreditCard },
-  ]},
-  { section: 'Intelligence', items: [
     { label: 'Reports', href: '/reports', icon: BarChart3 },
     { label: 'AI Copilot', href: '/copilot', icon: Bot },
   ]},
@@ -101,6 +111,7 @@ export default function DashboardLayout({
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuthStore();
@@ -115,190 +126,243 @@ export default function DashboardLayout({
   return (
     <AuthProvider>
       <OrganizationThemeProvider>
-      <div className="flex min-h-screen bg-background">
-            <AnimatePresence>
-              {mobileOpen && (
-                <motion.div
+      <div className="flex min-h-screen bg-background text-foreground">
+        {/* Ambient background glows */}
+        <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+          <div className="absolute -top-40 left-1/4 h-[400px] w-[400px] rounded-full bg-slate-400/[0.05] dark:bg-white/[0.02] blur-[120px]" />
+          <div className="absolute bottom-0 right-0 h-[320px] w-[320px] rounded-full bg-slate-500/[0.04] dark:bg-white/[0.02] blur-[120px]" />
+        </div>
+
+        <AnimatePresence>
+          {mobileOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setMobileOpen(false)}
+              className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm dark:bg-black/60 lg:hidden"
+            />
+          )}
+        </AnimatePresence>
+
+        <aside
+          className={`fixed left-0 top-0 z-50 flex h-full flex-col glass-sidebar transition-all duration-300 ${
+            collapsed ? 'w-[80px]' : 'w-[240px]'
+          } ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+        >
+          {/* Logo */}
+          <div className={cn('flex h-14 items-center border-b border-border', collapsed ? 'justify-center gap-0 px-0' : 'gap-2 px-4')}>
+            <Link href="/dashboard" className={cn('flex min-w-0 items-center gap-2.5', collapsed ? 'shrink-0' : 'flex-1')}>
+              {brand.logoUrl ? (
+                <div
+                  className="h-8 w-8 shrink-0 rounded-lg bg-slate-100 bg-contain bg-center bg-no-repeat dark:bg-white/[0.06]"
+                  style={{ backgroundImage: `url(${brand.logoUrl})` }}
+                />
+              ) : (
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-bold text-primary-foreground">
+                  {brandInitials(brand.brandName)}
+                </div>
+              )}
+              {!collapsed && (
+                <motion.span
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
-                  onClick={() => setMobileOpen(false)}
-                  className="fixed inset-0 z-40 bg-black/50 lg:hidden"
-                />
+                  className="truncate text-[15px] font-semibold tracking-tight"
+                >
+                  {brand.brandName}
+                </motion.span>
               )}
-            </AnimatePresence>
-
-            <aside
-              className={`fixed left-0 top-0 z-50 flex h-full flex-col glass-sidebar transition-all duration-300 ${
-                collapsed ? 'w-[72px]' : 'w-[260px]'
-              } ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+            </Link>
+            <button
+              onClick={() => {
+                setCollapsed(!collapsed);
+                setMobileOpen(false);
+              }}
+              aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              className="hidden shrink-0 rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-white/[0.06] dark:hover:text-white lg:block"
             >
-              <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
-                <Link href="/dashboard" className="flex items-center gap-3">
-                    {brand.logoUrl ? (
-                      <div
-                        className="h-9 w-9 shrink-0 rounded-xl bg-primary/10 bg-contain bg-center bg-no-repeat"
-                        style={{ backgroundImage: `url(${brand.logoUrl})` }}
-                      />
-                    ) : (
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary">
-                        <span className="text-sm font-bold text-primary-foreground">{brandInitials(brand.brandName)}</span>
-                      </div>
-                    )}
-                  {!collapsed && (
-                    <motion.span
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="text-sm font-bold text-slate-900"
-                    >
-                      {brand.brandName}
-                    </motion.span>
-                  )}
-                </Link>
-                <button
-                  onClick={() => {
-                    setCollapsed(!collapsed);
-                    setMobileOpen(false);
-                  }}
-                  aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-                  className="hidden rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 lg:block"
-                >
-                  {collapsed ? (
-                    <ChevronRight className="h-4 w-4" />
-                  ) : (
-                    <ChevronLeft className="h-4 w-4" />
-                  )}
-                </button>
-                <button
-                  onClick={() => setMobileOpen(false)}
-                  aria-label="Close sidebar"
-                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 lg:hidden"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              <nav className="flex-1 overflow-y-auto p-3">
-                {sidebarItems.map((section) => (
-                  <div key={section.section} className="mb-4">
-                    {!collapsed && (
-                      <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                        {section.section}
-                      </p>
-                    )}
-                    {section.items.map((item) => {
-                      const isActive = pathname === item.href;
-                      return (
-                        <Link
-                          key={item.href}
-                          href={item.href}
-                          onClick={() => setMobileOpen(false)}
-                          className={`group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
-                            isActive
-                              ? 'bg-primary/10 text-primary font-semibold'
-                              : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
-                          }`}
-                        >
-                          <item.icon className="h-4 w-4 shrink-0" />
-                          {!collapsed && (
-                            <span>{item.label}</span>
-                          )}
-                          {collapsed && (
-                            <div className="absolute left-full ml-2 rounded-md bg-popover px-2 py-1 text-xs text-popover-foreground opacity-0 shadow-md transition-opacity group-hover:opacity-100 whitespace-nowrap">
-                              {item.label}
-                            </div>
-                          )}
-                        </Link>
-                      );
-                    })}
-                  </div>
-                ))}
-              </nav>
-
-              <div className="border-t border-slate-100 p-3">
-                <div className="relative">
-                  <button
-                    onClick={() => setUserMenuOpen(!userMenuOpen)}
-                    className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm text-slate-500 hover:bg-slate-50 hover:text-slate-800 transition-colors"
-                  >
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-                      {user?.name ? generateInitials(user.name) : 'U'}
-                    </div>
-                    {!collapsed && (
-                      <>
-                        <div className="flex-1 text-left">
-                          <p className="text-sm font-semibold text-slate-900 truncate">
-                            {user?.name ?? 'User'}
-                          </p>
-                          <p className="text-xs text-slate-400 truncate">
-                            {user?.email ?? ''}
-                          </p>
-                        </div>
-                        <ChevronDown className={`h-3 w-3 text-slate-400 transition-transform ${userMenuOpen ? 'rotate-180' : ''}`} />
-                      </>
-                    )}
-                  </button>
-
-                  {userMenuOpen && !collapsed && (
-                    <div className="absolute bottom-full left-0 right-0 mb-2 rounded-2xl border border-slate-100 bg-white p-1.5 shadow-lg shadow-slate-200/50">
-                      <Link
-                        href="/dashboard/settings"
-                        className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 hover:text-slate-900 transition-colors"
-                      >
-                        <Settings className="h-4 w-4" />
-                        Settings
-                      </Link>
-                      <button
-                        onClick={handleLogout}
-                        className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                      >
-                        <LogOut className="h-4 w-4" />
-                        Sign out
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </aside>
-
-            <main className={`flex-1 transition-all duration-300 ${collapsed ? 'lg:ml-[72px]' : 'lg:ml-[260px]'}`}>
-              <header className="sticky top-0 z-30 flex h-16 items-center gap-4 border-b border-slate-100 bg-white/80 backdrop-blur-xl px-4 lg:px-8">
-                <button
-                  onClick={() => setMobileOpen(true)}
-                  aria-label="Open menu"
-                  className="rounded-xl p-2 text-slate-500 hover:bg-slate-100 lg:hidden"
-                >
-                  <Menu className="h-5 w-5" />
-                </button>
-
-                <button
-                  className="flex flex-1 items-center gap-2 rounded-xl border border-slate-100 bg-slate-50/50 px-3 py-2 text-sm text-slate-400 hover:border-slate-200 transition-colors lg:max-w-md"
-                >
-                  <Search className="h-4 w-4" />
-                  <span>Search anything...</span>
-                  <kbd className="ml-auto hidden rounded-lg border border-slate-100 bg-white px-1.5 py-0.5 text-[11px] font-medium text-slate-400 lg:inline">
-                    Ctrl+K
-                  </kbd>
-                </button>
-
-                <div className="flex items-center gap-1 ml-auto">
-                  <button aria-label="Help" className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
-                    <HelpCircle className="h-4 w-4" />
-                  </button>
-                  <button aria-label="Notifications" className="relative rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
-                    <Bell className="h-4 w-4" />
-                    <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary ring-2 ring-white" />
-                  </button>
-                </div>
-              </header>
-
-              <div className="p-4 lg:p-8">
-                {children}
-              </div>
-            </main>
+              {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            </button>
+            <button
+              onClick={() => setMobileOpen(false)}
+              aria-label="Close sidebar"
+              className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-white/[0.06] dark:hover:text-white lg:hidden"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-          </OrganizationThemeProvider>
-        </AuthProvider>
+
+          {/* Navigation */}
+          <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-4">
+            {sidebarItems.map((section) => (
+              <div key={section.section} className="mb-4">
+                {!collapsed && (
+                  <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">
+                    {section.section}
+                  </p>
+                )}
+                <div className="space-y-0.5">
+                  {section.items.map((item) => {
+                    const isActive = pathname === item.href;
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        onClick={() => setMobileOpen(false)}
+                        className={cn(
+                          'group relative flex items-center gap-2.5 rounded-lg py-2 text-[13px] font-medium transition-colors duration-150 ease-out',
+                          collapsed && 'justify-center px-0',
+                          isActive
+                            ? 'bg-primary/10 text-primary'
+                            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/[0.05] dark:hover:text-white',
+                        )}
+                      >
+                        {isActive && (
+                          <motion.span
+                            layoutId="sidebar-active"
+                            className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-primary"
+                          />
+                        )}
+                        <item.icon className={cn('h-4 w-4 shrink-0', collapsed ? 'mx-auto' : 'ml-3', isActive ? 'text-primary' : 'text-slate-400 group-hover:text-slate-600 dark:text-slate-500 dark:group-hover:text-slate-300 transition-colors')} />
+                        {!collapsed && <span className="truncate">{item.label}</span>}
+                        {collapsed && (
+                          <div className="pointer-events-none absolute left-full ml-2 z-50 rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-slate-700 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 dark:text-slate-200 dark:shadow-black/40 whitespace-nowrap">
+                            {item.label}
+                          </div>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </nav>
+
+          {/* User profile card */}
+          <div className="border-t border-border p-3">
+            <div className="relative">
+              <button
+                onClick={() => setUserMenuOpen(!userMenuOpen)}
+                className={cn(
+                  'flex w-full items-center gap-2.5 rounded-xl border border-border bg-card p-2 text-left transition-colors hover:bg-slate-50 dark:hover:bg-white/[0.06]',
+                  collapsed && 'justify-center px-0',
+                )}
+              >
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-bold text-primary-foreground">
+                  {user?.name ? generateInitials(user.name) : 'U'}
+                </div>
+                {!collapsed && (
+                  <>
+                    <div className="min-w-0 flex-1 text-left">
+                      <p className="truncate text-[13px] font-semibold">{user?.name ?? 'User'}</p>
+                      <p className="truncate text-[11px] text-slate-400 dark:text-slate-500">{user?.email ?? ''}</p>
+                    </div>
+                    <ChevronDown className={cn('h-3.5 w-3.5 shrink-0 text-slate-400 transition-transform dark:text-slate-500', userMenuOpen && 'rotate-180')} />
+                  </>
+                )}
+              </button>
+
+              {userMenuOpen && (
+                <div className="absolute bottom-full left-0 right-0 z-50 mb-2 overflow-hidden rounded-xl border border-border bg-card p-1 shadow-xl dark:shadow-black/40">
+                  <Link
+                    href="/dashboard/settings"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white"
+                  >
+                    <Settings className="h-4 w-4 text-slate-400" />
+                    Settings
+                  </Link>
+                  <button
+                    onClick={handleLogout}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Sign out
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </aside>
+
+        <main className={cn('relative z-10 flex-1 transition-all duration-300', collapsed ? 'lg:ml-[80px]' : 'lg:ml-[240px]')}>
+          {/* Top bar */}
+          <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-white/80 px-4 backdrop-blur-xl dark:bg-background/80 lg:px-6">
+            <button
+              onClick={() => setMobileOpen(true)}
+              aria-label="Open menu"
+              className="rounded-[10px] p-2 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-white/[0.06] dark:hover:text-white lg:hidden"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+
+            {/* Global search */}
+            <button className="group flex h-9 min-w-0 flex-1 items-center gap-2 rounded-[12px] border border-border bg-slate-50/60 px-3 text-sm text-slate-400 transition-colors hover:border-slate-300 dark:bg-white/[0.04] dark:hover:border-white/[0.16] lg:max-w-md">
+              <Search className="h-4 w-4 shrink-0 text-slate-400 dark:text-slate-500" />
+              <span className="truncate">Search anything...</span>
+              <kbd className="ml-auto hidden shrink-0 items-center gap-0.5 rounded-md border border-border bg-card px-1.5 py-0.5 text-[10px] font-medium text-slate-400 lg:inline-flex">
+                <Command className="h-2.5 w-2.5" /> K
+              </kbd>
+            </button>
+
+            <div className="ml-auto flex items-center gap-1">
+              {/* Workspace switcher */}
+              <div className="relative hidden md:block">
+                <button
+                  onClick={() => setWorkspaceOpen(!workspaceOpen)}
+                  className="flex h-9 items-center gap-2 rounded-[10px] border border-border bg-card px-3 text-[13px] font-medium text-slate-700 transition-colors hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-white/[0.06]"
+                >
+                  <Sparkles className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+                  <span className="max-w-[140px] truncate">{brand.brandName || 'Workspace'}</span>
+                  <ChevronDown className={cn('h-3.5 w-3.5 text-slate-400 transition-transform dark:text-slate-500', workspaceOpen && 'rotate-180')} />
+                </button>
+                <AnimatePresence>
+                  {workspaceOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 6, scale: 0.98 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute right-0 top-full z-40 mt-2 w-64 overflow-hidden rounded-xl border border-border bg-card p-1.5 shadow-xl dark:shadow-black/40"
+                    >
+                      <div className="px-3 pb-1.5 pt-2.5">
+                        <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400 dark:text-slate-500">Workspace</p>
+                      </div>
+                      <div className="flex items-center gap-3 rounded-lg bg-primary/10 px-3 py-2.5">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-[11px] font-bold text-primary-foreground">
+                          {brandInitials(brand.brandName)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{brand.brandName}</p>
+                          <p className="text-[11px] text-slate-400 dark:text-slate-500">Current workspace</p>
+                        </div>
+                        <Sparkles className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              <button aria-label="Help" className="flex h-9 w-9 items-center justify-center rounded-[10px] text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-white/[0.06] dark:hover:text-white">
+                <HelpCircle className="h-4 w-4" />
+              </button>
+
+              <ThemeToggle />
+
+              <button aria-label="Notifications" className="relative flex h-9 w-9 items-center justify-center rounded-[10px] text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 dark:text-slate-500 dark:hover:bg-white/[0.06] dark:hover:text-white">
+                <Bell className="h-4 w-4" />
+                <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-primary" />
+              </button>
+            </div>
+          </header>
+
+          <div className="p-4 lg:p-6">
+            {children}
+          </div>
+        </main>
+      </div>
+      </OrganizationThemeProvider>
+    </AuthProvider>
   );
 }

@@ -49,22 +49,22 @@ export function DashboardError({ status, message, onRetry }: DashboardErrorProps
   const { title, message: displayMessage, icon: Icon } = getErrorMessage(status, message);
 
   return (
-    <div className="flex flex-col items-center justify-center py-20 text-center">
-      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 mb-5">
-        <Icon className="h-8 w-8 text-red-500" />
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50 dark:bg-red-500/10 mb-5">
+        <Icon className="h-8 w-8 text-red-500 dark:text-red-400" />
       </div>
-      <h2 className="text-xl font-bold text-slate-900 mb-2">{title}</h2>
-      <p className="text-sm text-slate-500 max-w-sm mb-8 leading-relaxed">
+      <h2 className="text-xl font-bold text-foreground mb-2">{title}</h2>
+      <p className="text-sm text-muted-foreground max-w-sm mb-8 leading-relaxed">
         {displayMessage}
       </p>
       <div className="flex items-center gap-3">
         {onRetry && (
-          <Button onClick={onRetry} className="gap-2 rounded-xl">
+          <Button onClick={onRetry} className="gap-2 rounded-[10px] bg-primary text-primary-foreground hover:bg-primary/90">
             <RefreshCw className="h-4 w-4" />
             Try again
           </Button>
         )}
-        <Button asChild variant="outline" className="gap-2 rounded-xl">
+        <Button asChild variant="outline" className="gap-2 rounded-[10px]">
           <Link href="/">
             <ArrowLeft className="h-4 w-4" />
             Go home

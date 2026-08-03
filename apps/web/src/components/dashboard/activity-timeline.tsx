@@ -54,7 +54,7 @@ export function ActivityTimeline({ activities }: ActivityTimelineProps) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
     >
-      <DashboardCard className="p-5 h-full">
+      <DashboardCard className="p-4 h-full">
         <SectionHeader
           title="Activity"
           description="Latest team actions"
@@ -73,21 +73,21 @@ export function ActivityTimeline({ activities }: ActivityTimelineProps) {
               const userName = activity.user?.name ?? 'System';
               const status = getStatusInfo(activity.entity);
               return (
-                <div key={activity.id} className="flex items-start gap-3 py-2.5 group hover:bg-slate-50/50 rounded-xl px-2 -mx-2 transition-colors">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-50 text-[11px] font-semibold text-red-600 ring-2 ring-white">
+                <div key={activity.id} className="group flex items-center gap-3 rounded-lg px-2 py-2 -mx-2 transition-colors hover:bg-slate-50 dark:hover:bg-white/[0.03]">
+                  <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[10px] font-bold text-slate-500 dark:bg-white/[0.08] dark:text-slate-400">
                     {generateInitials(userName)}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium text-slate-800 truncate">{activity.action}</span>
-                      <StatusBadge label={status.label} variant={status.variant} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="min-w-0 flex-1 truncate text-[13px] font-medium leading-snug tracking-tight text-slate-700 dark:text-slate-200">{activity.action}</span>
+                      <StatusBadge label={status.label} variant={status.variant} className="ml-auto" />
                     </div>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-xs text-slate-500">{userName}</span>
-                      <span className="text-slate-300">·</span>
+                    <div className="mt-1 flex items-center gap-1.5">
+                      <span className="text-[11px] font-medium leading-snug text-slate-500 dark:text-slate-400">{userName}</span>
+                      <span className="text-slate-300 dark:text-slate-600">·</span>
                       <ModuleBadge label={activity.entity} variant={getModuleVariant(activity.entity)} />
-                      <span className="text-slate-300">·</span>
-                      <span className="text-xs text-slate-400">{getRelativeTime(activity.createdAt)}</span>
+                      <span className="text-slate-300 dark:text-slate-600">·</span>
+                      <span className="text-[11px] leading-snug text-muted-foreground">{getRelativeTime(activity.createdAt)}</span>
                     </div>
                   </div>
                 </div>
@@ -99,7 +99,7 @@ export function ActivityTimeline({ activities }: ActivityTimelineProps) {
         {activities.length > 5 && (
           <Link
             href="/audit"
-            className="mt-4 flex items-center justify-center gap-1.5 rounded-xl border border-slate-100 py-2.5 text-xs font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-all"
+            className="mt-3 flex items-center justify-center gap-1.5 rounded-[10px] border border-border bg-card py-2 text-xs font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700 dark:bg-white/[0.02] dark:text-slate-400 dark:hover:bg-white/[0.05] dark:hover:text-white"
           >
             View all activity
             <ArrowRight className="h-3 w-3" />
