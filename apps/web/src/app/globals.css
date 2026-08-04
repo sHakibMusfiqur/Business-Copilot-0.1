@@ -73,6 +73,11 @@
     font-family: var(--font-body);
   }
 
+  html,
+  body {
+    height: 100%;
+  }
+
   h1,
   h2,
   h3,

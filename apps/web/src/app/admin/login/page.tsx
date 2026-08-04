@@ -86,7 +86,8 @@ export default function AdminLoginPage() {
 
   return (
     <div
-      className="relative flex min-h-screen w-full flex-col bg-[#080D1A] text-slate-100 [color-scheme:dark] [font-family:var(--font-inter),ui-sans-serif,system-ui,sans-serif]"
+      className="relative flex h-screen w-full flex-col overflow-hidden bg-[#080D1A] text-slate-100 [color-scheme:dark] [font-family:var(--font-inter),ui-sans-serif,system-ui,sans-serif]"
+      style={{ height: '100dvh' }}
     >
       {/* ═══════ Background (overflow-hidden OK — no glow here) ═══════ */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-20 overflow-hidden">
@@ -158,7 +159,7 @@ export default function AdminLoginPage() {
       </motion.div>
 
       {/* Center content */}
-      <div className="relative z-10 flex min-h-screen flex-col items-center justify-center px-6">
+      <div className="relative z-10 flex flex-1 flex-col items-center justify-center px-6">
 
         {/* Typography — above card */}
         <motion.div
@@ -183,11 +184,34 @@ export default function AdminLoginPage() {
           </motion.p>
         </motion.div>
 
-        {/* ── Login Card (PIXEL-PERFECT — DO NOT MODIFY) ── */}
-        <motion.div
-          ref={cardRef}
-          onMouseMove={handleCardMouseMove}
-          onMouseLeave={handleCardMouseLeave}
+        {/* ── Glow Layer + Login Card ── */}
+        <div className="relative isolate">
+          {/* Glow Layer — behind the card, moves with it */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[900px] w-[900px] -translate-x-1/2 -translate-y-1/2 rounded-full"
+            style={{
+              filter: 'blur(140px)',
+              background:
+                'radial-gradient(circle at center, rgba(59,130,246,0.22) 0%, rgba(96,165,250,0.14) 32%, rgba(37,99,235,0.10) 62%, rgba(99,102,241,0.06) 100%)',
+            }}
+          />
+          {/* Floor bloom — wide horizontal light directly underneath the card */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute left-1/2 top-[calc(100%+16px)] h-[90px] w-[170%] -translate-x-1/2 rounded-full opacity-[0.22]"
+            style={{
+              filter: 'blur(140px)',
+              background:
+                'radial-gradient(ellipse 50% 50% at 50% 50%, rgba(59,130,246,0.35) 0%, rgba(96,165,250,0.16) 45%, transparent 75%)',
+            }}
+          />
+
+          {/* Login Card (PIXEL-PERFECT — DO NOT MODIFY) */}
+          <motion.div
+            ref={cardRef}
+            onMouseMove={handleCardMouseMove}
+            onMouseLeave={handleCardMouseLeave}
           initial={{ opacity: 0, y: 30, scale: 0.97 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 1.2, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
@@ -391,6 +415,7 @@ export default function AdminLoginPage() {
             </div>
           </div>
         </motion.div>
+        </div>
       </div>
 
       {/* ═══════ Layer 3 · Footer ═══════ */}
