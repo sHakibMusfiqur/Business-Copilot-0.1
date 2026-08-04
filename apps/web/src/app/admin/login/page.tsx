@@ -86,82 +86,11 @@ export default function AdminLoginPage() {
 
   return (
     <div
-      className="relative flex min-h-screen w-full flex-col overflow-hidden bg-[#080D1A] text-slate-100 [color-scheme:dark] [font-family:var(--font-inter),ui-sans-serif,system-ui,sans-serif]"
+      className="relative flex min-h-screen w-full flex-col bg-[#080D1A] text-slate-100 [color-scheme:dark] [font-family:var(--font-inter),ui-sans-serif,system-ui,sans-serif]"
     >
-      {/* ═══════ Layer 1 · Cinematic Lighting ═══════ */}
-      <div aria-hidden className="pointer-events-none absolute inset-0">
-        {/* Base gradient */}
+      {/* ═══════ Background (overflow-hidden OK — no glow here) ═══════ */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-20 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-[#080D1A] via-[#0C1322] to-[#080D1A]" />
-
-        {/* ── A. Large ambient blue — wide, soft foundation ── */}
-        <div
-          className="absolute left-1/2 top-[47%] h-[700px] w-[700px] -translate-x-1/2 -translate-y-1/2 blur-[260px]"
-          style={{
-            background: 'radial-gradient(ellipse 100% 85% at 50% 50%, rgba(59,130,246,0.12) 0%, rgba(59,130,246,0.04) 45%, transparent 72%)',
-          }}
-        />
-
-        {/* ── B. Soft cyan bloom — offset, adds depth ── */}
-        <div
-          className="absolute left-[48%] top-[44%] h-[560px] w-[640px] -translate-x-1/2 -translate-y-1/2 blur-[340px]"
-          style={{
-            background: 'radial-gradient(ellipse 95% 80% at 50% 50%, rgba(56,189,248,0.08) 0%, rgba(56,189,248,0.025) 50%, transparent 72%)',
-          }}
-        />
-
-        {/* ── C. Small bright center — tight core behind card ── */}
-        <div
-          className="absolute left-1/2 top-[47%] h-[320px] w-[380px] -translate-x-1/2 -translate-y-1/2 blur-[140px]"
-          style={{
-            background: 'radial-gradient(ellipse 100% 90% at 50% 50%, rgba(96,165,250,0.10) 0%, rgba(96,165,250,0.03) 50%, transparent 75%)',
-          }}
-        />
-
-        {/* ── D. Very wide atmospheric haze — deep background layer ── */}
-        <div
-          className="absolute left-1/2 top-[46%] h-[1100px] w-[1200px] -translate-x-1/2 -translate-y-1/2 blur-[520px]"
-          style={{
-            background: 'radial-gradient(ellipse 100% 80% at 50% 50%, rgba(37,99,235,0.05) 0%, rgba(37,99,235,0.015) 50%, transparent 70%)',
-          }}
-        />
-
-        {/* ── E. Thin floor light — floating card illusion ── */}
-        <div
-          className="absolute left-1/2 top-[69%] h-[22px] w-[302px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-[0.45] blur-[48px]"
-          style={{
-            background: 'radial-gradient(ellipse 100% 100% at 50% 50%, rgba(59,130,246,0.5) 0%, rgba(96,165,250,0.3) 40%, transparent 75%)',
-          }}
-        />
-
-        {/* ── F. Edge lighting — indirect wrap around card silhouette ── */}
-        {/* Top edge — light spilling over from behind */}
-        <div
-          className="absolute left-1/2 top-[22%] h-[60px] w-[460px] -translate-x-1/2 -translate-y-1/2 blur-[50px]"
-          style={{
-            background: 'radial-gradient(ellipse 100% 100% at 50% 100%, rgba(59,130,246,0.06) 0%, transparent 70%)',
-          }}
-        />
-        {/* Bottom edge — reflected light */}
-        <div
-          className="absolute left-1/2 top-[74%] h-[50px] w-[440px] -translate-x-1/2 -translate-y-1/2 blur-[45px]"
-          style={{
-            background: 'radial-gradient(ellipse 100% 100% at 50% 0%, rgba(96,165,250,0.05) 0%, transparent 70%)',
-          }}
-        />
-        {/* Left edge — faint side wrap */}
-        <div
-          className="absolute left-[calc(50%-250px)] top-[47%] h-[380px] w-[40px] -translate-y-1/2 blur-[40px]"
-          style={{
-            background: 'radial-gradient(ellipse 100% 100% at 100% 50%, rgba(59,130,246,0.04) 0%, transparent 70%)',
-          }}
-        />
-        {/* Right edge — faint side wrap */}
-        <div
-          className="absolute left-[calc(50%+210px)] top-[47%] h-[380px] w-[40px] -translate-y-1/2 blur-[40px]"
-          style={{
-            background: 'radial-gradient(ellipse 100% 100% at 0% 50%, rgba(59,130,246,0.04) 0%, transparent 70%)',
-          }}
-        />
 
         {/* Architectural grid — extremely faint */}
         <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(148,163,184,0.018)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.018)_1px,transparent_1px)] bg-[size:80px_80px] [mask-image:radial-gradient(ellipse_at_center,black_12%,transparent_55%)]" />
@@ -193,7 +122,7 @@ export default function AdminLoginPage() {
         />
       </div>
 
-      {/* ═══════ Layer 2 · Brand + Typography + Card ═══════ */}
+      {/* ═══════ Content — z-10 above background ═══════ */}
 
       {/* Top brand */}
       <motion.header
