@@ -17,6 +17,7 @@
     "db:deploy": "npm run db:deploy --workspace=apps/api",
     "db:seed": "npm run db:seed --workspace=apps/api",
     "db:generate": "npm run db:generate --workspace=apps/api",
+    "postinstall": "npm run db:generate",
     "docker:up": "docker compose up -d",
     "docker:down": "docker compose down"
   },

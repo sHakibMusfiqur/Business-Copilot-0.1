@@ -21,10 +21,7 @@ export type ScopedModel = (typeof SCOPED_MODELS)[number];
 type SqlRunner = { $executeRaw: (query: Prisma.Sql) => Promise<unknown> };
 
 export type TransactionalClient<Ctx> = {
-  $transaction: (
-    fn: (tx: Ctx) => Promise<unknown>,
-    options?: Prisma.TransactionOptions,
-  ) => Promise<unknown>;
+  $transaction: (fn: (tx: Ctx) => Promise<unknown>) => Promise<unknown>;
 };
 
 async function setContextVar(tx: SqlRunner, name: string, value: string): Promise<void> {
@@ -111,5 +108,5 @@ export function tenantExtension(scope: TenantScope) {
   return Prisma.defineExtension({
     name: 'bc-tenant-scope',
     query: queries,
-  }) as unknown as (client: any) => any;
+  } as never) as unknown as (client: any) => any;
 }
