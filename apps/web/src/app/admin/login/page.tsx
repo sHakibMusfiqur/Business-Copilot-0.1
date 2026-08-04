@@ -88,53 +88,79 @@ export default function AdminLoginPage() {
     <div
       className="relative flex min-h-screen w-full flex-col overflow-hidden bg-[#080D1A] text-slate-100 [color-scheme:dark] [font-family:var(--font-inter),ui-sans-serif,system-ui,sans-serif]"
     >
-      {/* ═══════ Layer 1 · Atmospheric Background ═══════ */}
+      {/* ═══════ Layer 1 · Cinematic Lighting ═══════ */}
       <div aria-hidden className="pointer-events-none absolute inset-0">
         {/* Base gradient */}
         <div className="absolute inset-0 bg-gradient-to-b from-[#080D1A] via-[#0C1322] to-[#080D1A]" />
 
-        {/* Architectural grid */}
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(148,163,184,0.025)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.025)_1px,transparent_1px)] bg-[size:80px_80px] [mask-image:radial-gradient(ellipse_at_center,black_15%,transparent_65%)]" />
-
-        {/* Blueprint crosshair — center */}
-        <div className="absolute left-1/2 top-1/2 h-px w-[600px] -translate-x-1/2 bg-gradient-to-r from-transparent via-white/[0.025] to-transparent" />
-        <div className="absolute left-1/2 top-1/2 h-[600px] w-px -translate-y-1/2 bg-gradient-to-b from-transparent via-white/[0.025] to-transparent" />
-
-        {/* Concentric rings — centered */}
-        <div className="absolute left-1/2 top-1/2 h-[360px] w-[360px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.02]" />
-        <div className="absolute left-1/2 top-1/2 h-[560px] w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.015]" />
-        <div className="absolute left-1/2 top-1/2 h-[800px] w-[800px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.01]" />
-        <div className="absolute left-1/2 top-1/2 h-[1100px] w-[1100px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.005]" />
-
-        {/* Orbital accent — tilted ellipse */}
-        <div className="absolute left-1/2 top-1/2 h-[500px] w-[900px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.015] [transform:rotateX(65deg)]" />
-
-        {/* Floating orbs */}
-        <motion.div
-          className="absolute left-[15%] top-[18%] h-[400px] w-[400px] rounded-full bg-[#1E3A8A]/[0.07] blur-[160px]"
-          animate={{ x: [0, 50, 0], y: [0, 30, 0] }}
-          transition={{ duration: 28, repeat: Infinity, ease: 'easeInOut' }}
-        />
-        <motion.div
-          className="absolute bottom-[15%] right-[12%] h-[350px] w-[350px] rounded-full bg-[#0C4A6E]/[0.05] blur-[160px]"
-          animate={{ x: [0, -40, 0], y: [0, -25, 0] }}
-          transition={{ duration: 34, repeat: Infinity, ease: 'easeInOut' }}
+        {/* ── 1. Deep ambient blue — wide, barely visible ── */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background: 'radial-gradient(ellipse 120% 90% at 50% 48%, rgba(15,23,55,0.9) 0%, rgba(8,13,26,1) 100%)',
+          }}
         />
 
-        {/* Central radial glow */}
-        <div className="absolute left-1/2 top-[45%] h-[500px] w-[700px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#1E40AF]/[0.03] blur-[120px]" />
+        {/* ── 2. Soft blue ambient glow — Layer 1 (core) ── */}
+        <div
+          className="absolute left-1/2 top-[47%] h-[440px] w-[440px] -translate-x-1/2 -translate-y-1/2 blur-[200px]"
+          style={{
+            background: 'radial-gradient(circle at center, rgba(59,130,246,0.20) 0%, rgba(59,130,246,0.08) 40%, transparent 70%)',
+          }}
+        />
+
+        {/* ── 3. Soft blue ambient glow — Layer 2 (mid spread) ── */}
+        <div
+          className="absolute left-1/2 top-[47%] h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 blur-[300px]"
+          style={{
+            background: 'radial-gradient(circle at center, rgba(96,165,250,0.12) 0%, rgba(96,165,250,0.04) 45%, transparent 70%)',
+          }}
+        />
+
+        {/* ── 4. Soft blue ambient glow — Layer 3 (wide falloff) ── */}
+        <div
+          className="absolute left-1/2 top-[47%] h-[900px] w-[900px] -translate-x-1/2 -translate-y-1/2 blur-[460px]"
+          style={{
+            background: 'radial-gradient(circle at center, rgba(37,99,235,0.08) 0%, rgba(37,99,235,0.02) 50%, transparent 70%)',
+          }}
+        />
+
+        {/* ── 5. Bottom floating glow — card hover illusion ── */}
+        <div
+          className="absolute left-1/2 top-[68%] h-[28px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-[0.35] blur-[50px]"
+          style={{
+            background: 'linear-gradient(90deg, transparent 0%, rgba(59,130,246,0.6) 30%, rgba(96,165,250,0.5) 50%, rgba(59,130,246,0.6) 70%, transparent 100%)',
+          }}
+        />
+
+        {/* Architectural grid — extremely faint */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(148,163,184,0.018)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.018)_1px,transparent_1px)] bg-[size:80px_80px] [mask-image:radial-gradient(ellipse_at_center,black_12%,transparent_55%)]" />
+
+        {/* Blueprint crosshair — barely perceptible */}
+        <div className="absolute left-1/2 top-[47%] h-px w-[500px] -translate-x-1/2 bg-gradient-to-r from-transparent via-white/[0.018] to-transparent" />
+        <div className="absolute left-1/2 top-[47%] h-[500px] w-px -translate-y-1/2 bg-gradient-to-b from-transparent via-white/[0.018] to-transparent" />
+
+        {/* Concentric rings — ghost-faint */}
+        <div className="absolute left-1/2 top-[47%] h-[340px] w-[340px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.012]" />
+        <div className="absolute left-1/2 top-[47%] h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.008]" />
+        <div className="absolute left-1/2 top-[47%] h-[740px] w-[740px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.005]" />
 
         {/* Noise texture */}
         <div
-          className="absolute inset-0 opacity-[0.012] mix-blend-overlay"
+          className="absolute inset-0 opacity-[0.01] mix-blend-overlay"
           style={{
             backgroundImage:
               'url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27200%27 height=%27200%27%3E%3Cfilter id=%27n%27%3E%3CfeTurbulence type=%27fractalNoise%27 baseFrequency=%270.8%27 numOctaves=%274%27 stitchTiles=%27stitch%27/%3E%3C/filter%3E%3Crect width=%27100%25%27 height=%27100%25%27 filter=%27url(%23n)%27/%3E%3C/svg%3E")',
           }}
         />
 
-        {/* Vignette */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_35%,rgba(8,13,26,0.75)_100%)]" />
+        {/* Vignette — extremely soft, wraps edges */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background: 'radial-gradient(ellipse 80% 70% at 50% 48%, transparent 30%, rgba(8,13,26,0.4) 65%, rgba(8,13,26,0.8) 100%)',
+          }}
+        />
       </div>
 
       {/* ═══════ Layer 2 · Brand + Typography + Card ═══════ */}

@@ -1,6 +1,7 @@
 'use client';
 
 import { Moon, Sun } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 import { cn } from '@/lib/utils';
 import { useThemeStore } from '@/store/theme-store';
@@ -11,8 +12,15 @@ interface ThemeToggleProps {
 
 export function ThemeToggle({ className }: ThemeToggleProps) {
   const { theme, setTheme } = useThemeStore();
+  const [mounted, setMounted] = useState(false);
 
-  const isDark = theme === 'dark' || (theme === 'system' && typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  useEffect(() => setMounted(true), []);
+
+  const isDark =
+    theme === 'dark' ||
+    (theme === 'system' &&
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-color-scheme: dark)').matches);
 
   return (
     <button
@@ -24,9 +32,15 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
         className,
       )}
     >
-      <span suppressHydrationWarning>
-        {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-      </span>
+      {mounted ? (
+        isDark ? (
+          <Sun className="h-4 w-4" />
+        ) : (
+          <Moon className="h-4 w-4" />
+        )
+      ) : (
+        <span className="h-4 w-4" />
+      )}
     </button>
   );
 }
