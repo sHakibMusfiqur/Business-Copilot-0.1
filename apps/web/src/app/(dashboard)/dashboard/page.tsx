@@ -28,7 +28,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { Fragment, useEffect } from 'react';
 
 import { DashboardHeader } from '@/components/dashboard/dashboard-header';
 import { DashboardError } from '@/components/dashboard/dashboard-error';
@@ -279,10 +279,30 @@ export default function DashboardPage() {
   const profitMargin = statistics.monthlyRevenue > 0 ? ((netProfit / statistics.monthlyRevenue) * 100).toFixed(1) : '0.0';
 
   const can = (...required: string[]) => required.some((permission) => permissions.includes(permission));
-  const kpiCards = layout.kpis.map((key) => renderKpiCard(key, statistics, netProfit, profitMargin)).filter(Boolean);
-  const chartCards = layout.charts.map((key) => renderChartCard(key, statistics, netProfit, profitMargin)).filter(Boolean);
-  const secondaryCards = layout.secondary.map((key) => renderSecondaryCard(key, statistics)).filter(Boolean);
-  const alertCards = layout.alerts.map((key) => renderAlertCard(key, statistics)).filter(Boolean);
+  const kpiCards = layout.kpis
+    .map((key, index) => {
+      const card = renderKpiCard(key, statistics, netProfit, profitMargin);
+      return card ? <Fragment key={`kpi-${key}-${index}`}>{card}</Fragment> : null;
+    })
+    .filter(Boolean);
+  const chartCards = layout.charts
+    .map((key, index) => {
+      const card = renderChartCard(key, statistics, netProfit, profitMargin);
+      return card ? <Fragment key={`chart-${key}-${index}`}>{card}</Fragment> : null;
+    })
+    .filter(Boolean);
+  const secondaryCards = layout.secondary
+    .map((key, index) => {
+      const card = renderSecondaryCard(key, statistics);
+      return card ? <Fragment key={`secondary-${key}-${index}`}>{card}</Fragment> : null;
+    })
+    .filter(Boolean);
+  const alertCards = layout.alerts
+    .map((key, index) => {
+      const card = renderAlertCard(key, statistics);
+      return card ? <Fragment key={`alert-${key}-${index}`}>{card}</Fragment> : null;
+    })
+    .filter(Boolean);
   const showActivity = layout.activity && recentActivities.length > 0;
   const showQuickActions = quickActions.length > 0;
   const showBottomGrid = showActivity || showQuickActions;

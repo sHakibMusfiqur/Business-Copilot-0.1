@@ -137,3 +137,91 @@ export async function getAdminPlans(signal?: AbortSignal) {
   const response = await api.get(API_ROUTES.ADMIN.PLANS, { signal });
   return response.data;
 }
+
+export interface AdminOrganizationDetail {
+  id: string;
+  name: string;
+  slug: string;
+  email: string | null;
+  logo: string | null;
+  isActive: boolean;
+  suspendedAt: string | null;
+  deletedAt: string | null;
+  archivedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  _count: {
+    users: number;
+    members: number;
+    customers: number;
+    products: number;
+    suppliers: number;
+    invoices: number;
+  };
+  subscription: {
+    id: string;
+    status: string;
+    plan: { name: string; slug: string } | null;
+  } | null;
+  settings: { settings: Record<string, unknown> | null } | null;
+  owner: { id: string; name: string; email: string; avatar: string | null } | null;
+}
+
+export async function getAdminOrganization(id: string, signal?: AbortSignal) {
+  const response = await api.get(`${API_ROUTES.ADMIN.ORGANIZATIONS}/${id}`, { signal });
+  return response.data as AdminOrganizationDetail;
+}
+
+export interface OrganizationStatistics {
+  id: string;
+  name: string;
+  slug: string;
+  email: string | null;
+  isActive: boolean;
+  status: 'ACTIVE' | 'SUSPENDED' | 'ARCHIVED' | 'DELETED';
+  createdAt: string;
+  lastActivity: string | null;
+  owner: { id: string; name: string; email: string; avatar: string | null } | null;
+  subscription: {
+    plan: string | null;
+    status: string;
+    currentPeriodEnd: string;
+  } | null;
+  users: {
+    total: number;
+    active: number;
+    inactive: number;
+    totalLogins: number;
+    monthlyLogins: number;
+  };
+  revenue: { total: number };
+  usage: {
+    customers: number;
+    products: number;
+    suppliers: number;
+    invoices: number;
+    auditEvents: number;
+  };
+  recentActivities: {
+    id: string;
+    action: string;
+    entity: string | null;
+    createdAt: string;
+    user: { id: string; name: string; email: string } | null;
+  }[];
+}
+
+export async function getAdminOrganizationStatistics(id: string, signal?: AbortSignal) {
+  const response = await api.get(`${API_ROUTES.ADMIN.ORGANIZATIONS}/${id}/statistics`, { signal });
+  return response.data as OrganizationStatistics;
+}
+
+export async function restoreAdminOrganization(id: string, reason?: string) {
+  const response = await api.patch(`${API_ROUTES.ADMIN.ORGANIZATIONS}/${id}/restore`, { reason });
+  return response.data;
+}
+
+export async function getAdminSettingHistory(key: string, signal?: AbortSignal) {
+  const response = await api.get(`${API_ROUTES.ADMIN.SETTINGS}/${encodeURIComponent(key)}/history`, { signal });
+  return response.data;
+}

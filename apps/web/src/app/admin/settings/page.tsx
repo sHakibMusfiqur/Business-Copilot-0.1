@@ -1,165 +1,174 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Settings, Save, Loader2, Mail, Shield } from 'lucide-react';
+import { Settings, Mail, Shield, Save } from 'lucide-react';
 import { useState } from 'react';
 
-import { getAdminSettings, updateAdminSetting } from '@/lib/api';
-import type { ApiError } from '@/lib/api';
+import { getAdminSettings, updateAdminSetting, type ApiError } from '@/lib/api';
+import { PageHeader } from '@/components/admin/page-header';
+import { PanelCard } from '@/components/admin/panel-card';
+import { AdminButton } from '@/components/admin/admin-button';
+import { Switch } from '@/components/ui/switch';
+import { ErrorState, LoadingState } from '@/components/admin/states';
+import { toast } from '@/components/ui/use-toast';
 
-const SETTING_KEYS = [
-  { key: 'smtp_host', label: 'SMTP Host', icon: Mail, type: 'text' },
-  { key: 'smtp_port', label: 'SMTP Port', icon: Mail, type: 'number' },
-  { key: 'smtp_user', label: 'SMTP Username', icon: Mail, type: 'text' },
-  { key: 'smtp_pass', label: 'SMTP Password', icon: Mail, type: 'password' },
-  { key: 'smtp_from', label: 'SMTP From Email', icon: Mail, type: 'email' },
-  { key: 'app_name', label: 'Application Name', icon: Settings, type: 'text' },
-  { key: 'app_url', label: 'Application URL', icon: Settings, type: 'url' },
-  { key: 'support_email', label: 'Support Email', icon: Mail, type: 'email' },
-  { key: 'maintenance_mode', label: 'Maintenance Mode', icon: Shield, type: 'boolean' },
-];
+const SMTP_FIELDS = [
+  { key: 'smtp_host', label: 'SMTP Host', type: 'text', placeholder: 'smtp.gmail.com' },
+  { key: 'smtp_port', label: 'SMTP Port', type: 'number', placeholder: '587' },
+  { key: 'smtp_user', label: 'SMTP Username', type: 'text', placeholder: 'user@gmail.com' },
+  { key: 'smtp_pass', label: 'SMTP Password', type: 'password', placeholder: '••••••••' },
+  { key: 'smtp_from', label: 'From Email', type: 'email', placeholder: 'noreply@example.com' },
+] as const;
 
-const MASKED_PASSWORD = '••••••••';
+const APP_FIELDS = [
+  { key: 'app_name', label: 'Application Name', type: 'text', placeholder: 'Business Copilot' },
+  { key: 'app_url', label: 'Application URL', type: 'url', placeholder: 'https://copilot.example.com' },
+  { key: 'support_email', label: 'Support Email', type: 'email', placeholder: 'support@example.com' },
+] as const;
+
+const BOOLEAN_SETTINGS = [
+  { key: 'maintenance_mode', label: 'Maintenance Mode', description: 'Block all non-admin access to the platform.' },
+] as const;
+
+const MASKED = '••••••••';
 
 export default function AdminSettingsPage() {
   const queryClient = useQueryClient();
-  const { data: settings, isLoading } = useQuery({
+  const { data: settings, isLoading, isError, refetch } = useQuery({
     queryKey: ['admin', 'settings'],
     queryFn: () => getAdminSettings(),
     staleTime: 30_000,
   });
 
-  const [localValues, setLocalValues] = useState<Record<string, string>>({});
-  const [smtpPassChanged, setSmtpPassChanged] = useState(false);
-  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [dirtyPass, setDirtyPass] = useState(false);
 
-  const updateMutation = useMutation({
+  const saveMutation = useMutation({
     mutationFn: ({ key, value }: { key: string; value: unknown }) => updateAdminSetting(key, value),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'settings'] });
-      setToast({ type: 'success', message: 'Setting updated successfully' });
-      setTimeout(() => setToast(null), 3000);
+      toast({ title: 'Setting updated' });
     },
     onError: (err: ApiError) => {
-      // Rollback UI for boolean toggles
-      setLocalValues({});
-      setSmtpPassChanged(false);
-      setToast({ type: 'error', message: err?.message ?? 'Failed to update setting' });
-      setTimeout(() => setToast(null), 5000);
+      setDraft({});
+      setDirtyPass(false);
+      toast({ title: err?.message ?? 'Failed to update', variant: 'destructive' });
     },
   });
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <LoadingState rows={2} />;
   }
 
-  const getValue = (key: string) => {
-    if (key === 'smtp_pass' && !smtpPassChanged) {
-      const stored = localValues[key] ?? (settings?.[key] ? MASKED_PASSWORD : '');
-      return stored;
+  if (isError) {
+    return <ErrorState message="Could not load settings" onRetry={() => refetch()} />;
+  }
+
+  const getVal = (key: string) => {
+    if (key === 'smtp_pass' && !dirtyPass) {
+      return draft[key] ?? (settings?.[key] ? MASKED : '');
     }
-    if (localValues[key] !== undefined) return localValues[key];
-    const val = settings?.[key];
-    if (val === null || val === undefined) return '';
-    if (typeof val === 'object') return JSON.stringify(val);
-    return String(val);
+    if (draft[key] !== undefined) return draft[key];
+    const v = settings?.[key];
+    if (v == null) return '';
+    return String(v);
+  };
+
+  const saveText = (key: string, type: string) => {
+    const v = draft[key];
+    if (v === undefined) return;
+    saveMutation.mutate({ key, value: type === 'number' ? Number(v) : v });
+    setDraft((p) => { const n = { ...p }; delete n[key]; return n; });
+    if (key === 'smtp_pass') setDirtyPass(false);
   };
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      {toast && (
-        <div className={`rounded-lg p-3 text-sm ${
-          toast.type === 'success' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-destructive/10 text-destructive'
-        }`}>
-          {toast.message}
-        </div>
-      )}
+    <div className="space-y-4">
+      <PageHeader
+        title="Platform Settings"
+        description="Configure global platform behavior and integrations"
+      />
 
-      <div>
-        <h1 className="text-2xl font-bold">System Settings</h1>
-        <p className="text-muted-foreground">Configure global platform settings</p>
-      </div>
-
-      <div className="space-y-4">
-        {SETTING_KEYS.map((setting) => (
-          <div key={setting.key} className="rounded-xl border bg-card p-5">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex items-center gap-3 flex-1">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                  <setting.icon className="h-4 w-4 text-primary" />
-                </div>
-                <div className="flex-1">
-                  <label className="text-sm font-medium">{setting.label}</label>
-                  <p className="text-xs text-muted-foreground">{setting.key}</p>
-                </div>
+      <PanelCard title="SMTP Configuration" icon={Mail} description="Email delivery settings">
+        <div className="space-y-3">
+          {SMTP_FIELDS.map((f) => (
+            <div key={f.key}>
+              <label className="mb-1 block text-[12px] font-medium text-muted-foreground">{f.label}</label>
+              <div className="flex gap-2">
+                <input
+                  type={f.type}
+                  value={getVal(f.key)}
+                  placeholder={f.placeholder}
+                  onChange={(e) => {
+                    setDraft((p) => ({ ...p, [f.key]: e.target.value }));
+                    if (f.key === 'smtp_pass') setDirtyPass(true);
+                  }}
+                  className="flex-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+                <AdminButton
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => saveText(f.key, f.type)}
+                  disabled={draft[f.key] === undefined}
+                >
+                  <Save className="h-3.5 w-3.5" />
+                </AdminButton>
               </div>
             </div>
-            <div className="mt-3">
-              {setting.type === 'boolean' ? (
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => {
-                      const current = getValue(setting.key) === 'true';
-                      const newVal = String(!current);
-                      setLocalValues((prev) => ({ ...prev, [setting.key]: newVal }));
-                      updateMutation.mutate({ key: setting.key, value: newVal === 'true' });
-                    }}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                      getValue(setting.key) === 'true' ? 'bg-primary' : 'bg-muted'
-                    }`}
-                    aria-label={`Toggle ${setting.label}`}
-                  >
-                    <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                        getValue(setting.key) === 'true' ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                    />
-                  </button>
-                  <span className="text-sm text-muted-foreground">
-                    {getValue(setting.key) === 'true' ? 'Enabled' : 'Disabled'}
-                  </span>
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <input
-                    type={setting.type}
-                    value={getValue(setting.key)}
-                    onChange={(e) => {
-                      setLocalValues((prev) => ({ ...prev, [setting.key]: e.target.value }));
-                      if (setting.key === 'smtp_pass') setSmtpPassChanged(true);
-                    }}
-                    className="flex-1 rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                    aria-label={setting.label}
-                  />
-                  <button
-                    onClick={() => {
-                      const val = localValues[setting.key];
-                      if (val !== undefined) {
-                        updateMutation.mutate({ key: setting.key, value: setting.type === 'number' ? Number(val) : val });
-                        setLocalValues((prev) => {
-                          const next = { ...prev };
-                          delete next[setting.key];
-                          return next;
-                        });
-                        if (setting.key === 'smtp_pass') setSmtpPassChanged(false);
-                      }
-                    }}
-                    disabled={localValues[setting.key] === undefined}
-                    className="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
-                    aria-label={`Save ${setting.label}`}
-                  >
-                    <Save className="h-4 w-4" />
-                  </button>
-                </div>
-              )}
+          ))}
+        </div>
+      </PanelCard>
+
+      <PanelCard title="Application" icon={Settings} description="General platform settings">
+        <div className="space-y-3">
+          {APP_FIELDS.map((f) => (
+            <div key={f.key}>
+              <label className="mb-1 block text-[12px] font-medium text-muted-foreground">{f.label}</label>
+              <div className="flex gap-2">
+                <input
+                  type={f.type}
+                  value={getVal(f.key)}
+                  placeholder={f.placeholder}
+                  onChange={(e) => setDraft((p) => ({ ...p, [f.key]: e.target.value }))}
+                  className="flex-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-[13px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
+                <AdminButton
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => saveText(f.key, f.type)}
+                  disabled={draft[f.key] === undefined}
+                >
+                  <Save className="h-3.5 w-3.5" />
+                </AdminButton>
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      </PanelCard>
+
+      <PanelCard title="Platform Control" icon={Shield}>
+        <div className="space-y-3">
+          {BOOLEAN_SETTINGS.map((b) => {
+            const enabled = settings?.[b.key] === true || settings?.[b.key] === 'true';
+            return (
+              <div
+                key={b.key}
+                className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2.5"
+              >
+                <div>
+                  <p className="text-[13px] font-medium text-foreground">{b.label}</p>
+                  <p className="text-[12px] text-muted-foreground">{b.description}</p>
+                </div>
+                <Switch
+                  checked={enabled}
+                  disabled={saveMutation.isPending}
+                  onCheckedChange={(c) => saveMutation.mutate({ key: b.key, value: c })}
+                />
+              </div>
+            );
+          })}
+        </div>
+      </PanelCard>
     </div>
   );
 }
