@@ -1,26 +1,19 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import {
   ArrowRight,
-  BrainCircuit,
-  Building2,
-  CreditCard,
   Eye,
   EyeOff,
   Loader2,
   Lock,
   Mail,
-  ScrollText,
-  Server,
   ShieldCheck,
-  type LucideIcon,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
-import { PlatformBackground } from '@/components/admin/login/platform-background';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,31 +22,38 @@ import { adminLogin } from '@/lib/api';
 import { EMAIL_RE } from '@/lib/validation';
 import { useAuthStore } from '@/store/auth-store';
 
-interface Capability {
-  icon: LucideIcon;
-  title: string;
-  description: string;
-}
-
-const CAPABILITIES: Capability[] = [
-  { icon: Building2, title: 'Organization Control', description: 'Create, suspend, and manage workspaces' },
-  { icon: CreditCard, title: 'Billing & Revenue', description: 'Plans, invoices, and subscriptions' },
-  { icon: BrainCircuit, title: 'AI Platform', description: 'Token usage, costs, and model providers' },
-  { icon: ShieldCheck, title: 'Security Center', description: 'Encrypted sessions, role-based access' },
-  { icon: ScrollText, title: 'Audit Logs', description: 'Every action captured and reviewable' },
-  { icon: Server, title: 'Infrastructure Monitoring', description: 'Uptime, health, and observability' },
-];
-
 export default function AdminLoginPage() {
   const router = useRouter();
   const setUser = useAuthStore((s) => s.setUser);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [remember, setRemember] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const cardRef = useRef<HTMLDivElement>(null);
+  const mouseX = useMotionValue(0);
+  const mouseY = useMotionValue(0);
+  const springX = useSpring(mouseX, { stiffness: 80, damping: 22, mass: 0.8 });
+  const springY = useSpring(mouseY, { stiffness: 80, damping: 22, mass: 0.8 });
+  const rotateX = useTransform(springY, [-0.5, 0.5], [3, -3]);
+  const rotateY = useTransform(springX, [-0.5, 0.5], [-3, 3]);
+
+  const handleCardMouseMove = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      const rect = cardRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      mouseX.set((e.clientX - rect.left) / rect.width - 0.5);
+      mouseY.set((e.clientY - rect.top) / rect.height - 0.5);
+    },
+    [mouseX, mouseY],
+  );
+
+  const handleCardMouseLeave = useCallback(() => {
+    mouseX.set(0);
+    mouseY.set(0);
+  }, [mouseX, mouseY]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -85,254 +85,347 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen w-full flex-col overflow-hidden bg-[#0B1120] text-slate-100 [color-scheme:dark] [font-family:var(--font-inter),ui-sans-serif,system-ui,sans-serif]">
-      <PlatformBackground />
+    <div
+      className="relative flex min-h-screen w-full flex-col overflow-hidden bg-[#080D1A] text-slate-100 [color-scheme:dark] [font-family:var(--font-inter),ui-sans-serif,system-ui,sans-serif]"
+    >
+      {/* ═══════ Layer 1 · Atmospheric Background ═══════ */}
+      <div aria-hidden className="pointer-events-none absolute inset-0">
+        {/* Base gradient */}
+        <div className="absolute inset-0 bg-gradient-to-b from-[#080D1A] via-[#0C1322] to-[#080D1A]" />
 
-      {/* ── Top right: theme toggle ─────────────────────────────── */}
+        {/* Architectural grid */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(148,163,184,0.025)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.025)_1px,transparent_1px)] bg-[size:80px_80px] [mask-image:radial-gradient(ellipse_at_center,black_15%,transparent_65%)]" />
+
+        {/* Blueprint crosshair — center */}
+        <div className="absolute left-1/2 top-1/2 h-px w-[600px] -translate-x-1/2 bg-gradient-to-r from-transparent via-white/[0.025] to-transparent" />
+        <div className="absolute left-1/2 top-1/2 h-[600px] w-px -translate-y-1/2 bg-gradient-to-b from-transparent via-white/[0.025] to-transparent" />
+
+        {/* Concentric rings — centered */}
+        <div className="absolute left-1/2 top-1/2 h-[360px] w-[360px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.02]" />
+        <div className="absolute left-1/2 top-1/2 h-[560px] w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.015]" />
+        <div className="absolute left-1/2 top-1/2 h-[800px] w-[800px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.01]" />
+        <div className="absolute left-1/2 top-1/2 h-[1100px] w-[1100px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.005]" />
+
+        {/* Orbital accent — tilted ellipse */}
+        <div className="absolute left-1/2 top-1/2 h-[500px] w-[900px] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.015] [transform:rotateX(65deg)]" />
+
+        {/* Floating orbs */}
+        <motion.div
+          className="absolute left-[15%] top-[18%] h-[400px] w-[400px] rounded-full bg-[#1E3A8A]/[0.07] blur-[160px]"
+          animate={{ x: [0, 50, 0], y: [0, 30, 0] }}
+          transition={{ duration: 28, repeat: Infinity, ease: 'easeInOut' }}
+        />
+        <motion.div
+          className="absolute bottom-[15%] right-[12%] h-[350px] w-[350px] rounded-full bg-[#0C4A6E]/[0.05] blur-[160px]"
+          animate={{ x: [0, -40, 0], y: [0, -25, 0] }}
+          transition={{ duration: 34, repeat: Infinity, ease: 'easeInOut' }}
+        />
+
+        {/* Central radial glow */}
+        <div className="absolute left-1/2 top-[45%] h-[500px] w-[700px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#1E40AF]/[0.03] blur-[120px]" />
+
+        {/* Noise texture */}
+        <div
+          className="absolute inset-0 opacity-[0.012] mix-blend-overlay"
+          style={{
+            backgroundImage:
+              'url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27200%27 height=%27200%27%3E%3Cfilter id=%27n%27%3E%3CfeTurbulence type=%27fractalNoise%27 baseFrequency=%270.8%27 numOctaves=%274%27 stitchTiles=%27stitch%27/%3E%3C/filter%3E%3Crect width=%27100%25%27 height=%27100%25%27 filter=%27url(%23n)%27/%3E%3C/svg%3E")',
+          }}
+        />
+
+        {/* Vignette */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_35%,rgba(8,13,26,0.75)_100%)]" />
+      </div>
+
+      {/* ═══════ Layer 2 · Brand + Typography + Card ═══════ */}
+
+      {/* Top brand */}
+      <motion.header
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.8, delay: 0.4 }}
+        className="absolute left-0 top-0 z-20 flex items-center gap-3 px-8 py-7 md:px-12"
+      >
+        <div className="relative h-8 w-8">
+          <div className="absolute inset-0 rounded-[9px] bg-gradient-to-br from-[#2563EB] to-[#1D4ED8] shadow-[0_2px_8px_rgba(37,99,235,0.25)]" />
+          <div className="relative flex h-full w-full items-center justify-center text-[13px] font-bold text-white">
+            BC
+          </div>
+        </div>
+        <div className="flex flex-col">
+          <span className="text-[15px] font-semibold tracking-[-0.01em] text-white/90">
+            Business Copilot
+          </span>
+          <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-slate-500/50">
+            Platform Admin
+          </span>
+        </div>
+      </motion.header>
+
+      {/* Theme toggle — top right */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ duration: 0.6, delay: 0.6 }}
-        className="absolute right-5 top-5 z-30"
+        transition={{ duration: 0.8, delay: 0.6 }}
+        className="absolute right-6 top-6 z-20 md:right-8 md:top-7"
       >
-        <ThemeToggle className="rounded-[10px] text-slate-400 hover:bg-white/[0.06] hover:text-white" />
+        <ThemeToggle className="h-9 w-9 rounded-full text-slate-500/50 hover:text-slate-300" />
       </motion.div>
 
-      {/* ── Split layout: 55% branding / 45% login card ─────────── */}
-      <div className="relative z-10 mx-auto grid min-h-screen w-full max-w-[1440px] items-center gap-10 px-6 py-12 lg:grid-cols-[11fr_9fr] lg:gap-24 lg:px-12">
-        {/* ── Left: Enterprise OS branding ──────────────────────── */}
-        <section aria-label="Business Copilot platform overview" className="hidden lg:block">
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, ease: 'easeOut' }}
-          >
-            {/* Logo + badge */}
-            <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-[#2563EB] to-[#1D4ED8] shadow-lg shadow-blue-950/60 ring-1 ring-white/10">
-                <ShieldCheck className="h-7 w-7 text-white" />
-              </div>
-              <div>
-                <p className="text-xl font-semibold tracking-tight text-white">Business Copilot</p>
-                <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1">
-                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-400" />
-                  <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-300">
-                    Platform Console
-                  </span>
-                </span>
-              </div>
-            </div>
+      {/* Center content */}
+      <div className="relative z-10 flex min-h-screen flex-col items-center justify-center px-6">
 
-            {/* Heading */}
-            <h1 className="mt-16 text-[56px] font-semibold leading-[1.02] tracking-tight text-white xl:text-[64px]">
-              Business Copilot
-              <span className="block bg-gradient-to-r from-white via-[#BFDBFE] to-[#60A5FA] bg-clip-text text-transparent">
-                Platform Console
-              </span>
-            </h1>
-
-            <p className="mt-7 max-w-xl text-base leading-relaxed text-slate-400">
-              Administer every organization, subscription, AI usage, billing, feature flags,
-              support, monitoring, audit, and security from a single, unified platform.
-            </p>
-
-            {/* Capability cards */}
-            <div className="mt-14 grid max-w-2xl grid-cols-2 gap-4">
-              {CAPABILITIES.map((capability, i) => (
-                <motion.div
-                  key={capability.title}
-                  initial={{ opacity: 0, y: 14 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.12 + i * 0.06, duration: 0.5, ease: 'easeOut' }}
-                  whileHover={{ y: -3 }}
-                  className="group rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4 backdrop-blur-sm transition-colors duration-300 hover:border-blue-400/30 hover:bg-white/[0.05]"
-                >
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.05] text-blue-300 transition-colors duration-300 group-hover:border-blue-400/30 group-hover:bg-blue-500/10">
-                    <capability.icon className="h-[18px] w-[18px]" />
-                  </div>
-                  <p className="mt-3 text-sm font-medium text-slate-200">{capability.title}</p>
-                  <p className="mt-1 text-[13px] leading-relaxed text-slate-500">
-                    {capability.description}
-                  </p>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-        </section>
-
-        {/* ── Right: glass login card ───────────────────────────── */}
-        <section className="relative mx-auto w-full max-w-[460px]">
-          <motion.div
-            initial={{ opacity: 0, y: 28, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            transition={{ duration: 0.7, ease: 'easeOut' }}
-            className="relative rounded-[28px] border border-white/10 bg-white/[0.04] p-8 shadow-[0_24px_80px_-20px_rgba(2,6,23,0.9)] backdrop-blur-2xl sm:p-10"
-          >
-            {/* Top hairline highlight */}
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent"
-            />
-
-            {/* Compact branding for mobile / tablet */}
-            <div className="mb-9 flex items-center justify-center gap-3 lg:hidden">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-[#2563EB] to-[#1D4ED8] shadow-lg shadow-blue-950/50 ring-1 ring-white/10">
-                <ShieldCheck className="h-5 w-5 text-white" />
-              </div>
-              <div className="text-left">
-                <p className="font-semibold leading-tight text-white">Business Copilot</p>
-                <p className="text-[11px] uppercase tracking-[0.14em] text-slate-400">
-                  Platform Console
-                </p>
-              </div>
-            </div>
-
-            {/* Role badge */}
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-400/20 bg-blue-500/10 px-2.5 py-1 text-[11px] font-medium text-blue-300">
-              <Lock className="h-3 w-3" />
-              Platform Administrator
+        {/* Typography — above card */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.9, delay: 0.15, ease: [0.16, 1, 0.3, 1] }}
+          className="mb-12 text-center md:mb-14"
+        >
+          <h1 className="text-[clamp(40px,4.5vw,64px)] font-semibold leading-[1.05] tracking-[-0.025em] text-white">
+            Platform{' '}
+            <span className="bg-gradient-to-r from-white via-[#BFDBFE] to-[#60A5FA] bg-clip-text text-transparent">
+              Console
             </span>
-
-            <h2 className="mt-5 text-3xl font-semibold tracking-tight text-white">Sign in</h2>
-            <p className="mt-2 text-sm leading-relaxed text-slate-400">
-              Restricted access. Only Business Copilot Platform Administrators can continue.
-            </p>
-
-            <form onSubmit={handleSubmit} className="mt-9 space-y-6">
-              {/* Email */}
-              <div className="group relative">
-                <Mail className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-500 transition-colors duration-300 group-focus-within:text-blue-300" />
-                <Input
-                  id="admin-email"
-                  type="email"
-                  autoComplete="email"
-                  autoFocus
-                  placeholder=" "
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="peer h-[52px] w-full rounded-[14px] border border-white/10 bg-white/[0.04] pb-1 pl-12 pr-4 pt-[18px] text-[15px] text-white placeholder:text-transparent transition-[border-color,box-shadow] duration-300 focus-visible:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/25 focus-visible:ring-offset-0"
-                />
-                <Label
-                  htmlFor="admin-email"
-                  className="pointer-events-none absolute left-12 top-1/2 -translate-y-1/2 text-[15px] font-normal text-slate-500 transition-all duration-200 peer-focus:top-[14px] peer-focus:-translate-y-0 peer-focus:text-[11px] peer-focus:font-medium peer-focus:text-blue-300 peer-[:not(:placeholder-shown)]:top-[14px] peer-[:not(:placeholder-shown)]:-translate-y-0 peer-[:not(:placeholder-shown)]:text-[11px] peer-[:not(:placeholder-shown)]:font-medium peer-[:not(:placeholder-shown)]:text-slate-400"
-                >
-                  Email
-                </Label>
-              </div>
-
-              {/* Password */}
-              <div className="group relative">
-                <Lock className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-500 transition-colors duration-300 group-focus-within:text-blue-300" />
-                <Input
-                  id="admin-password"
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
-                  placeholder=" "
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="peer h-[52px] w-full rounded-[14px] border border-white/10 bg-white/[0.04] pb-1 pl-12 pr-12 pt-[18px] text-[15px] text-white placeholder:text-transparent transition-[border-color,box-shadow] duration-300 focus-visible:border-blue-400/60 focus-visible:ring-2 focus-visible:ring-blue-500/25 focus-visible:ring-offset-0"
-                />
-                <Label
-                  htmlFor="admin-password"
-                  className="pointer-events-none absolute left-12 top-1/2 -translate-y-1/2 text-[15px] font-normal text-slate-500 transition-all duration-200 peer-focus:top-[14px] peer-focus:-translate-y-0 peer-focus:text-[11px] peer-focus:font-medium peer-focus:text-blue-300 peer-[:not(:placeholder-shown)]:top-[14px] peer-[:not(:placeholder-shown)]:-translate-y-0 peer-[:not(:placeholder-shown)]:text-[11px] peer-[:not(:placeholder-shown)]:font-medium peer-[:not(:placeholder-shown)]:text-slate-400"
-                >
-                  Password
-                </Label>
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 rounded-md p-1 text-slate-500 transition-colors hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
-                >
-                  {showPassword ? <EyeOff className="h-[18px] w-[18px]" /> : <Eye className="h-[18px] w-[18px]" />}
-                </button>
-              </div>
-
-              {/* Remember me + forgot password */}
-              <div className="flex items-center justify-between">
-                <label className="flex cursor-pointer items-center gap-2.5 text-sm text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={remember}
-                    onChange={(e) => setRemember(e.target.checked)}
-                    className="h-4 w-4 cursor-pointer rounded border-white/20 bg-white/[0.04] accent-[#3B82F6] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
-                  />
-                  Remember me
-                </label>
-                <span
-                  title="Coming soon"
-                  className="cursor-not-allowed text-xs font-medium text-slate-500"
-                >
-                  Forgot password?{' '}
-                  <span className="ml-0.5 rounded-md border border-white/10 bg-white/[0.04] px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-slate-400">
-                    Coming soon
-                  </span>
-                </span>
-              </div>
-
-              {error && (
-                <motion.div
-                  initial={{ opacity: 0, y: -8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  role="alert"
-                  className="flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-300"
-                >
-                  <span aria-hidden className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-red-400" />
-                  {error}
-                </motion.div>
-              )}
-
-              {/* Primary action */}
-              <motion.div whileTap={{ scale: 0.98 }}>
-                <Button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="group relative h-[54px] w-full overflow-hidden rounded-[14px] bg-gradient-to-r from-[#2563EB] to-[#3B82F6] text-[15px] font-semibold text-white shadow-[0_8px_24px_-8px_rgba(37,99,235,0.65)] transition-all duration-300 hover:shadow-[0_14px_36px_-8px_rgba(37,99,235,0.85)] hover:brightness-110 disabled:opacity-70"
-                >
-                  <span
-                    aria-hidden
-                    className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,transparent_30%,rgba(255,255,255,0.25)_50%,transparent_70%)] opacity-0 transition-opacity duration-500 group-hover:opacity-100"
-                  />
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Signing in…
-                    </>
-                  ) : (
-                    <>
-                      Sign in to console
-                      <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" />
-                    </>
-                  )}
-                </Button>
-              </motion.div>
-            </form>
-
-            {/* Audit notice */}
-            <p className="mt-8 flex items-center justify-center gap-1.5 text-xs text-slate-500">
-              <ShieldCheck className="h-3.5 w-3.5 text-slate-600" />
-              All access is logged and monitored.
-            </p>
-          </motion.div>
-
-          {/* Muted organization link */}
+          </h1>
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ duration: 0.6, delay: 0.5 }}
-            className="mt-8 text-center text-[13px] text-slate-500"
+            transition={{ duration: 0.7, delay: 0.45 }}
+            className="mt-5 text-[15px] text-slate-500/60"
           >
-            Need workspace access?{' '}
-            <Link
-              href="/login"
-              className="group inline-flex items-center gap-1 rounded font-medium text-slate-400 transition-colors hover:text-blue-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/40"
-            >
-              Sign in to your organization
-              <ArrowRight className="h-3.5 w-3.5 transition-transform duration-300 group-hover:translate-x-0.5" />
-            </Link>
+            Sign in to access the admin console
           </motion.p>
-        </section>
+        </motion.div>
+
+        {/* ── Login Card (PIXEL-PERFECT — DO NOT MODIFY) ── */}
+        <motion.div
+          ref={cardRef}
+          onMouseMove={handleCardMouseMove}
+          onMouseLeave={handleCardMouseLeave}
+          initial={{ opacity: 0, y: 30, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 1.2, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
+          style={{
+            rotateX,
+            rotateY,
+            transformPerspective: 1200,
+            transformOrigin: 'center center',
+          }}
+          className="w-full max-w-[420px]"
+        >
+          {/* Outer shell — gradient border + ambient glow */}
+          <div className="relative rounded-[28px] p-[1px]">
+            {/* Ambient glow behind card */}
+            <div
+              aria-hidden
+              className="absolute -inset-4 rounded-[40px] opacity-40 blur-[60px]"
+              style={{
+                background:
+                  'radial-gradient(ellipse at 50% 20%, rgba(37,99,235,0.10) 0%, transparent 60%)',
+              }}
+            />
+
+            {/* Gradient border ring */}
+            <div
+              aria-hidden
+              className="absolute inset-0 rounded-[28px]"
+              style={{
+                background:
+                  'linear-gradient(160deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.02) 40%, rgba(255,255,255,0.04) 60%, rgba(255,255,255,0.08) 100%)',
+              }}
+            />
+
+            {/* Inner card surface */}
+            <div
+              className="relative rounded-[27px] bg-[#0D1424]/95 backdrop-blur-2xl"
+              style={{
+                boxShadow:
+                  '0 0 0 0.5px rgba(255,255,255,0.04), 0 1px 2px rgba(0,0,0,0.3), 0 4px 8px rgba(0,0,0,0.2), 0 12px 24px rgba(0,0,0,0.2), 0 32px 64px rgba(0,0,0,0.25), 0 48px 96px rgba(0,0,0,0.15), inset 0 1px 0 rgba(255,255,255,0.06)',
+              }}
+            >
+              {/* Top edge highlight */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-6 top-0 h-px rounded-full bg-gradient-to-r from-transparent via-white/[0.14] to-transparent"
+              />
+              {/* Second edge highlight */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-10 top-px h-px bg-gradient-to-r from-transparent via-white/[0.04] to-transparent"
+              />
+
+              {/* Glass reflection */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 rounded-[27px]"
+                style={{
+                  background:
+                    'linear-gradient(165deg, rgba(255,255,255,0.04) 0%, transparent 35%, transparent 65%, rgba(255,255,255,0.015) 100%)',
+                }}
+              />
+
+              {/* Inner top reflection */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 top-0 h-[120px] rounded-t-[27px]"
+                style={{
+                  background:
+                    'linear-gradient(180deg, rgba(255,255,255,0.02) 0%, transparent 100%)',
+                }}
+              />
+
+              {/* ── Card content ── */}
+              <div className="relative px-10 py-12 sm:px-12 sm:py-14">
+                {/* Card heading */}
+                <div className="mb-10">
+                  <h2 className="text-[28px] font-semibold tracking-[-0.02em] text-white">
+                    Sign in
+                  </h2>
+                  <p className="mt-2 text-[14px] text-slate-500">
+                    Access the admin console
+                  </p>
+                </div>
+
+                {/* Form */}
+                <form onSubmit={handleSubmit} className="space-y-5">
+                  {/* Email */}
+                  <div className="group relative">
+                    <Mail className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-600 transition-all duration-300 group-focus-within:text-[#60A5FA]/50" />
+                    <Input
+                      id="admin-email"
+                      type="email"
+                      autoComplete="email"
+                      autoFocus
+                      placeholder=" "
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="peer h-[54px] w-full rounded-[14px] border border-white/[0.06] bg-white/[0.03] pl-12 pr-4 text-[15px] text-white placeholder:text-transparent shadow-[inset_0_2px_4px_rgba(0,0,0,0.2),inset_0_0_0_1px_rgba(255,255,255,0.02)] transition-all duration-300 hover:border-white/[0.10] hover:bg-white/[0.04] focus-visible:border-[#3B82F6]/30 focus-visible:bg-white/[0.04] focus-visible:ring-0 focus-visible:shadow-[inset_0_2px_4px_rgba(0,0,0,0.15),0_0_0_3px_rgba(59,130,246,0.08),0_0_24px_rgba(59,130,246,0.04)]"
+                    />
+                    <Label
+                      htmlFor="admin-email"
+                      className="pointer-events-none absolute left-12 top-1/2 -translate-y-1/2 text-[15px] text-slate-500 transition-all duration-200 peer-focus:top-[15px] peer-focus:text-[11px] peer-focus:font-medium peer-focus:text-[#60A5FA]/50 peer-[:not(:placeholder-shown)]:top-[15px] peer-[:not(:placeholder-shown)]:text-[11px] peer-[:not(:placeholder-shown)]:font-medium peer-[:not(:placeholder-shown)]:text-slate-500"
+                    >
+                      Email address
+                    </Label>
+                  </div>
+
+                  {/* Password */}
+                  <div className="group relative">
+                    <Lock className="pointer-events-none absolute left-4 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-600 transition-all duration-300 group-focus-within:text-[#60A5FA]/50" />
+                    <Input
+                      id="admin-password"
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete="current-password"
+                      placeholder=" "
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="peer h-[54px] w-full rounded-[14px] border border-white/[0.06] bg-white/[0.03] pl-12 pr-12 text-[15px] text-white placeholder:text-transparent shadow-[inset_0_2px_4px_rgba(0,0,0,0.2),inset_0_0_0_1px_rgba(255,255,255,0.02)] transition-all duration-300 hover:border-white/[0.10] hover:bg-white/[0.04] focus-visible:border-[#3B82F6]/30 focus-visible:bg-white/[0.04] focus-visible:ring-0 focus-visible:shadow-[inset_0_2px_4px_rgba(0,0,0,0.15),0_0_0_3px_rgba(59,130,246,0.08),0_0_24px_rgba(59,130,246,0.04)]"
+                    />
+                    <Label
+                      htmlFor="admin-password"
+                      className="pointer-events-none absolute left-12 top-1/2 -translate-y-1/2 text-[15px] text-slate-500 transition-all duration-200 peer-focus:top-[15px] peer-focus:text-[11px] peer-focus:font-medium peer-focus:text-[#60A5FA]/50 peer-[:not(:placeholder-shown)]:top-[15px] peer-[:not(:placeholder-shown)]:text-[11px] peer-[:not(:placeholder-shown)]:font-medium peer-[:not(:placeholder-shown)]:text-slate-500"
+                    >
+                      Password
+                    </Label>
+                    <motion.button
+                      type="button"
+                      onClick={() => setShowPassword((v) => !v)}
+                      whileTap={{ scale: 0.9 }}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-slate-600 transition-colors hover:text-slate-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#3B82F6]/40"
+                    >
+                      <motion.span
+                        key={showPassword ? 'off' : 'on'}
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ duration: 0.15 }}
+                      >
+                        {showPassword ? (
+                          <EyeOff className="h-[18px] w-[18px]" />
+                        ) : (
+                          <Eye className="h-[18px] w-[18px]" />
+                        )}
+                      </motion.span>
+                    </motion.button>
+                  </div>
+
+                  {/* Error */}
+                  {error && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      role="alert"
+                      className="flex items-center gap-2 rounded-[12px] border border-red-500/15 bg-red-500/[0.06] px-4 py-3 text-[13px] text-red-300"
+                    >
+                      <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-400 shadow-[0_0_6px_rgba(248,113,113,0.4)]" />
+                      {error}
+                    </motion.div>
+                  )}
+
+                  {/* Submit */}
+                  <motion.div whileTap={{ scale: 0.985 }} className="pt-1">
+                    <Button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="group relative h-[54px] w-full overflow-hidden rounded-[14px] bg-[#2563EB] text-[15px] font-medium text-white transition-all duration-300 hover:bg-[#3B82F6] hover:shadow-[0_4px_16px_rgba(37,99,235,0.4),0_0_40px_rgba(37,99,235,0.12)] disabled:opacity-50"
+                      style={{
+                        boxShadow:
+                          '0 2px 8px rgba(37,99,235,0.3), 0 8px 24px rgba(37,99,235,0.2)',
+                      }}
+                    >
+                      {/* Shimmer */}
+                      <span
+                        aria-hidden
+                        className="pointer-events-none absolute inset-0 bg-[linear-gradient(115deg,transparent_30%,rgba(255,255,255,0.15)_50%,transparent_70%)] opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+                      />
+                      {isSubmitting ? (
+                        <span className="inline-flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Signing in
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-2">
+                          Sign in
+                          <ArrowRight className="h-4 w-4 transition-transform duration-300 group-hover:translate-x-0.5" />
+                        </span>
+                      )}
+                    </Button>
+                  </motion.div>
+                </form>
+
+                {/* Divider */}
+                <div className="my-8 h-px bg-gradient-to-r from-transparent via-white/[0.05] to-transparent" />
+
+                {/* Security */}
+                <p className="flex items-center justify-center gap-1.5 text-[12px] text-slate-600/80">
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  All access is logged and monitored
+                </p>
+              </div>
+            </div>
+          </div>
+        </motion.div>
       </div>
+
+      {/* ═══════ Layer 3 · Footer ═══════ */}
+      <motion.footer
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.8, delay: 1 }}
+        className="absolute bottom-0 left-0 right-0 z-10 flex items-center justify-between px-8 py-6 md:px-12"
+      >
+        <span className="text-[12px] text-slate-600/40">
+          &copy; Business Copilot
+        </span>
+        <Link
+          href="/login"
+          className="group inline-flex items-center gap-1 text-[12px] text-slate-600/40 transition-colors duration-300 hover:text-slate-400/60"
+        >
+          Organization Login
+          <ArrowRight className="h-3 w-3 transition-transform duration-300 group-hover:translate-x-0.5" />
+        </Link>
+      </motion.footer>
     </div>
   );
 }

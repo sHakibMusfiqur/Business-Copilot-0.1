@@ -16,6 +16,7 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
 
   return (
     <button
+      suppressHydrationWarning
       aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
       onClick={() => setTheme(isDark ? 'light' : 'dark')}
       className={cn(
@@ -23,7 +24,9 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
         className,
       )}
     >
-      {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      <span suppressHydrationWarning>
+        {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      </span>
     </button>
   );
 }
