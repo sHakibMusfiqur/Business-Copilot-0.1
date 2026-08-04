@@ -93,43 +93,73 @@ export default function AdminLoginPage() {
         {/* Base gradient */}
         <div className="absolute inset-0 bg-gradient-to-b from-[#080D1A] via-[#0C1322] to-[#080D1A]" />
 
-        {/* ── 1. Deep ambient blue — wide, barely visible ── */}
+        {/* ── A. Large ambient blue — wide, soft foundation ── */}
         <div
-          className="absolute inset-0"
+          className="absolute left-1/2 top-[47%] h-[700px] w-[700px] -translate-x-1/2 -translate-y-1/2 blur-[260px]"
           style={{
-            background: 'radial-gradient(ellipse 120% 90% at 50% 48%, rgba(15,23,55,0.9) 0%, rgba(8,13,26,1) 100%)',
+            background: 'radial-gradient(ellipse 100% 85% at 50% 50%, rgba(59,130,246,0.12) 0%, rgba(59,130,246,0.04) 45%, transparent 72%)',
           }}
         />
 
-        {/* ── 2. Soft blue ambient glow — Layer 1 (core) ── */}
+        {/* ── B. Soft cyan bloom — offset, adds depth ── */}
         <div
-          className="absolute left-1/2 top-[47%] h-[440px] w-[440px] -translate-x-1/2 -translate-y-1/2 blur-[200px]"
+          className="absolute left-[48%] top-[44%] h-[560px] w-[640px] -translate-x-1/2 -translate-y-1/2 blur-[340px]"
           style={{
-            background: 'radial-gradient(circle at center, rgba(59,130,246,0.20) 0%, rgba(59,130,246,0.08) 40%, transparent 70%)',
+            background: 'radial-gradient(ellipse 95% 80% at 50% 50%, rgba(56,189,248,0.08) 0%, rgba(56,189,248,0.025) 50%, transparent 72%)',
           }}
         />
 
-        {/* ── 3. Soft blue ambient glow — Layer 2 (mid spread) ── */}
+        {/* ── C. Small bright center — tight core behind card ── */}
         <div
-          className="absolute left-1/2 top-[47%] h-[600px] w-[600px] -translate-x-1/2 -translate-y-1/2 blur-[300px]"
+          className="absolute left-1/2 top-[47%] h-[320px] w-[380px] -translate-x-1/2 -translate-y-1/2 blur-[140px]"
           style={{
-            background: 'radial-gradient(circle at center, rgba(96,165,250,0.12) 0%, rgba(96,165,250,0.04) 45%, transparent 70%)',
+            background: 'radial-gradient(ellipse 100% 90% at 50% 50%, rgba(96,165,250,0.10) 0%, rgba(96,165,250,0.03) 50%, transparent 75%)',
           }}
         />
 
-        {/* ── 4. Soft blue ambient glow — Layer 3 (wide falloff) ── */}
+        {/* ── D. Very wide atmospheric haze — deep background layer ── */}
         <div
-          className="absolute left-1/2 top-[47%] h-[900px] w-[900px] -translate-x-1/2 -translate-y-1/2 blur-[460px]"
+          className="absolute left-1/2 top-[46%] h-[1100px] w-[1200px] -translate-x-1/2 -translate-y-1/2 blur-[520px]"
           style={{
-            background: 'radial-gradient(circle at center, rgba(37,99,235,0.08) 0%, rgba(37,99,235,0.02) 50%, transparent 70%)',
+            background: 'radial-gradient(ellipse 100% 80% at 50% 50%, rgba(37,99,235,0.05) 0%, rgba(37,99,235,0.015) 50%, transparent 70%)',
           }}
         />
 
-        {/* ── 5. Bottom floating glow — card hover illusion ── */}
+        {/* ── E. Thin floor light — floating card illusion ── */}
         <div
-          className="absolute left-1/2 top-[68%] h-[28px] w-[300px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-[0.35] blur-[50px]"
+          className="absolute left-1/2 top-[69%] h-[22px] w-[302px] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-[0.45] blur-[48px]"
           style={{
-            background: 'linear-gradient(90deg, transparent 0%, rgba(59,130,246,0.6) 30%, rgba(96,165,250,0.5) 50%, rgba(59,130,246,0.6) 70%, transparent 100%)',
+            background: 'radial-gradient(ellipse 100% 100% at 50% 50%, rgba(59,130,246,0.5) 0%, rgba(96,165,250,0.3) 40%, transparent 75%)',
+          }}
+        />
+
+        {/* ── F. Edge lighting — indirect wrap around card silhouette ── */}
+        {/* Top edge — light spilling over from behind */}
+        <div
+          className="absolute left-1/2 top-[22%] h-[60px] w-[460px] -translate-x-1/2 -translate-y-1/2 blur-[50px]"
+          style={{
+            background: 'radial-gradient(ellipse 100% 100% at 50% 100%, rgba(59,130,246,0.06) 0%, transparent 70%)',
+          }}
+        />
+        {/* Bottom edge — reflected light */}
+        <div
+          className="absolute left-1/2 top-[74%] h-[50px] w-[440px] -translate-x-1/2 -translate-y-1/2 blur-[45px]"
+          style={{
+            background: 'radial-gradient(ellipse 100% 100% at 50% 0%, rgba(96,165,250,0.05) 0%, transparent 70%)',
+          }}
+        />
+        {/* Left edge — faint side wrap */}
+        <div
+          className="absolute left-[calc(50%-250px)] top-[47%] h-[380px] w-[40px] -translate-y-1/2 blur-[40px]"
+          style={{
+            background: 'radial-gradient(ellipse 100% 100% at 100% 50%, rgba(59,130,246,0.04) 0%, transparent 70%)',
+          }}
+        />
+        {/* Right edge — faint side wrap */}
+        <div
+          className="absolute left-[calc(50%+210px)] top-[47%] h-[380px] w-[40px] -translate-y-1/2 blur-[40px]"
+          style={{
+            background: 'radial-gradient(ellipse 100% 100% at 0% 50%, rgba(59,130,246,0.04) 0%, transparent 70%)',
           }}
         />
 
