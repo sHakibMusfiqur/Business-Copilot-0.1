@@ -1,6 +1,7 @@
 export const API_ROUTES = {
   AUTH: {
     LOGIN: '/auth/login',
+    ADMIN_LOGIN: '/admin/auth/login',
     REGISTER: '/auth/register',
     LOGOUT: '/auth/logout',
     ME: '/auth/me',

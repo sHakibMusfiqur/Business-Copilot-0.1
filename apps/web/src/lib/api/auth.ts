@@ -11,6 +11,15 @@ export async function login(email: string, password: string) {
   return { user, accessToken: token };
 }
 
+export async function adminLogin(email: string, password: string) {
+  const response = await api.post(API_ROUTES.AUTH.ADMIN_LOGIN, { email, password });
+  resetAuthSession();
+  const { accessToken: token, user } = response.data;
+  setAccessToken(token);
+  setAuthCookie(token);
+  return { user, accessToken: token };
+}
+
 export async function register(name: string, email: string, password: string) {
   const response = await api.post(API_ROUTES.AUTH.REGISTER, { name, email, password });
   resetAuthSession();

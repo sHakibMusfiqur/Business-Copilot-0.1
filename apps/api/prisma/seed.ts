@@ -237,6 +237,27 @@ async function main() {
   });
   console.log(`  Super Admin: ${SEED_SUPER_ADMIN_EMAIL}`);
 
+  // ─── Development Platform Admin ───────────────────────────────
+
+  // Temporary, development-only Platform Console account. Never provisioned in
+  // production builds. Sign in at /admin/login (never the organization login).
+  if (process.env.NODE_ENV !== 'production') {
+    const DEV_ADMIN_EMAIL = 'admin@businesscopilot.local';
+    const DEV_ADMIN_PASSWORD = 'Admin@123';
+    const devAdminPassword = await argon2.hash(DEV_ADMIN_PASSWORD);
+    await prisma.user.upsert({
+      where: { email: DEV_ADMIN_EMAIL },
+      update: {},
+      create: {
+        email: DEV_ADMIN_EMAIL,
+        name: 'Platform Admin',
+        password: devAdminPassword,
+        role: 'SUPER_ADMIN',
+      },
+    });
+    console.log(`  Dev Platform Admin: ${DEV_ADMIN_EMAIL} (${DEV_ADMIN_PASSWORD}) [DEVELOPMENT ONLY]`);
+  }
+
   // ─── Subscription Plans ────────────────────────────────────────
 
   const PLAN_SEEDS: Array<Record<string, unknown>> = [

@@ -37,7 +37,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
     await apiLogout();
     queryClient.clear();
     logout();
-    router.replace('/login');
+    router.replace('/admin/login');
   }
 
   const isActive = (href: string) =>

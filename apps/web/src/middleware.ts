@@ -87,19 +87,40 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // ── Platform Console sign-in (public, but only to sign in) ─────
+  // An authenticated platform admin is sent straight into the console;
+  // an authenticated organization user is never allowed near /admin.
+  if (pathname === '/admin/login') {
+    if (!isLoggedIn) {
+      return NextResponse.next();
+    }
+    if (role === 'SUPER_ADMIN') {
+      return NextResponse.redirect(new URL('/admin', request.url));
+    }
+    return NextResponse.redirect(new URL(onboardingCompleted ? '/dashboard' : '/onboarding', request.url));
+  }
+
+  // ── Platform admin routes (SUPER_ADMIN only) ───────────────────
+  // Guarded before the generic protected-route block so unauthenticated
+  // visitors are sent to the Platform Console sign-in, never the
+  // organization login.
+  if (pathname.startsWith('/admin')) {
+    if (!isLoggedIn) {
+      const adminLoginUrl = new URL('/admin/login', request.url);
+      adminLoginUrl.searchParams.set('redirect', pathname);
+      return NextResponse.redirect(adminLoginUrl);
+    }
+    if (role !== 'SUPER_ADMIN') {
+      return NextResponse.redirect(new URL(onboardingCompleted ? '/dashboard' : '/onboarding', request.url));
+    }
+    return NextResponse.next();
+  }
+
   // ── Protected routes (require authentication) ──────────────────
   if (!isLoggedIn) {
     const loginUrl = new URL('/login', request.url);
     loginUrl.searchParams.set('redirect', pathname);
     return NextResponse.redirect(loginUrl);
-  }
-
-  // ── Platform admin routes ──────────────────────────────────────
-  if (pathname.startsWith('/admin')) {
-    if (role !== 'SUPER_ADMIN') {
-      return NextResponse.redirect(new URL(onboardingCompleted ? '/dashboard' : '/onboarding', request.url));
-    }
-    return NextResponse.next();
   }
 
   // ── Organization routes (require auth + completed onboarding) ──

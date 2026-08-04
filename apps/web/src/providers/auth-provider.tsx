@@ -9,9 +9,15 @@ import { useAuthStore } from '@/store/auth-store';
 
 interface AuthProviderProps {
   children: ReactNode;
+  /**
+   * Where unauthenticated users are sent when the session cannot be restored.
+   * Organization shells use the default `/login`; the Platform Console uses
+   * `/admin/login` so admins are never bounced to the organization login.
+   */
+  signInPath?: string;
 }
 
-export function AuthProvider({ children }: AuthProviderProps) {
+export function AuthProvider({ children, signInPath = '/login' }: AuthProviderProps) {
   const router = useRouter();
   const { user, setUser, setLoading, isLoading } = useAuthStore();
 
@@ -42,7 +48,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   useEffect(() => {
     if (isLoading) return;
     if (!user) {
-      router.replace('/login');
+      router.replace(signInPath);
       return;
     }
     // Dashboard/admin shells must never host a user whose onboarding is
@@ -50,7 +56,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     if (user.role !== 'SUPER_ADMIN' && !user.onboardingCompleted) {
       router.replace('/onboarding');
     }
-  }, [isLoading, user, router]);
+  }, [isLoading, user, router, signInPath]);
 
   if (isLoading) {
     return (
