@@ -29,6 +29,7 @@ import { SettingsModule } from './settings/settings.module';
 import { SuppliersModule } from './suppliers/suppliers.module';
 import { UsersModule } from './users/users.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
+import { TenantScopeModule } from './common/tenant/tenant-scope.module';
 
 @Module({
   imports: [
@@ -63,6 +64,7 @@ import { AllExceptionsFilter } from './common/filters/http-exception.filter';
     SettingsModule,
     SuppliersModule,
     UsersModule,
+    TenantScopeModule,
   ],
   providers: [
     {
