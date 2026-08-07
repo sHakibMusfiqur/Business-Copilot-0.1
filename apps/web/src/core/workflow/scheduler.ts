@@ -132,8 +132,9 @@ export function scheduleOccurrences(input: ScheduleInput, from: Date): Date[] {
         next = nextCron(input.cron, next);
         guard++;
       }
-    } catch {
-     
+    } catch (error) {
+      void error;
+      // Invalid cron expression intentionally ignored; interval schedules still apply.
     }
   }
   if (input.seconds) {
