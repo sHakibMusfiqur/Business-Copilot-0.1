@@ -3,11 +3,21 @@ export { resolveEnvironment, PLATFORM_ROLE_KEYS, PLATFORM_INDUSTRY_KEYS } from '
 export type { EnvironmentContext, BrowserContext, RuntimeContext, FeatureFlags } from './platform/environment';
 
 // Modules
-export { moduleRegistry } from './modules/registry';
-export type { ModuleRegistry } from './modules/registry';
+export { moduleRegistry, ModuleRegistry } from './modules/registry';
 export { MODULE_CATEGORIES, DEFAULT_FAVORITES } from './modules/categories';
 export { MODULE_MANIFESTS, MODULE_BY_ID } from './modules/definitions';
+export { ModuleEngine } from './modules/engine';
+export { ModuleLifecycle } from './modules/lifecycle';
+export { ModuleControllerRegistry } from './modules/controller';
 export type { ModuleManifest, ModuleCategory, ModuleSettings } from './modules/types';
+export type {
+  ModuleLifecycleStatus,
+  ModuleController,
+  ModuleControllerFactory,
+  ModuleRuntimeContext,
+  ModuleHealth,
+  ModuleRuntimeSnapshot,
+} from './modules/types';
 
 // Capabilities
 export { CAPABILITY_DEFINITIONS, CAPABILITY_ICONS } from './capabilities/capabilities';
@@ -272,6 +282,81 @@ export type {
 
 // Shared Utilities Foundation (Phase 1.5 Step 10)
 export * from './utils';
+
+// Event Bus (Phase 2 Step 1)
+export { EventBus, createEventBus } from './events/event-bus';
+export type {
+  EventMap,
+  EventHandler,
+  WildcardHandler,
+  Unsubscribe,
+  EventEnvelope,
+  EventMiddleware,
+  EventBusSnapshot,
+} from './events/types';
+
+// Command Bus (Phase 2 Step 2)
+export { CommandBus, createCommandBus } from './commands/command-bus';
+export type {
+  Command,
+  CommandResult,
+  CommandOutcome,
+  CommandHandler,
+  CommandDefinition,
+  CommandMiddleware,
+  CommandValidator,
+  CommandLogger,
+  CommandRegistrySnapshot,
+} from './commands/types';
+
+// Query Bus (Phase 2 Step 3)
+export { QueryBus, createQueryBus } from './queries/query-bus';
+export type {
+  Query,
+  QueryResponse,
+  QueryOptions,
+  QueryHandler,
+  QueryDefinition,
+  CachedQuery,
+  QueryBusSnapshot,
+} from './queries/types';
+
+// Plugin System (Phase 2 Step 4)
+export {
+  compareVersions,
+  parseSemVer,
+  satisfiesRange,
+  PLUGIN_VERSION,
+  PLUGIN_STATUSES,
+} from './plugins/metadata';
+export { PluginLifecycle } from './plugins/lifecycle';
+export { PluginRegistry } from './plugins/registry';
+export { PluginLoader } from './plugins/loader';
+export type {
+  PluginManifest,
+  PluginDefinition,
+  PluginHooks,
+  PluginContext,
+  PluginRecord,
+  PluginMetadata,
+  PluginStatus,
+  PluginLoadResult,
+  PluginRegistrySnapshot,
+  VersionRange,
+} from './plugins/types';
+
+// Extension SDK (Phase 2 Step 6)
+export { createExtensionSDK } from './sdk/extension-sdk';
+export type {
+  ExtensionSDK,
+  ExtensionSdkSnapshot,
+  ExtensionSdkDeps,
+  ExtensionModuleContext,
+  ModuleControllerAdapter,
+  EventSurface,
+  CommandSurface,
+  QuerySurface,
+} from './sdk/extension-sdk';
 
 // Primitives
 export type {

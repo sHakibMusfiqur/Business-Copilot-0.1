@@ -1,0 +1,30 @@
+export { createExtensionSDK } from './extension-sdk';
+export type {
+  ExtensionSDK,
+  ExtensionSdkSnapshot,
+  ExtensionSdkDeps,
+  ExtensionModuleContext,
+  ModuleControllerAdapter,
+  EventSurface,
+  CommandSurface,
+  QuerySurface,
+} from './extension-sdk';
+export type {
+  Command,
+  CommandDefinition,
+  CommandMiddleware,
+  CommandResult,
+  CommandValidator,
+  EventHandler,
+  EventMiddleware,
+  EventMap,
+  Query,
+  QueryDefinition,
+  QueryOptions,
+  QueryResponse,
+  Unsubscribe,
+  WildcardHandler,
+  ModuleController,
+  ModuleControllerFactory,
+  ModuleRuntimeContext,
+} from './extension-sdk';

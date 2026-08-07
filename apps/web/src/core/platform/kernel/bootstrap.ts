@@ -19,6 +19,12 @@ import { ErrorEngine } from '../../errors';
 import { LoggerEngine } from '../../logger';
 import type { LogLevel } from '../../logger';
 import { IdentityEngine } from '../../identity';
+import { EventBus } from '../../events/event-bus';
+import { CommandBus } from '../../commands/command-bus';
+import { QueryBus } from '../../queries/query-bus';
+import { ModuleEngine } from '../../modules/engine';
+import { PluginRegistry } from '../../plugins/registry';
+import { createExtensionSDK } from '../../sdk/extension-sdk';
 
 import { moduleRegistry } from '@/core/modules/registry';
 import { createCapabilityEngine } from '@/core/capabilities/capabilities-engine';
@@ -137,9 +143,18 @@ function coreServices(environment: EnvironmentContext): ServiceDefinition<object
   const errors = new ErrorEngine();
   const logger = new LoggerEngine({}, (key) => (key === 'logging.level' ? config.getIf(key) as LogLevel : undefined));
   const identity = new IdentityEngine();
+  // Phase 2: enterprise messaging backbone + extension runtime.
+  const eventBus = new EventBus();
+  const commandBus = new CommandBus();
+  const queryBus = new QueryBus();
+  const moduleEngine = new ModuleEngine();
   return [
     { id: 'environment', name: 'Environment Context', category: 'platform', version, value: environment },
     { id: 'modules', name: 'Module Registry Service', category: 'core', version, value: moduleRegistry },
+    { id: 'module-engine', name: 'Module Engine Service', category: 'core', version, value: moduleEngine },
+    { id: 'events', name: 'Event Bus Service', category: 'core', version, value: eventBus },
+    { id: 'commands', name: 'Command Bus Service', category: 'core', version, value: commandBus },
+    { id: 'queries', name: 'Query Bus Service', category: 'core', version, value: queryBus },
     { id: 'capabilities', name: 'Capability Service', category: 'core', version, value: createCapabilityEngine() },
     { id: 'permissions', name: 'Permission Service', category: 'core', version, value: createPermissionEngine },
     { id: 'entitlements', name: 'Entitlement Service', category: 'core', version, value: createEntitlementEngine() },
@@ -154,6 +169,61 @@ function coreServices(environment: EnvironmentContext): ServiceDefinition<object
     { id: 'errors', name: 'Error Engine Service', category: 'platform', version, value: errors },
     { id: 'logger', name: 'Logger Engine Service', category: 'platform', version, value: logger },
     { id: 'identity', name: 'Identity Engine Service', category: 'platform', version, value: identity },
+    {
+      id: 'plugins',
+      name: 'Plugin Registry Service',
+      category: 'platform',
+      version,
+      value: new PluginRegistry({
+        eventBus: {
+          subscribe: (event, handler) => eventBus.subscribe(event, handler),
+          publish: (event, payload) => eventBus.publish(event, payload),
+        },
+        commands: {
+          register: (type, handler) => commandBus.register({ type, handler }),
+          execute: (command) => commandBus.execute(command),
+        },
+        queries: {
+          register: (type, handler) => queryBus.register({ type, handler }),
+          execute: (query) => queryBus.execute(query),
+        },
+      }),
+    },
+    {
+      id: 'extension-sdk',
+      name: 'Extension SDK Service',
+      category: 'platform',
+      version,
+      value: createExtensionSDK({
+        events: {
+          on: (event: string, handler: unknown) => eventBus.subscribe(event, handler as never),
+          onAny: (handler) => eventBus.onAny(handler),
+          once: (event: string, handler: unknown) => eventBus.once(event, handler as never),
+          publish: (event: string, payload: unknown) => eventBus.publish(event, payload),
+          use: (middleware) => { eventBus.use(middleware); },
+          listenerCount: () => eventBus.listenerCount(),
+        },
+        commands: {
+          register: (definition) => commandBus.register(definition),
+          validate: (type, validator) => { commandBus.validate(type, validator); },
+          use: (middleware) => { commandBus.use(middleware); },
+          execute: (command) => commandBus.execute(command),
+          size: () => commandBus.snapshot().commandCount,
+        },
+        queries: {
+          register: (definition) => queryBus.register(definition),
+          execute: (query, options) => queryBus.execute(query, options),
+          invalidate: (query) => queryBus.invalidate(query),
+          clearType: (type) => { queryBus.clearType(type); },
+          clearCache: () => { queryBus.clearCache(); },
+          size: () => queryBus.snapshot().queryCount,
+        },
+        controllers: {
+          bind: (moduleId, factory) => moduleEngine.controllers.bind(moduleId, factory),
+          size: () => moduleEngine.controllers.ids().length,
+        },
+      }),
+    },
   ];
 }
 
