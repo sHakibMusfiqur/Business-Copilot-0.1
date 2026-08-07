@@ -5,10 +5,10 @@ import { Command, CornerDownLeft, Search, Settings, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { useWorkspace } from '@/lib/workspace/context';
-import { useShellStore } from '@/lib/workspace/shell-store';
+import { useWorkspace } from '@/core/workspace/workspace-context';
+import { useShellStore } from '@/core/layout/shell-store';
 import { cn } from '@/lib/utils';
-import type { QuickActionDef } from '@/lib/workspace/types';
+import type { QuickActionDef } from '@/core/workspace/types';
 
 interface PaletteItem {
   id: string;

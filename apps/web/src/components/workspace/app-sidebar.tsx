@@ -14,15 +14,15 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-import { useWorkspace } from '@/lib/workspace/context';
-import { useShellStore } from '@/lib/workspace/shell-store';
-import { INDUSTRY_ICONS } from '@/lib/workspace/modules';
+import { useWorkspace } from '@/core/workspace/workspace-context';
+import { useShellStore } from '@/core/layout/shell-store';
+import { INDUSTRY_ICONS } from '@/core/workspace/industries';
 import { logout as apiLogout } from '@/lib/api';
 import { brandInitials } from '@/lib/branding';
 import { cn, generateInitials } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth-store';
 import { useBrandingStore } from '@/store/branding-store';
-import type { NavItem } from '@/lib/workspace/types';
+import type { NavItem } from '@/core/navigation/types';
 
 export function AppSidebar() {
   const { resolved, isResolving } = useWorkspace();

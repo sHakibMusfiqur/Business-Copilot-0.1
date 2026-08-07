@@ -16,8 +16,8 @@ import {
 import { useMemo } from 'react';
 
 import { usePermissions } from '@/hooks/use-permissions';
-import { useWorkspace } from '@/lib/workspace/context';
-import { useShellStore } from '@/lib/workspace/shell-store';
+import { useWorkspace } from '@/core/workspace/workspace-context';
+import { useShellStore } from '@/core/layout/shell-store';
 
 interface CopilotAction {
   id: string;

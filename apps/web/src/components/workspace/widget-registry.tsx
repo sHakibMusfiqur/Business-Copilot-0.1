@@ -2,10 +2,10 @@
 
 import type { ComponentType } from 'react';
 
-import { INDUSTRY_PROFILES } from '@/lib/workspace/industries';
+import { INDUSTRY_PROFILES } from '@/core/workspace/industries';
 import type { DashboardOverview } from '@/components/dashboard/types';
-import { resolveWidgetData } from '@/lib/workspace/data';
-import type { WidgetDefinition, WidgetKey, WorkspaceManifest } from '@/lib/workspace/types';
+import { resolveWidgetData } from '@/core/workspace/widget-data';
+import type { WidgetDefinition, WidgetKey, WorkspaceManifest } from '@/core/workspace/types';
 
 import {
   ActivityWidget,

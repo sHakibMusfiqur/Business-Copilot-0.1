@@ -6,10 +6,10 @@ import { CalendarDays } from 'lucide-react';
 import { AlertsBanner } from '@/components/workspace/widgets';
 import { WidgetSurface } from '@/components/workspace/widget-registry';
 import type { DashboardOverview } from '@/components/dashboard/types';
-import { useWorkspace } from '@/lib/workspace/context';
+import { useWorkspace } from '@/core/workspace/workspace-context';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth-store';
-import type { WidgetZone } from '@/lib/workspace/types';
+import type { WidgetZone } from '@/core/workspace/types';
 
 const ZONE_ORDER: WidgetZone[] = ['hero', 'kpis', 'charts', 'insights', 'side', 'bottom'];
 

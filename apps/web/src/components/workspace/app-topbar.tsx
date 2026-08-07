@@ -13,9 +13,9 @@ import {
 import { useState } from 'react';
 
 import { ThemeToggle } from '@/components/ui/theme-toggle';
-import { useWorkspace } from '@/lib/workspace/context';
-import { INDUSTRY_ICONS } from '@/lib/workspace/modules';
-import { useShellStore } from '@/lib/workspace/shell-store';
+import { useWorkspace } from '@/core/workspace/workspace-context';
+import { INDUSTRY_ICONS } from '@/core/workspace/industries';
+import { useShellStore } from '@/core/layout/shell-store';
 import { brandInitials } from '@/lib/branding';
 import { useBrandingStore } from '@/store/branding-store';
 

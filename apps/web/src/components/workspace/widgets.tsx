@@ -16,12 +16,12 @@ import { Sparkline, TrendChart } from '@/components/dashboard/charts';
 import type { DashboardOverview } from '@/components/dashboard/types';
 import { TrendBadge } from '@/components/ui/trend-badge';
 import { formatCurrency, formatNumber } from '@/lib/utils';
-import type { WidgetDefinition, WorkspaceManifest } from '@/lib/workspace/types';
+import type { WidgetDefinition, WorkspaceManifest } from '@/core/workspace/types';
 import {
   STATUS_TONES,
   statusClasses,
-} from '@/lib/workspace/widget-styles';
-import type { WidgetData } from '@/lib/workspace/data';
+} from '@/core/theme/widget-styles';
+import type { WidgetData } from '@/core/workspace/widget-data';
 
 export interface WorkspaceWidgetProps {
   widget: WidgetDefinition;

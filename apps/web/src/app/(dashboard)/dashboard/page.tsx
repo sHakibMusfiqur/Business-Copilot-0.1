@@ -11,7 +11,7 @@ import { OnboardingWidget } from '@/components/dashboard/onboarding-widget';
 import { SubscriptionBanner } from '@/components/dashboard/subscription-banner';
 import { ExecutiveWorkspace } from '@/components/workspace/executive-workspace';
 import type { DashboardOverview } from '@/components/dashboard/types';
-import { useCopilotActions } from '@/lib/workspace/copilot-actions';
+import { useCopilotActions } from '@/core/workspace/copilot-actions';
 import { getDashboardOverview } from '@/lib/api';
 import { useAuthStore } from '@/store/auth-store';
 
