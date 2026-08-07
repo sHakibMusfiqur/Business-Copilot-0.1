@@ -4,14 +4,14 @@ import { motion } from 'framer-motion';
 import { CalendarDays } from 'lucide-react';
 
 import { AlertsBanner } from '@/components/workspace/widgets';
-import { WidgetSurface } from '@/components/workspace/widget-registry';
+import { DashboardWidgetSurface } from '@/components/workspace/widget-registry';
 import type { DashboardOverview } from '@/components/dashboard/types';
-import { useWorkspace } from '@/core/workspace/workspace-context';
+import { useDashboard } from '@/hooks/use-dashboard';
 import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth-store';
-import type { WidgetZone } from '@/core/workspace/types';
-
-const ZONE_ORDER: WidgetZone[] = ['hero', 'kpis', 'charts', 'insights', 'side', 'bottom'];
+import { spanTokens } from '@/core/dashboard/widget-layout';
+import { useWorkspace } from '@/core/workspace/workspace-context';
+import type { DashboardWidget } from '@/core/dashboard/widget-types';
 
 function getFormattedDate(): string {
   return new Date().toLocaleDateString('en-US', {
@@ -27,33 +27,16 @@ interface ExecutiveWorkspaceProps {
 }
 
 /**
- * Composes the executive workspace from the resolved manifest: a dynamic grid
- * of widgets arranged by zone (hero → kpis → charts → insights → side → bottom)
- * on the 12-column layout grid.
+ * Dumb renderer over the Dashboard Engine output. All widget selection,
+ * ordering, visibility and layout are resolved by the engine; this component
+ * only maps the resolved manifest to the rendering layer.
  */
 export function ExecutiveWorkspace({ overview, onCommand }: ExecutiveWorkspaceProps) {
-  const { resolved, isResolving } = useWorkspace();
+  const { manifest, context } = useDashboard();
+  const { resolved } = useWorkspace();
   const user = useAuthStore((s) => s.user);
   const firstName = user?.name?.split(' ')[0];
-
-  if (isResolving) {
-    return (
-      <div className="space-y-5">
-        <div className="skeleton-shimmer h-16 w-1/3 rounded-xl" />
-        <div className="grid grid-cols-12 gap-5">
-          {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="skeleton-shimmer col-span-3 h-32 rounded-2xl" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  const { manifest } = resolved;
-  const zones = ZONE_ORDER.map((zone) => ({
-    zone,
-    widgets: manifest.widgets.filter((w) => w.zone === zone),
-  })).filter((z) => z.widgets.length > 0);
+  const manifestData = resolved.manifest;
 
   return (
     <motion.div
@@ -67,7 +50,7 @@ export function ExecutiveWorkspace({ overview, onCommand }: ExecutiveWorkspacePr
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
             <h1 className="text-[22px] font-bold leading-tight tracking-tight sm:text-[26px]">
-              {manifest.headline}
+              {context.headline}
             </h1>
             {firstName && (
               <span className="rounded-full border border-border px-2.5 py-0.5 text-[11px] font-semibold text-muted-foreground">
@@ -82,25 +65,25 @@ export function ExecutiveWorkspace({ overview, onCommand }: ExecutiveWorkspacePr
             </span>
             <span className="hidden h-3.5 w-px bg-slate-200 dark:bg-white/10 sm:block" />
             <span className="font-medium text-slate-600 dark:text-slate-300">
-              {resolved.industryLabel} · {resolved.roleLabel}
+              {context.industryLabel} · {context.roleLabel}
             </span>
           </div>
         </div>
         <AlertsBanner overview={overview} />
       </div>
 
-      {/* Widget zones */}
-      {zones.map(({ zone, widgets }) => (
-        <section key={zone} className="grid grid-cols-12 gap-5">
-          {widgets.map((widget, index) => (
+      {/* Engine-resolved widget zones */}
+      {manifest.layout.zones.map((zone) => (
+        <section key={zone.zone} className="grid grid-cols-12 gap-5">
+          {zone.widgets.map((widget, index) => (
             <motion.div
-              key={`${widget.source ?? widget.key}-${zone}-${index}`}
+              key={widget.id}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.18, delay: index * 0.025, ease: 'easeOut' }}
-              className={cn('min-w-0', spanClass(widget.span))}
+              className={cn('min-w-0', spanTokens(widget.span))}
             >
-              <WidgetSurface widget={widget} overview={overview} manifest={manifest} onCommand={onCommand} />
+              <DashboardWidgetSurface widget={widget} overview={overview} manifest={manifestData} onCommand={onCommand} />
             </motion.div>
           ))}
         </section>
@@ -109,14 +92,4 @@ export function ExecutiveWorkspace({ overview, onCommand }: ExecutiveWorkspacePr
   );
 }
 
-function spanClass(span: number): string {
-  switch (span) {
-    case 3: return 'col-span-12 sm:col-span-6 xl:col-span-3';
-    case 4: return 'col-span-12 sm:col-span-6 xl:col-span-4';
-    case 5: return 'col-span-12 sm:col-span-6 xl:col-span-5';
-    case 6: return 'col-span-12 sm:col-span-6 xl:col-span-6';
-    case 7: return 'col-span-12 sm:col-span-6 xl:col-span-7';
-    case 8: return 'col-span-12 sm:col-span-6 xl:col-span-8';
-    default: return 'col-span-12';
-  }
-}
+export type { DashboardWidget };

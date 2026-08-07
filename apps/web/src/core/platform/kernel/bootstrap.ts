@@ -25,6 +25,8 @@ import { QueryBus } from '../../queries/query-bus';
 import { ModuleEngine } from '../../modules/engine';
 import { PluginRegistry } from '../../plugins/registry';
 import { createExtensionSDK } from '../../sdk/extension-sdk';
+import { createWorkflowEngine } from '../../workflow/workflow-engine';
+import { createAutomationEngine } from '../../automation/automation-engine';
 
 import { moduleRegistry } from '@/core/modules/registry';
 import { createCapabilityEngine } from '@/core/capabilities/capabilities-engine';
@@ -128,6 +130,22 @@ function coreEngines(): EngineRegistrationInput[] {
       dependencies: ['platform', 'modules', 'capabilities', 'permissions', 'entitlements', 'navigation', 'layout', 'theme', 'manifest'],
       implementation: workspaceEngine,
     },
+    {
+      id: 'workflow',
+      name: 'Workflow Engine',
+      description: 'Declarative, trigger-driven business workflows over the event/command/query buses.',
+      version,
+      kind: 'workflow',
+      implementation: { createWorkflowEngine },
+    },
+    {
+      id: 'automation',
+      name: 'Automation Engine',
+      description: 'Rule-based automation reacting to events and schedules.',
+      version,
+      kind: 'automation',
+      implementation: { createAutomationEngine },
+    },
   ];
 }
 
@@ -148,6 +166,26 @@ function coreServices(environment: EnvironmentContext): ServiceDefinition<object
   const commandBus = new CommandBus();
   const queryBus = new QueryBus();
   const moduleEngine = new ModuleEngine();
+  // Phase 4: workflow + automation engines over the messaging backbone.
+  const workflowEngine = createWorkflowEngine({
+    buses: {
+      command: (command) => commandBus.execute(command),
+      query: (query) => queryBus.execute(query),
+      event: (event) => eventBus.publish(event.type, event.payload),
+      subscribe: (event, handler) =>
+        eventBus.subscribe(event as never, handler as never),
+    },
+  });
+  const automationEngine = createAutomationEngine({
+    buses: {
+      command: (command) => commandBus.execute(command),
+      event: (event) => eventBus.publish(event.type, event.payload),
+      runWorkflow: (workflowId, payload) => workflowEngine.run(workflowId, payload),
+      subscribe: (event, handler) =>
+        eventBus.subscribe(event as never, handler as never),
+    },
+    logger: logger.logger('automation', { category: 'automation' }),
+  });
   return [
     { id: 'environment', name: 'Environment Context', category: 'platform', version, value: environment },
     { id: 'modules', name: 'Module Registry Service', category: 'core', version, value: moduleRegistry },
@@ -163,6 +201,8 @@ function coreServices(environment: EnvironmentContext): ServiceDefinition<object
     { id: 'theme', name: 'Theme Service', category: 'core', version, value: themeEngine },
     { id: 'manifest', name: 'Manifest Service', category: 'core', version, value: resolveWorkspace },
     { id: 'workspace', name: 'Workspace Service', category: 'application', version, value: workspaceEngine },
+    { id: 'workflow', name: 'Workflow Engine Service', category: 'core', version, value: workflowEngine, dependencies: ['events', 'commands', 'queries'] },
+    { id: 'automation', name: 'Automation Engine Service', category: 'core', version, value: automationEngine, dependencies: ['events', 'commands', 'workflow'] },
     { id: 'config', name: 'Configuration Service', category: 'core', version, value: config },
     { id: 'design', name: 'Design Token Service', category: 'core', version, value: design },
     { id: 'features', name: 'Feature Registry Service', category: 'core', version, value: features },

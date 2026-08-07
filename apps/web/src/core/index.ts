@@ -69,6 +69,115 @@ export type {
   WidgetZone,
 } from './workspace/types';
 
+// Dashboard Engine (Phase 3) — fully manifest-driven dashboard resolution.
+export { createDashboardEngine, DashboardEngine } from './dashboard/dashboard-engine';
+export type { DashboardEngineDeps } from './dashboard/dashboard-engine';
+export { DashboardResolver } from './dashboard/dashboard-resolver';
+export type { DashboardResolverDeps } from './dashboard/dashboard-resolver';
+export { WidgetRegistry, resolveVisibleWidgets } from './dashboard/widget-registry';
+export type { WidgetDeclaration, BoundWidget } from './dashboard/widget-registry';
+export { WidgetLoader, FALLBACK_RENDERER, LOADING_RENDERER, UNKNOWN_RENDERER } from './dashboard/widget-loader';
+export type { WidgetLoaderFn, WidgetModule, WidgetModuleFactory } from './dashboard/widget-loader';
+export {
+  ZONE_ORDER,
+  spanTokens,
+  zoneHasWidgets,
+  zoneIndex,
+} from './dashboard/widget-layout';
+export { evaluateVisibility } from './dashboard/widget-visibility';
+export { buildDashboardContext } from './dashboard/widget-context';
+export type { DashboardContextExtras } from './dashboard/widget-context';
+export type {
+  WidgetKind,
+  WidgetLoadState,
+  ResponsiveSpan,
+  DashboardWidget,
+  DashboardZone,
+  DashboardLayout,
+  DashboardManifest,
+  DashboardContext,
+  WidgetVisibility,
+} from './dashboard/widget-types';
+
+// Workflow Engine (Phase 4) — declarative, trigger-driven business workflows.
+export { WorkflowEngine, createWorkflowEngine } from './workflow/workflow-engine';
+export type { WorkflowEngineBuses } from './workflow/workflow-engine';
+export { WorkflowRegistry, createWorkflowRegistry } from './workflow/workflow-registry';
+export type { WorkflowValidationReport, WorkflowValidation } from './workflow/workflow-registry';
+export { WorkflowStepRegistry, createStepRegistry } from './workflow/step-registry';
+export type { StepExecutionHooks, StepExecutor, StepExecutorRecord, StepByKind } from './workflow/step-registry';
+export { WorkflowTriggerRegistry, createTriggerRegistry } from './workflow/trigger-registry';
+export type { TriggerEvaluator, TriggerEvaluatorRecord, WorkflowTriggerSignal } from './workflow/trigger-registry';
+export {
+  WorkflowRunner,
+  createWorkflowRunner,
+} from './workflow/workflow-runner';
+export type { WorkflowRunStore, RunOptions, WorkflowStepResult } from './workflow/workflow-runner';
+export {
+  parseCron,
+  nextCron,
+  matchesCron,
+  nextInterval,
+  scheduleOccurrences,
+  CronParseError,
+} from './workflow/scheduler';
+export type { CronParts, ScheduleInput } from './workflow/scheduler';
+export type {
+  WorkflowCategory,
+  WorkflowStatus,
+  WorkflowRunStatus,
+  WorkflowTriggerKind,
+  WorkflowStepKind,
+  WorkflowTrigger,
+  WorkflowManualTrigger,
+  WorkflowEventTrigger,
+  WorkflowScheduleTrigger,
+  WorkflowStep,
+  WorkflowTaskStep,
+  WorkflowCommandStep,
+  WorkflowQueryStep,
+  WorkflowConditionStep,
+  WorkflowWaitStep,
+  WorkflowSubflowStep,
+  WorkflowEmitStep,
+  WorkflowPluginStep,
+  WorkflowDefinition,
+  WorkflowRunContext,
+  WorkflowRun,
+  WorkflowRecord,
+  WorkflowEngineSnapshot,
+} from './workflow/types';
+
+// Automation Engine (Phase 4) — rule-based automation over events & schedules.
+export { createAutomationEngine, AutomationEngineImp } from './automation/automation-engine';
+export type { AutomationEngine, AutomationEngineBuses } from './automation/automation-engine';
+export { AutomationRegistry, createAutomationRegistry } from './automation/automation-registry';
+export type { AutomationValidationReport, AutomationValidation } from './automation/automation-registry';
+export { AutomationActionRegistry, createActionRegistry } from './automation/action-registry';
+export type { ActionExecutor, ActionByKind, AutomationActionHooks } from './automation/action-registry';
+export type {
+  AutomationStatus,
+  AutomationTriggerKind,
+  AutomationActionKind,
+  AutomationTrigger,
+  AutomationEventTrigger,
+  AutomationScheduleTrigger,
+  AutomationManualTrigger,
+  AutomationAction,
+  AutomationNotifyAction,
+  AutomationWorkflowAction,
+  AutomationCommandAction,
+  AutomationEventAction,
+  AutomationLogAction,
+  AutomationPluginAction,
+  AutomationRule,
+  AutomationContext,
+  AutomationActionResult,
+  AutomationEvaluation,
+  AutomationRecord,
+  AutomationEngineSnapshot,
+} from './automation/types';
+
 // Kernel
 export { kernel, createCoreKernel } from './kernel';
 export type { CoreKernel } from './kernel';
