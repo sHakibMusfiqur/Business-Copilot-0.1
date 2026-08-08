@@ -1,9 +1,9 @@
 import { Logger } from '@nestjs/common';
 
-import type { RateLimitRecord, RateLimiterStorage } from './rate-limiter-storage.interface';
-import type { RedisHealthService } from './redis-health.service';
-import type { RedisRateLimiterStorage } from './redis-rate-limiter-storage';
+import type { RedisHealthService } from '../infrastructure/redis/redis-health.service';
+import type { RedisRateLimiterStorage } from '../infrastructure/redis/redis-rate-limiter-storage';
 import type { MemoryRateLimiterStorage } from './memory-rate-limiter-storage';
+import type { RateLimitRecord, RateLimiterStorage } from './rate-limiter-storage.interface';
 
 export type ActiveStorage = 'redis' | 'memory';
 

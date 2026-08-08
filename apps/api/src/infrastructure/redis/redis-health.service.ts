@@ -1,5 +1,5 @@
-import { Logger } from '@nestjs/common';
-import Redis from 'ioredis';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import type Redis from 'ioredis';
 
 export type RedisConnectionStatus = 'connected' | 'disconnected' | 'reconnecting';
 
@@ -11,10 +11,16 @@ export interface RedisHealthMetrics {
   reconnectCount: number;
 }
 
-export class RedisHealthService {
+/**
+ * Observes health of the single shared Redis client.
+ *
+ * Consumes an existing {@link Redis} instance (owned by RedisService) rather than
+ * creating its own connection, guaranteeing only one client per process. Emits
+ * onRedisUp/onRedisDown callbacks used by {@link FailsafeRateLimiterStorage}.
+ */
+@Injectable()
+export class RedisHealthService implements OnModuleDestroy {
   private readonly logger = new Logger(RedisHealthService.name);
-  private readonly redis: Redis;
-  private readonly checkInterval: ReturnType<typeof setInterval>;
   private readonly STABILIZATION_THRESHOLD = 5;
   private _status: RedisConnectionStatus = 'disconnected';
   private _lastPing: number | null = null;
@@ -25,17 +31,21 @@ export class RedisHealthService {
   private _consecutiveSuccesses = 0;
   private _onRedisUp: (() => void) | null = null;
   private _onRedisDown: (() => void) | null = null;
+  private readonly checkInterval: ReturnType<typeof setInterval>;
+  private readonly PING_INTERVAL_MS = 10_000;
 
-  constructor(redisUrl: string) {
-    this.redis = new Redis(redisUrl, {
-      maxRetriesPerRequest: null,
-      retryStrategy: () => 2000,
-      lazyConnect: true,
-      enableReadyCheck: true,
-    });
-
+  constructor(private readonly redis: Redis) {
     this.redis.on('connect', () => {
       this.logger.log('Redis Connected');
+    });
+
+    // Redis is ready before the first scheduled health ping runs. Reflect that
+    // truthfully instead of reporting "disconnected" for the first interval.
+    this.redis.on('ready', () => {
+      if (!this._wasDown) {
+        this._status = 'connected';
+      }
+      this.logger.log('Redis Ready');
     });
 
     this.redis.on('close', () => {
@@ -53,11 +63,7 @@ export class RedisHealthService {
       this.logger.log('Redis Reconnecting');
     });
 
-    this.redis.connect().catch(() => {
-      this._status = 'disconnected';
-    });
-
-    this.checkInterval = setInterval(() => this.ping(), 10_000).unref();
+    this.checkInterval = setInterval(() => this.ping(), this.PING_INTERVAL_MS).unref();
   }
 
   get status(): RedisConnectionStatus {
@@ -98,9 +104,8 @@ export class RedisHealthService {
     };
   }
 
-  async destroy(): Promise<void> {
+  async onModuleDestroy(): Promise<void> {
     clearInterval(this.checkInterval);
-    await this.redis.quit();
   }
 
   private async ping(): Promise<void> {

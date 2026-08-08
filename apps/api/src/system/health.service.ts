@@ -2,8 +2,8 @@ import { Inject, Injectable, Optional } from '@nestjs/common';
 
 import type { ActiveStorage } from '../auth/failsafe-rate-limiter-storage';
 import { FailsafeRateLimiterStorage } from '../auth/failsafe-rate-limiter-storage';
-import { RedisHealthService } from '../auth/redis-health.service';
-import type { RedisHealthMetrics } from '../auth/redis-health.service';
+import { RedisHealthService } from '../infrastructure/redis/redis-health.service';
+import type { RedisHealthMetrics } from '../infrastructure/redis/redis-health.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface HealthCheckResult {

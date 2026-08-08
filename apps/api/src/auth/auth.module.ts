@@ -5,6 +5,7 @@ import { PassportModule } from '@nestjs/passport';
 import { ConfigService } from '../config/config.service';
 import { AuthThrottleGuard } from '../common/guards/auth-throttle.guard';
 import { MailModule } from '../mail/mail.module';
+import { REDIS_HEALTH, REDIS_CLIENT } from '../infrastructure/redis/redis.module';
 
 import { AuditModule } from '../audit/audit.module';
 import { AuthRateLimiterService } from './auth-rate-limiter.service';
@@ -13,11 +14,11 @@ import { AuthService } from './auth.service';
 import { FailsafeRateLimiterStorage } from './failsafe-rate-limiter-storage';
 import { MemoryRateLimiterStorage } from './memory-rate-limiter-storage';
 import type { RateLimiterStorage } from './rate-limiter-storage.interface';
-import { RedisHealthService } from './redis-health.service';
-import { RedisRateLimiterStorage } from './redis-rate-limiter-storage';
+import { RedisHealthService } from '../infrastructure/redis/redis-health.service';
+import { RedisRateLimiterStorage } from '../infrastructure/redis/redis-rate-limiter-storage';
 import { JwtStrategy } from './strategies/jwt.strategy';
 
-let _redisHealth: RedisHealthService | null = null;
+import type Redis from 'ioredis';
 
 @Module({
   imports: [
@@ -41,40 +42,22 @@ let _redisHealth: RedisHealthService | null = null;
     AuthThrottleGuard,
     AuthRateLimiterService,
     {
-      provide: 'REDIS_HEALTH',
-      inject: [ConfigService],
-      useFactory: (config: ConfigService): RedisHealthService | null => {
-        try {
-          const redisUrl = config.redisUrl;
-          if (redisUrl) {
-            _redisHealth = new RedisHealthService(redisUrl);
-            return _redisHealth;
-          }
-        } catch {
-          // REDIS_URL not set
-        }
-        return null;
-      },
-    },
-    {
       provide: 'RATE_LIMITER_STORAGE',
-      inject: [ConfigService],
-      useFactory: (config: ConfigService): RateLimiterStorage => {
-        try {
-          const redisUrl = config.redisUrl;
-          if (redisUrl && _redisHealth) {
-            const redis = new RedisRateLimiterStorage(redisUrl);
-            const memory = new MemoryRateLimiterStorage();
-            return new FailsafeRateLimiterStorage(redis, memory, _redisHealth);
-          }
-        } catch {
-          // REDIS_URL not set — fall back to in-memory
+      inject: [REDIS_CLIENT, REDIS_HEALTH],
+      useFactory: (
+        client: Redis | null,
+        health: RedisHealthService | null,
+      ): RateLimiterStorage => {
+        const memory = new MemoryRateLimiterStorage();
+        if (client && health) {
+          const redis = new RedisRateLimiterStorage(client);
+          return new FailsafeRateLimiterStorage(redis, memory, health);
         }
-        return new MemoryRateLimiterStorage();
+        return memory;
       },
     },
     MemoryRateLimiterStorage,
   ],
-  exports: [AuthService, JwtModule, AuthRateLimiterService, 'REDIS_HEALTH'],
+  exports: [AuthService, JwtModule, AuthRateLimiterService, 'RATE_LIMITER_STORAGE'],
 })
 export class AuthModule {}

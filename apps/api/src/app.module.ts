@@ -24,6 +24,7 @@ import { PlatformAdminModule } from './platform-admin/platform-admin.module';
 import { PurchaseModule } from './purchase/purchase.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RbacModule } from './rbac/rbac.module';
+import { RedisModule } from './infrastructure/redis/redis.module';
 import { ProductsModule } from './products/products.module';
 import { SalesModule } from './sales/sales.module';
 import { SettingsModule } from './settings/settings.module';
@@ -47,6 +48,7 @@ import { TenantScopeModule } from './common/tenant/tenant-scope.module';
     CrmModule,
     ConfigModule,
     PrismaModule,
+    RedisModule,
     AuthModule,
     SystemModule,
     CategoriesModule,

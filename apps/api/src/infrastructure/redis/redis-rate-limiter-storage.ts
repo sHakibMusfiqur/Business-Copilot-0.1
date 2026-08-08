@@ -1,7 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
-import Redis from 'ioredis';
+import { Logger } from '@nestjs/common';
+import type Redis from 'ioredis';
 
-import type { RateLimitRecord, RateLimiterStorage } from './rate-limiter-storage.interface';
+import type { RateLimitRecord, RateLimiterStorage } from '../../auth/rate-limiter-storage.interface';
 
 const RECORD_ATTEMPT_SCRIPT = `
   local attempts_key = KEYS[1]
@@ -62,29 +62,16 @@ const CLEAR_SCRIPT = `
   return 1
 `;
 
-@Injectable()
+/**
+ * Redis-backed rate limiter storage using the single shared Redis client.
+ *
+ * Does NOT create its own connection — it consumes the client owned by
+ * RedisService so exactly one ioredis client exists per process.
+ */
 export class RedisRateLimiterStorage implements RateLimiterStorage {
   private readonly logger = new Logger(RedisRateLimiterStorage.name);
-  private readonly redis: Redis;
 
-  constructor(redisUrl: string) {
-    this.redis = new Redis(redisUrl, {
-      maxRetriesPerRequest: 3,
-      retryStrategy: (times) => {
-        if (times > 3) return null;
-        return Math.min(times * 200, 2000);
-      },
-      lazyConnect: true,
-    });
-
-    this.redis.on('error', (err) => {
-      this.logger.error(`Redis connection error: ${err.message}`);
-    });
-
-    this.redis.connect().catch((err) => {
-      this.logger.error(`Failed to connect to Redis: ${err.message}. Rate limiter will fall back.`);
-    });
-  }
+  constructor(private readonly redis: Redis) {}
 
   async recordAttempt(
     key: string,
