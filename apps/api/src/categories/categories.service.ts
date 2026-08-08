@@ -8,9 +8,12 @@ export class CategoriesService {
     private readonly prisma: PrismaService,
   ) {}
 
-  async findAll() {
+  async findAll(orgId: string) {
     return this.prisma.category.findMany({
-      where: { isActive: true },
+      where: {
+        isActive: true,
+        OR: [{ organizationId: orgId }, { organizationId: null }],
+      },
       select: { id: true, name: true },
       orderBy: { name: 'asc' },
     });
