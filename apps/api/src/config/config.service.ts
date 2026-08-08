@@ -9,6 +9,27 @@ const JWT_SECRET_KEYS = ['JWT_SECRET', 'JWT_REFRESH_SECRET'] as const;
 /** Known placeholder shapes that must never be used as a production JWT secret. */
 const INSECURE_SECRET_PATTERN = /change[-_ ]?me|changeme|placeholder|your[-_ ]?(secret|jwt)|^your-/i;
 
+/** The only NODE_ENV values the application understands. Anything else is rejected. */
+const VALID_NODE_ENV_VALUES: NodeEnv[] = ['development', 'production', 'test'];
+
+/** http(s) URL shapes accepted for API_URL / WEB_URL / CORS_ORIGINS. */
+const HTTP_URL_PATTERN = /^https?:\/\/[^\s]+$/i;
+
+/** Accepted network ports (1-65535). */
+const PORT_MIN = 1;
+const PORT_MAX = 65535;
+
+/**
+ * JWT `expiresIn` values allowed to be passed straight to jsonwebtoken. Expiry
+ * is a positive integer optionally followed by a supported ms unit. This mirrors
+ * the `ms`-style strings the existing JwtModule already accepts.
+ */
+const JWT_EXPIRY_PATTERN = /^\d+(\.\d+)?(ms|s|m|h|d|w|y)?$/i;
+
+/** Redis connection string must use redis:// or rediss://. */
+const REDIS_URL_PATTERN = /^rediss?:\/\/.+$/i;
+
+/** Development/test localhost origins (never applied in production). */
 const DEFAULT_WEB_ORIGINS = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
@@ -48,6 +69,11 @@ export class ConfigService {
     return this.getEnv('WEB_URL', 'http://localhost:3000');
   }
 
+  /**
+   * Node environment. Unknown/invalid NODE_ENV values fall back to
+   * 'development' for runtime safety, but {@link validate} rejects them so a
+   * typo like `NODE_ENV=stg` can never silently change behavior.
+   */
   get nodeEnv(): NodeEnv {
     const value = this.getOptionalEnv('NODE_ENV');
     if (value === 'production' || value === 'test') return value;
@@ -94,10 +120,26 @@ export class ConfigService {
     return this.getOptionalEnv('SWAGGER_VERSION') || '1.0';
   }
 
-  /** CORS origins allowed by the API, starting with the configured WEB_URL. */
+  /**
+   * CORS origins allowed by the API.
+   *
+   * - Development/test: configured WEB_URL plus safe localhost defaults, so local
+   *   tooling keeps working out of the box.
+   * - Production: only explicitly configured origins. These are WEB_URL plus an
+   *   optional CORS_ORIGINS list (comma-separated). Localhost defaults are NEVER
+   *   applied in production, so a prod CORS allow-list can never accidentally
+   *   become allow-all or trust local origins.
+   */
   get corsOrigins(): string[] {
-    const webUrl = this.getOptionalEnv('WEB_URL');
-    return [...(webUrl ? [webUrl] : []), ...DEFAULT_WEB_ORIGINS];
+    const webUrl = this.webUrl;
+    const explicitOrigins = this.getCorsOriginList();
+
+    const configured = [...(webUrl ? [webUrl] : []), ...explicitOrigins];
+
+    if (this.isProduction) {
+      return [...new Set(configured)];
+    }
+    return [...new Set([...configured, ...DEFAULT_WEB_ORIGINS])];
   }
 
   get stripeSecretKey(): string {
@@ -106,6 +148,21 @@ export class ConfigService {
 
   get stripeWebhookSecret(): string {
     return this.getOptionalEnv('STRIPE_WEBHOOK_SECRET');
+  }
+
+  /**
+   * Optional, comma-separated CORS origins (used mainly for production). An
+   * empty string yields an empty list. Each entry must pass URL validation in
+   * {@link validate}, so malformed entries fail loudly instead of silently
+   * widening the allow-list.
+   */
+  private getCorsOriginList(): string[] {
+    const raw = this.getOptionalEnv('CORS_ORIGINS');
+    if (!raw) return [];
+    return raw
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0);
   }
 
   /**
@@ -120,8 +177,9 @@ export class ConfigService {
   /**
    * Validates the environment and throws a clear, secret-free error listing
    * every problem. Required variables fail loudly; optional integrations
-   * (Redis, Stripe, AI, Swagger) are not enforced. In production, weak or
-   * placeholder JWT secrets are rejected.
+   * (Redis, Stripe, AI, Swagger) degrade where appropriate. In production,
+   * weak or placeholder JWT secrets are rejected and localhost CORS origins are
+   * never applied.
    *
    * The error message contains only variable NAMES, never values.
    */
@@ -131,6 +189,70 @@ export class ConfigService {
     for (const key of REQUIRED_ENV_VARS) {
       if (!this.getOptionalEnv(key)) {
         problems.push(`${key} is required.`);
+      }
+    }
+
+    // NODE_ENV must be a recognized value. Unknown values are caught here so a
+    // typo (e.g. NODE_ENV=stg) cannot silently run with unsafe assumptions.
+    const nodeEnvRaw = this.getOptionalEnv('NODE_ENV');
+    if (nodeEnvRaw && !VALID_NODE_ENV_VALUES.includes(nodeEnvRaw as NodeEnv)) {
+      problems.push(
+        `NODE_ENV must be one of: ${VALID_NODE_ENV_VALUES.join(', ')}. Received an unsupported value.`,
+      );
+    }
+
+    // PORT must be a valid network port; never silently fall back in production.
+    const portRaw = this.getOptionalEnv('PORT');
+    if (portRaw) {
+      const parsedPort = Number(portRaw);
+      if (!/^\d+$/.test(portRaw.trim()) || parsedPort < PORT_MIN || parsedPort > PORT_MAX) {
+        problems.push(`PORT must be an integer between ${PORT_MIN} and ${PORT_MAX}.`);
+      }
+    }
+
+    // Public URLs are validated as http(s) when present. This keeps the CORS
+    // allow-list and generated links well-formed instead of silently misbehaving.
+    for (const key of ['API_URL', 'WEB_URL'] as const) {
+      const value = this.getOptionalEnv(key);
+      if (value && !HTTP_URL_PATTERN.test(value.trim())) {
+        problems.push(`${key} must be a valid http(s) URL.`);
+      }
+    }
+
+    // JWT expiration values feed directly into jsonwebtoken; reject anything
+    // that jose/jsonwebtoken would reject at sign time to fail early.
+    for (const key of ['JWT_EXPIRES_IN', 'JWT_REFRESH_EXPIRES_IN'] as const) {
+      const value = this.getOptionalEnv(key);
+      if (value && !JWT_EXPIRY_PATTERN.test(value.trim())) {
+        problems.push(`${key} must be a positive duration such as "15m", "2h" or "7d".`);
+      }
+    }
+
+    // Redis is optional. When present it must be a well-formed URL so graceful
+    // degradation is never confused with a silently broken connection string.
+    const redisUrl = this.redisUrl;
+    if (redisUrl && !REDIS_URL_PATTERN.test(redisUrl.trim())) {
+      problems.push(`REDIS_URL must start with redis:// or rediss:// when set.`);
+    }
+
+    // Stripe is optional, but its two secrets must be configured together. A
+    // half-configured gateway (only secret key or only webhook secret) is a
+    // misconfiguration, so reject it rather than silently degrade.
+    const stripeSecret = this.getOptionalEnv('STRIPE_SECRET_KEY');
+    const stripeWebhook = this.getOptionalEnv('STRIPE_WEBHOOK_SECRET');
+    const hasSecret = Boolean(stripeSecret);
+    const hasWebhook = Boolean(stripeWebhook);
+    if (hasSecret !== hasWebhook) {
+      problems.push(
+        'STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET must both be set, or both be empty.',
+      );
+    }
+
+    // CORS entries (used in production) must be valid HTTP origins.
+    for (const origin of this.getCorsOriginList()) {
+      if (!HTTP_URL_PATTERN.test(origin)) {
+        problems.push(`CORS_ORIGINS contains an invalid http(s) URL entry.`);
+        break;
       }
     }
 

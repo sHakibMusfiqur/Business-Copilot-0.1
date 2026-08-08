@@ -17,19 +17,20 @@ import {
 import type { Request, Response } from 'express';
 
 import { LoginDto } from '../auth/dto/login.dto';
+import { ConfigService } from '../config/config.service';
 import { Public } from '../common/decorators/public.decorator';
 import { AuthThrottleGuard } from '../common/guards/auth-throttle.guard';
 
 import { AdminAuthService } from './admin-auth.service';
 
-/**
- * Dedicated Platform Console authentication endpoint. Separate from the
- * organization `/auth/login` flow; only a SUPER_ADMIN may sign in here.
- */
+
 @ApiTags('Platform Admin Auth')
 @Controller('admin/auth')
 export class AdminAuthController {
-  constructor(private readonly adminAuthService: AdminAuthService) {}
+  constructor(
+    private readonly adminAuthService: AdminAuthService,
+    private readonly config: ConfigService,
+  ) {}
 
   @Public()
   @UseGuards(AuthThrottleGuard)
@@ -54,7 +55,7 @@ export class AdminAuthController {
   private setRefreshTokenCookie(response: Response, refreshToken: string): void {
     response.cookie('refresh_token', refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: this.config.isProduction,
       sameSite: 'strict',
       maxAge: 7 * 24 * 60 * 60 * 1000,
       path: '/',
@@ -64,7 +65,7 @@ export class AdminAuthController {
   private setAccessTokenCookie(response: Response, token: string): void {
     response.cookie('access_token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: this.config.isProduction,
       sameSite: 'lax',
       maxAge: 15 * 60 * 1000,
       path: '/',

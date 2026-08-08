@@ -21,6 +21,7 @@ const TRACKED_ENV_VARS = [
   'PORT',
   'WEB_URL',
   'API_URL',
+  'CORS_ORIGINS',
   'APP_VERSION',
   'SWAGGER_ENABLED',
   'SWAGGER_TITLE',
@@ -65,6 +66,10 @@ describe('ConfigService', () => {
       REDIS_URL: undefined,
       PORT: undefined,
       WEB_URL: undefined,
+      API_URL: undefined,
+      CORS_ORIGINS: undefined,
+      JWT_EXPIRES_IN: undefined,
+      JWT_REFRESH_EXPIRES_IN: undefined,
       APP_VERSION: undefined,
       SWAGGER_ENABLED: undefined,
       STRIPE_SECRET_KEY: undefined,
@@ -143,6 +148,128 @@ describe('ConfigService', () => {
 
       expect(() => service.validate()).not.toThrow();
     });
+
+    it('accepts valid strong production JWT secrets', () => {
+      setEnv({ ...REQUIRED, NODE_ENV: 'production' });
+      const service = new ConfigService();
+
+      expect(() => service.validate()).not.toThrow();
+    });
+
+    it('rejects an invalid NODE_ENV value', () => {
+      setEnv({ ...REQUIRED, NODE_ENV: 'staging' });
+      const error = captureError(() => new ConfigService().validate());
+
+      expect(error).toBeDefined();
+      expect(error?.message ?? '').toContain('NODE_ENV must be one of');
+    });
+
+    it('accepts the three recognized NODE_ENV values', () => {
+      for (const env of ['development', 'production', 'test']) {
+        setEnv({ ...REQUIRED, NODE_ENV: env });
+        expect(() => new ConfigService().validate()).not.toThrow();
+      }
+    });
+
+    it('rejects an invalid PORT', () => {
+      setEnv({ ...REQUIRED, PORT: '70000' });
+      const error = captureError(() => new ConfigService().validate());
+      expect(error?.message ?? '').toContain('PORT must be an integer');
+
+      setEnv({ ...REQUIRED, PORT: 'abc' });
+      const error2 = captureError(() => new ConfigService().validate());
+      expect(error2?.message ?? '').toContain('PORT must be an integer');
+    });
+
+    it('accepts a valid PORT and the default when unset', () => {
+      setEnv({ ...REQUIRED, PORT: '4010' });
+      expect(() => new ConfigService().validate()).not.toThrow();
+
+      setEnv({ ...REQUIRED, PORT: undefined });
+      expect(() => new ConfigService().validate()).not.toThrow();
+    });
+
+    it('rejects malformed API_URL and WEB_URL', () => {
+      setEnv({ ...REQUIRED, API_URL: 'not-a-url' });
+      const error = captureError(() => new ConfigService().validate());
+      expect(error?.message ?? '').toContain('API_URL must be a valid http(s) URL.');
+
+      setEnv({ ...REQUIRED, API_URL: undefined, WEB_URL: 'ftp://bad' });
+      const error2 = captureError(() => new ConfigService().validate());
+      expect(error2?.message ?? '').toContain('WEB_URL must be a valid http(s) URL.');
+    });
+
+    it('accepts well-formed API_URL and WEB_URL', () => {
+      setEnv({
+        ...REQUIRED,
+        API_URL: 'http://localhost:4000',
+        WEB_URL: 'http://localhost:3000',
+      });
+      expect(() => new ConfigService().validate()).not.toThrow();
+    });
+
+    it('rejects invalid JWT expiry values', () => {
+      setEnv({ ...REQUIRED, JWT_EXPIRES_IN: 'banana' });
+      const error = captureError(() => new ConfigService().validate());
+      expect(error?.message ?? '').toContain('JWT_EXPIRES_IN must be a positive duration');
+
+      setEnv({ ...REQUIRED, JWT_EXPIRES_IN: '-5m' });
+      const error2 = captureError(() => new ConfigService().validate());
+      expect(error2?.message ?? '').toContain('JWT_EXPIRES_IN must be a positive duration');
+    });
+
+    it('accepts valid JWT expiry values in ms-unit style', () => {
+      for (const expiry of ['15m', '2h', '7d', '90s', '120']) {
+        setEnv({ ...REQUIRED, JWT_EXPIRES_IN: expiry });
+        const service = new ConfigService();
+        expect(() => service.validate()).not.toThrow();
+        expect(service.jwtExpiresIn).toBe(expiry);
+      }
+    });
+
+    it('rejects an invalid REDIS_URL but allows missing Redis', () => {
+      setEnv({ ...REQUIRED, REDIS_URL: 'postgres://localhost:5432' });
+      const error = captureError(() => new ConfigService().validate());
+      expect(error?.message ?? '').toContain('REDIS_URL must start with redis://');
+
+      setEnv({ ...REQUIRED, REDIS_URL: undefined });
+      expect(() => new ConfigService().validate()).not.toThrow();
+    });
+
+    it('accepts a valid redis:// / rediss:// URL', () => {
+      for (const url of ['redis://localhost:6379', 'rediss://localhost:6379']) {
+        setEnv({ ...REQUIRED, REDIS_URL: url });
+        expect(() => new ConfigService().validate()).not.toThrow();
+      }
+    });
+
+    it('accepts Stripe credentials both absent or both present', () => {
+      setEnv({ ...REQUIRED });
+      expect(() => new ConfigService().validate()).not.toThrow();
+
+      setEnv({
+        ...REQUIRED,
+        STRIPE_SECRET_KEY: 'sk_test_123',
+        STRIPE_WEBHOOK_SECRET: 'whsec_456',
+      });
+      expect(() => new ConfigService().validate()).not.toThrow();
+    });
+
+    it('rejects partially configured Stripe credentials', () => {
+      setEnv({ ...REQUIRED, STRIPE_SECRET_KEY: 'sk_test_123' });
+      const error = captureError(() => new ConfigService().validate());
+      expect(error?.message ?? '').toContain('STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET');
+
+      setEnv({ ...REQUIRED, STRIPE_SECRET_KEY: undefined, STRIPE_WEBHOOK_SECRET: 'whsec_456' });
+      const error2 = captureError(() => new ConfigService().validate());
+      expect(error2?.message ?? '').toContain('STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET');
+    });
+
+    it('rejects malformed CORS_ORIGINS entries', () => {
+      setEnv({ ...REQUIRED, CORS_ORIGINS: 'https://good.example.com, not-a-url' });
+      const error = captureError(() => new ConfigService().validate());
+      expect(error?.message ?? '').toContain('CORS_ORIGINS contains an invalid http(s) URL entry.');
+    });
   });
 
   describe('environment getters', () => {
@@ -174,6 +301,39 @@ describe('ConfigService', () => {
 
       expect(service.corsOrigins).toContain('https://app.example.com');
       expect(service.corsOrigins).toContain('http://localhost:3000');
+    });
+
+    it('never includes localhost defaults in production CORS', () => {
+      setEnv({ ...REQUIRED, NODE_ENV: 'production', WEB_URL: 'https://app.example.com' });
+      const service = new ConfigService();
+
+      expect(service.corsOrigins).toContain('https://app.example.com');
+      expect(service.corsOrigins).not.toContain('http://localhost:3000');
+      expect(service.corsOrigins).not.toContain('http://127.0.0.1:3000');
+    });
+
+    it('includes production CORS_ORIGINS entries alongside WEB_URL', () => {
+      setEnv({
+        ...REQUIRED,
+        NODE_ENV: 'production',
+        WEB_URL: 'https://app.example.com',
+        CORS_ORIGINS: 'https://admin.example.com, https://widget.example.com',
+      });
+      const service = new ConfigService();
+
+      expect(service.corsOrigins).toEqual([
+        'https://app.example.com',
+        'https://admin.example.com',
+        'https://widget.example.com',
+      ]);
+    });
+
+    it('still includes localhost defaults in development CORS', () => {
+      setEnv({ ...REQUIRED, NODE_ENV: 'development' });
+      const service = new ConfigService();
+
+      expect(service.corsOrigins).toContain('http://localhost:3000');
+      expect(service.corsOrigins).toContain('http://localhost:3001');
     });
 
     it('never exposes secret values through validation or errors', () => {

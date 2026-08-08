@@ -23,6 +23,7 @@ import {
 import type { Response } from 'express';
 
 import { AuthService } from '../auth/auth.service';
+import { ConfigService } from '../config/config.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
@@ -38,6 +39,7 @@ export class OrganizationController {
   constructor(
     private readonly organizationService: OrganizationService,
     private readonly authService: AuthService,
+    private readonly config: ConfigService,
   ) {}
 
   @UseGuards(JwtAuthGuard)
@@ -65,7 +67,7 @@ export class OrganizationController {
 
     response.cookie('refresh_token', tokens.refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: this.config.isProduction,
       sameSite: 'strict',
       maxAge: 7 * 24 * 60 * 60 * 1000,
       path: '/',

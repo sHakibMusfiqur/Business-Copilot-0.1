@@ -9,7 +9,6 @@ import {
   Res,
   UnauthorizedException,
   UseGuards,
-  Logger,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -23,6 +22,7 @@ import {
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 
+import { ConfigService } from '../config/config.service';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
@@ -38,9 +38,10 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
-  private readonly logger = new Logger(AuthController.name);
-
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly config: ConfigService,
+  ) {}
 
   @Public()
   @UseGuards(AuthThrottleGuard)
@@ -54,24 +55,12 @@ export class AuthController {
     @Res({ passthrough: true }) response: Response,
     @Req() request: Request,
   ) {
-    this.logger.log(`=== REGISTER CONTROLLER ENTERED: email=${dto.email} name=${dto.name} ip=${request.ip} ===`);
     const ip = request.ip ?? '';
     const userAgent = request.headers['user-agent'] ?? '';
-    try {
-      const result = await this.authService.register(dto, ip, userAgent);
-      this.logger.log(`=== REGISTER CONTROLLER SERVICE RETURNED SUCCESSFULLY ===`);
-      this.setRefreshTokenCookie(response, result.refreshToken);
-      this.setAccessTokenCookie(response, result.accessToken);
-      this.logger.log(`=== REGISTER CONTROLLER COOKIES SET, RETURNING RESPONSE ===`);
-      return result;
-    } catch (err: unknown) {
-      this.logger.error(`=== REGISTER CONTROLLER CAUGHT EXCEPTION ===`);
-      this.logger.error(`error=${err instanceof Error ? err.message : String(err)}`);
-      if (err instanceof Error) {
-        this.logger.error(`stack=${err.stack}`);
-      }
-      throw err;
-    }
+    const result = await this.authService.register(dto, ip, userAgent);
+    this.setRefreshTokenCookie(response, result.refreshToken);
+    this.setAccessTokenCookie(response, result.accessToken);
+    return result;
   }
 
   @Public()
@@ -175,7 +164,7 @@ export class AuthController {
     await this.authService.logout(user.id, ip, userAgent);
     const cookieOptions = {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: this.config.isProduction,
       sameSite: 'strict' as const,
       path: '/',
     };
@@ -205,7 +194,7 @@ export class AuthController {
   private setRefreshTokenCookie(response: Response, refreshToken: string): void {
     response.cookie('refresh_token', refreshToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: this.config.isProduction,
       sameSite: 'strict',
       maxAge: 7 * 24 * 60 * 60 * 1000,
       path: '/',
@@ -215,7 +204,7 @@ export class AuthController {
   private setAccessTokenCookie(response: Response, token: string): void {
     response.cookie('access_token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: this.config.isProduction,
       sameSite: 'lax',
       maxAge: 15 * 60 * 1000,
       path: '/',
