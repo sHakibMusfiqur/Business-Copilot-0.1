@@ -1,15 +1,8 @@
 import type {
   DashboardOverview,
   DashboardStatistics,
+  DashboardTrends,
 } from '@/components/dashboard/types';
-
-/** Builds a deterministic 12-point series from a base value. */
-export function buildSeries(value: number, seed = 1): number[] {
-  const base = Math.max(value / 100, 1);
-  return Array.from({ length: 12 }, (_, i) =>
-    Math.round((base * (0.5 + 0.08 * Math.sin(i * 1.05 + seed)) + i * base * 0.045) * 100) / 100,
-  );
-}
 
 export type StatusTone = 'success' | 'warning' | 'danger' | 'neutral' | 'info';
 
@@ -359,21 +352,35 @@ function metricOf(stats: DashboardStatistics, source: string): WidgetMetric {
   };
 }
 
-function seriesOf(stats: DashboardStatistics, source: string): WidgetSeries {
-  const revenue = stats.monthlyRevenue;
-  const data =
-    source === 'sales' || source === 'orders'
-      ? buildSeries(stats.totalSalesOrders * 100, 3)
-      : source === 'stockMovement'
-        ? buildSeries(stats.totalProducts * 10, 5)
-        : source === 'appointments' || source === 'enrollment'
-          ? buildSeries(stats.totalCustomers, 4)
-          : buildSeries(revenue, 1);
+function seriesOf(_stats: DashboardStatistics, source: string, trends?: DashboardTrends): WidgetSeries {
+  const real = trends ? realSeriesOf(trends, source) : undefined;
+  if (real) return real;
 
+  // No backend time-series for this source (e.g. empty org, or trend data not
+  // available). Render a flat, zero series rather than fabricating trend data.
+  const data = Array.from({ length: 12 }, () => 0);
+  return {
+    label: seriesLabel(source),
+    value: '$0',
+    data,
+    color: '#3B82F6',
+  };
+}
+
+/** Resolves a trend series from real backend time-series when it is available. */
+function realSeriesOf(trends: DashboardTrends, source: string): WidgetSeries | undefined {
+  const series: Record<string, number[] | undefined> = {
+    revenue: trends.revenue,
+    expenses: trends.expenses,
+    sales: trends.sales,
+    cashFlow: trends.cashFlow,
+  };
+  const data = series[source];
+  if (!data || data.length === 0) return undefined;
   const total = data.reduce((a, b) => a + b, 0);
   return {
     label: seriesLabel(source),
-    value: `$${Math.round(total / 12).toLocaleString('en-US')}`,
+    value: `$${Math.round(total / data.length).toLocaleString('en-US')}`,
     data,
     color: '#3B82F6',
   };
@@ -382,59 +389,25 @@ function seriesOf(stats: DashboardStatistics, source: string): WidgetSeries {
 const DISTRIBUTION_COLORS = ['#3B82F6', '#8B5CF6', '#06B6D4', '#F59E0B', '#22C55E', '#F43F5E'];
 
 function distributionOf(stats: DashboardStatistics, source: string): WidgetDistribution[] {
-  const n = Math.max(1, stats.totalCustomers);
-  const e = Math.max(1, stats.totalEmployees);
-  const splits: Record<string, [string, number][]> = {
-    customers: [
-      ['New', 0.55],
-      ['Returning', 0.3],
-      ['Inactive', 0.15],
-    ],
-    menuMix: [
-      ['Mains', 0.42],
-      ['Starters', 0.22],
-      ['Beverages', 0.2],
-      ['Desserts', 0.16],
-    ],
-    departments: [
-      ['Core', 0.5],
-      ['Support', 0.25],
-      ['Admin', 0.25],
-    ],
-    quality: [
-      ['On spec', 0.88],
-      ['Rework', 0.09],
-      ['Scrap', 0.03],
-    ],
-    categorySales: [
-      ['Category A', 0.4],
-      ['Category B', 0.3],
-      ['Category C', 0.2],
-      ['Category D', 0.1],
-    ],
-    deployments: [
-      ['Prod', 0.55],
-      ['Staging', 0.3],
-      ['Canary', 0.15],
-    ],
-    departmentLoad: [
-      ['Operations', 0.45],
-      ['Sales', 0.25],
-      ['Finance', 0.2],
-      ['Admin', 0.1],
-    ],
-  };
-
-  const parts = splits[source] ?? splits.departments;
-  const base = source === 'customers' ? n : source === 'departmentLoad' || source === 'departments' ? e : n * 0.3;
-  return parts.map(([label, ratio], i) => ({
-    label,
-    value: Math.round(base * ratio),
+  // Only present real, countable data. The backend does not expose per-category
+  // breakdowns for these chart types, so fabricating split ratios would present
+  // fake business data. Show a single truthful segment when a real count exists,
+  // otherwise return an empty distribution.
+  const segments: { label: string; value: number }[] = [];
+  if (source === 'customers' && stats.totalCustomers > 0) {
+    segments.push({ label: 'Customers', value: stats.totalCustomers });
+  } else if ((source === 'departments' || source === 'departmentLoad') && stats.totalEmployees > 0) {
+    segments.push({ label: 'Employees', value: stats.totalEmployees });
+  } else if (source === 'categorySales' && stats.totalProducts > 0) {
+    segments.push({ label: 'Products', value: stats.totalProducts });
+  }
+  return segments.map((s, i) => ({
+    ...s,
     color: DISTRIBUTION_COLORS[i % DISTRIBUTION_COLORS.length],
   }));
 }
 
-function rowsOf(stats: DashboardStatistics, overview: DashboardOverview, source: string): WidgetListRow[] {
+function rowsOf(_stats: DashboardStatistics, overview: DashboardOverview, source: string): WidgetListRow[] {
   const activities = overview.recentActivities ?? [];
   const fromActivity = (offset: number, index: number): WidgetListRow | null => {
     const a = activities[index + offset];
@@ -450,14 +423,9 @@ function rowsOf(stats: DashboardStatistics, overview: DashboardOverview, source:
   };
 
   const rows: Record<string, WidgetListRow[]> = {
-    lowStock: Array.from({ length: Math.min(5, Math.max(0, stats.lowStockProducts)) }, (_, i) => ({
-      id: `ls-${i}`,
-      title: `Product SKU-${(i * 13 + 4) % 97}`,
-      subtitle: 'Below reorder point',
-      meta: `${2 + i} units left`,
-      status: 'Low stock',
-      tone: 'warning' as StatusTone,
-    })),
+    // No backend list data exists for these sources; avoid fabricating SKUs,
+    // employees, tables, machines or PRs. Render as empty (real data only).
+    lowStock: [],
     recentOrders: activities.slice(0, 5).map((a) => ({
       id: a.id,
       title: a.action,
@@ -466,14 +434,7 @@ function rowsOf(stats: DashboardStatistics, overview: DashboardOverview, source:
       status: 'Pending',
       tone: 'warning' as StatusTone,
     })),
-    leaveRequests: Array.from({ length: Math.min(4, Math.max(1, stats.pendingLeaves)) }, (_, i) => ({
-      id: `lv-${i}`,
-      title: `${['Annual', 'Sick', 'Remote'][i % 3]} leave request`,
-      subtitle: `Employee #${(i * 7 + 2) % 40}`,
-      meta: `Requested ${i + 1}d ago`,
-      status: 'Pending',
-      tone: 'warning' as StatusTone,
-    })),
+    leaveRequests: [],
     ordersQueue: [
       fromActivity(0, 0),
       fromActivity(1, 1),
@@ -488,30 +449,12 @@ function rowsOf(stats: DashboardStatistics, overview: DashboardOverview, source:
       fromActivity(0, 0),
       fromActivity(1, 1),
     ].filter(Boolean) as WidgetListRow[],
-    kitchenQueue: [
-      { id: 'k1', title: 'Table 12 — 2x Burger', subtitle: 'In progress', meta: '12 min', status: 'Cooking', tone: 'info' as StatusTone },
-      { id: 'k2', title: 'Table 5 — Pasta', subtitle: 'Queued', meta: '8 min', status: 'Queued', tone: 'neutral' as StatusTone },
-    ],
-    medicineStock: [
-      { id: 'm1', title: 'Paracetamol 500mg', subtitle: 'Critical', meta: '14 boxes', status: 'Low', tone: 'danger' as StatusTone },
-      { id: 'm2', title: 'Amoxicillin', subtitle: 'Reorder soon', meta: '36 boxes', status: 'Low', tone: 'warning' as StatusTone },
-    ],
-    machineStatus: [
-      { id: 'mac1', title: 'CNC Unit 01', subtitle: 'Running', meta: '92% util', status: 'Active', tone: 'success' as StatusTone },
-      { id: 'mac2', title: 'CNC Unit 03', subtitle: 'Maintenance', meta: 'scheduled', status: 'Idle', tone: 'neutral' as StatusTone },
-    ],
-    academicCalendar: [
-      { id: 'a1', title: 'Final exams', subtitle: 'Term 2', meta: 'Aug 10', status: 'Upcoming', tone: 'info' as StatusTone },
-      { id: 'a2', title: 'Parent meetings', subtitle: 'All grades', meta: 'Aug 14', status: 'Upcoming', tone: 'neutral' as StatusTone },
-    ],
-    pullRequests: [
-      { id: 'pr1', title: 'feat: dashboard engine', subtitle: 'main → develop', meta: '3 approvals', status: 'Open', tone: 'info' as StatusTone },
-      { id: 'pr2', title: 'fix: invoice totals', subtitle: 'develop → release', meta: 'needs review', status: 'Open', tone: 'warning' as StatusTone },
-    ],
-    productionLines: [
-      { id: 'pl1', title: 'Line A — Stitching', subtitle: '80% capacity', meta: '1.2k units', status: 'Running', tone: 'success' as StatusTone },
-      { id: 'pl2', title: 'Line B — Finishing', subtitle: 'Shift change', meta: '860 units', status: 'Idle', tone: 'neutral' as StatusTone },
-    ],
+    kitchenQueue: [],
+    medicineStock: [],
+    machineStatus: [],
+    academicCalendar: [],
+    pullRequests: [],
+    productionLines: [],
   };
 
   const fallback = activities.length > 0
@@ -542,11 +485,13 @@ function healthOf(stats: DashboardStatistics): { score: number; label: string } 
 
 function approvalsOf(stats: DashboardStatistics): WidgetListRow[] {
   const rows: WidgetListRow[] = [];
+  // Only surface pending counts that exist; do not invent specific employees,
+  // purchase orders or invoice references that are not backed by real data.
   if (stats.pendingLeaves > 0) {
     rows.push({
       id: 'ap-leave',
       title: 'Leave request',
-      subtitle: 'Employee #12',
+      subtitle: 'Awaiting approval',
       meta: `${stats.pendingLeaves} pending`,
       status: 'Approve',
       tone: 'warning',
@@ -556,45 +501,34 @@ function approvalsOf(stats: DashboardStatistics): WidgetListRow[] {
     rows.push({
       id: 'ap-po',
       title: 'Purchase order',
-      subtitle: 'PO-2024-0157',
-      meta: 'Awaiting sign-off',
+      subtitle: 'Awaiting sign-off',
+      meta: `${stats.totalPurchaseOrders} open`,
       status: 'Approve',
       tone: 'warning',
     });
   }
-  rows.push({
-    id: 'ap-inv',
-    title: 'Invoice approval',
-    subtitle: 'INV-2024-0912',
-    meta: 'Awaiting sign-off',
-    status: 'Approve',
-    tone: 'warning',
-  });
+  if (stats.totalInvoices > 0) {
+    rows.push({
+      id: 'ap-inv',
+      title: 'Invoice approval',
+      subtitle: 'Awaiting sign-off',
+      meta: `${stats.totalInvoices} open`,
+      status: 'Approve',
+      tone: 'warning',
+    });
+  }
   return rows;
 }
 
 function aiOf(overview: DashboardOverview): string[] {
   const insights = overview.aiInsights ?? [];
-  return insights.length > 0 ? insights.map((i) => i.text) : [
-    'Revenue is tracking 12% above the 30-day average.',
-    'Low-stock items should be reordered this week.',
-  ];
+  return insights.map((i) => i.text);
 }
 
 function calendarOf(): { day: number; items: string[] }[] {
-  const now = new Date();
-  const month = now.getMonth();
-  const items: Record<string, string[]> = {
-    [String(new Date(now.getFullYear(), month, 2).getDate())]: ['Payroll run'],
-    [String(new Date(now.getFullYear(), month, 5).getDate())]: ['Vendor payment due'],
-    [String(new Date(now.getFullYear(), month, 8).getDate())]: ['Board meeting'],
-    [String(new Date(now.getFullYear(), month, 12).getDate())]: ['Invoice run'],
-    [String(new Date(now.getFullYear(), month, 15).getDate())]: ['Team standup'],
-  };
-  return Object.entries(items).map(([day, list]) => ({
-    day: Number(day),
-    items: list,
-  }));
+  // No backend scheduling data; an empty calendar is honest rather than
+  // presenting invented payroll/vendor/payment events.
+  return [];
 }
 
 /**
@@ -630,10 +564,10 @@ export function resolveWidgetData(
   }
   if (TREND_SERIES[key] || key === 'forecast' || key === 'revenueTrend' || key === 'salesTrend' || key === 'cashFlow') {
     const seriesSource =
-      key === 'cashFlow' || key === 'revenueTrend' ? 'revenue' : key === 'salesTrend' ? 'sales' : key;
+      key === 'revenueTrend' ? 'revenue' : key === 'salesTrend' ? 'sales' : key === 'cashFlow' ? 'cashFlow' : key;
     return {
       ...base,
-      series: seriesOf(stats, seriesSource),
+      series: seriesOf(stats, seriesSource, overview?.trends),
       title: TREND_TITLES[key] ?? `${seriesLabel(key)} Trend`,
     };
   }
@@ -675,6 +609,7 @@ function emptyOverview(): DashboardOverview {
   return {
     organization: { id: '', name: '', logo: null, createdAt: '' },
     statistics: emptyStatistics(),
+    trends: { labels: [], revenue: [], expenses: [], sales: [], cashFlow: [] },
     quickActions: [],
     recentActivities: [],
     permissions: [],

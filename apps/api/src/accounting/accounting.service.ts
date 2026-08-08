@@ -598,6 +598,25 @@ export class AccountingService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      if (dto.customerId) {
+        const customer = await tx.customer.findFirst({
+          where: { id: dto.customerId, organizationId: orgId },
+          select: { id: true },
+        });
+        if (!customer) {
+          throw new BadRequestException('customerId does not belong to this organization');
+        }
+      }
+      if (dto.supplierId) {
+        const supplier = await tx.supplier.findFirst({
+          where: { id: dto.supplierId, organizationId: orgId },
+          select: { id: true },
+        });
+        if (!supplier) {
+          throw new BadRequestException('supplierId does not belong to this organization');
+        }
+      }
+
       const payment = await tx.payment.create({
         data: {
           organizationId: orgId,

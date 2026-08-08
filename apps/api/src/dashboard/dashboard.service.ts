@@ -72,9 +72,19 @@ export interface DashboardAiInsight {
   text: string;
 }
 
+/** Real monthly time-series for the last 12 months, used to render trend charts. */
+export interface DashboardTrends {
+  labels: string[];
+  revenue: number[];
+  expenses: number[];
+  sales: number[];
+  cashFlow: number[];
+}
+
 export interface DashboardOverview {
   organization: DashboardOrganization;
   statistics: DashboardStatistics;
+  trends: DashboardTrends;
   quickActions: QuickAction[];
   recentActivities: RecentActivityItem[];
   permissions: string[];
@@ -132,6 +142,7 @@ export class DashboardService {
     const hasAny = (...required: string[]) => required.some((permission) => permissions.includes(permission));
     const canFinance = hasAny(...FINANCE_PERMISSIONS);
     const canPayroll = hasAny('payroll.read');
+    const canSales = hasAny('sales.read', 'invoices.read');
 
     const [
       organization,
@@ -187,9 +198,12 @@ export class DashboardService {
       monthlyPayroll,
     };
 
+    const trends = await this.getTrends(orgId, canFinance, canSales);
+
     return {
       organization,
       statistics,
+      trends,
       quickActions,
       recentActivities: gatedActivities,
       permissions,
@@ -235,7 +249,7 @@ export class DashboardService {
       insights.push({
         id: 'revenue',
         icon: 'Zap',
-        text: 'Revenue increased 12.5% compared to last month. Your top-performing category is driving this growth.',
+        text: `Monthly revenue totals ${this.formatCurrency(statistics.monthlyRevenue)}. Track the trend chart to monitor this period's performance.`,
       });
     }
     if (layout.secondary.includes('invoices')) {
@@ -256,7 +270,7 @@ export class DashboardService {
       insights.push({
         id: 'customers',
         icon: 'ArrowUpRight',
-        text: 'Customer acquisition up 8.1%. Projected to reach 2,000 customers next quarter.',
+        text: `${statistics.totalCustomers} customers on record. Reference the customer module for segment and contact details.`,
       });
     }
     if (layout.kpis.includes('payroll')) {
@@ -414,6 +428,98 @@ export class DashboardService {
       this.logger.error(`Monthly payroll query failed: ${(error as Error).message}`);
       return 0;
     }
+  }
+
+  /** Last 12 month keys in ascending order (YYYY-MM). */
+  private monthKeys(): string[] {
+    const keys: string[] = [];
+    const now = new Date();
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      keys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    }
+    return keys;
+  }
+
+  private trendLabels(): string[] {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return this.monthKeys().map((key) => {
+      const [year, month] = key.split('-');
+      return `${months[Number(month) - 1]} '${year.slice(2)}`;
+    });
+  }
+
+  private zeros(): number[] {
+    return this.monthKeys().map(() => 0);
+  }
+
+  private mergeMonthMap(rows: Array<{ month: string; total: number }>): number[] {
+    const byKey = new Map(rows.map((row) => [row.month, Math.round(row.total * 100) / 100]));
+    return this.monthKeys().map((key) => byKey.get(key) ?? 0);
+  }
+
+  private async revenueTrend(orgId: string): Promise<number[]> {
+    const rows = await this.prisma.$queryRaw<Array<{ month: string; total: number }>>`
+      SELECT to_char(date_trunc('month', "issueDate"), 'YYYY-MM') AS month,
+             (SUM("total"))::float8 AS total
+      FROM "Invoice"
+      WHERE "organizationId" = ${orgId}
+        AND "type" = 'SALES'
+        AND "paymentStatus" = 'PAID'
+        AND "issueDate" >= date_trunc('month', now()) - INTERVAL '11 months'
+      GROUP BY 1
+    `;
+    return this.mergeMonthMap(rows);
+  }
+
+  private async expenseTrend(orgId: string): Promise<number[]> {
+    const rows = await this.prisma.$queryRaw<Array<{ month: string; total: number }>>`
+      SELECT to_char(date_trunc('month', "orderDate"), 'YYYY-MM') AS month,
+             (SUM("total"))::float8 AS total
+      FROM "PurchaseOrder"
+      WHERE "organizationId" = ${orgId}
+        AND "status" <> 'CANCELLED'
+        AND "orderDate" >= date_trunc('month', now()) - INTERVAL '11 months'
+      GROUP BY 1
+    `;
+    return this.mergeMonthMap(rows);
+  }
+
+  private async salesTrend(orgId: string): Promise<number[]> {
+    const rows = await this.prisma.$queryRaw<Array<{ month: string; total: number }>>`
+      SELECT to_char(date_trunc('month', "orderDate"), 'YYYY-MM') AS month,
+             (COUNT(*)::int)::float8 AS total
+      FROM "SalesOrder"
+      WHERE "organizationId" = ${orgId}
+        AND "status" <> 'CANCELLED'
+        AND "orderDate" >= date_trunc('month', now()) - INTERVAL '11 months'
+      GROUP BY 1
+    `;
+    return this.mergeMonthMap(rows);
+  }
+
+  private async safeTrend(query: () => Promise<number[]>): Promise<number[]> {
+    try {
+      return await query();
+    } catch (error) {
+      this.logger.error(`Dashboard trend query failed: ${(error as Error).message}`);
+      return this.zeros();
+    }
+  }
+
+  private async getTrends(orgId: string, canFinance: boolean, canSales: boolean): Promise<DashboardTrends> {
+    const revenue = canFinance ? await this.safeTrend(() => this.revenueTrend(orgId)) : this.zeros();
+    const expenses = canFinance ? await this.safeTrend(() => this.expenseTrend(orgId)) : this.zeros();
+    const sales = canSales ? await this.safeTrend(() => this.salesTrend(orgId)) : this.zeros();
+    const cashFlow = revenue.map((value, index) => Math.round((value - expenses[index]) * 100) / 100);
+
+    return {
+      labels: this.trendLabels(),
+      revenue,
+      expenses,
+      sales,
+      cashFlow,
+    };
   }
 
   private async getRecentActivities(orgId: string): Promise<RecentActivityItem[]> {

@@ -30,6 +30,7 @@ import { AuthThrottleGuard } from '../common/guards/auth-throttle.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 
 import { AuthService } from './auth.service';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -129,21 +130,16 @@ export class AuthController {
   @UseGuards(AuthThrottleGuard)
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: { email: { type: 'string', format: 'email' } },
-    },
-  })
+  @ApiBody({ type: ForgotPasswordDto })
   @ApiOkResponse({ description: 'If the email exists, a reset link has been sent' })
   @ApiTooManyRequestsResponse({ description: 'Too many forgot-password attempts' })
   async forgotPassword(
-    @Body('email') email: string,
+    @Body() dto: ForgotPasswordDto,
     @Req() request: Request,
   ) {
     const ip = request.ip ?? '';
     const userAgent = request.headers['user-agent'] ?? '';
-    await this.authService.forgotPassword(email, ip, userAgent);
+    await this.authService.forgotPassword(dto.email, ip, userAgent);
     return { message: 'If the email exists, a reset link has been sent' };
   }
 

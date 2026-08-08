@@ -72,9 +72,18 @@ export interface DashboardAiInsight {
   text: string;
 }
 
+export interface DashboardTrends {
+  labels: string[];
+  revenue: number[];
+  expenses: number[];
+  sales: number[];
+  cashFlow: number[];
+}
+
 export interface DashboardOverview {
   organization: DashboardOrganization;
   statistics: DashboardStatistics;
+  trends: DashboardTrends;
   quickActions: QuickAction[];
   recentActivities: RecentActivityItem[];
   permissions: string[];

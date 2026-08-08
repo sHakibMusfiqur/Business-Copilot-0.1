@@ -4,6 +4,7 @@ import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 
 import { AccountingModule } from './accounting/accounting.module';
+import { AiModule } from './ai/ai.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
 import { BillingModule } from './billing/billing.module';
@@ -40,6 +41,7 @@ import { TenantScopeModule } from './common/tenant/tenant-scope.module';
       { name: 'long', ttl: 60000, limit: 200 },
     ]),
     AccountingModule,
+    AiModule,
     AuditModule,
     BillingModule,
     CrmModule,

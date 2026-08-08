@@ -48,3 +48,13 @@ export async function createOrganization(name: string) {
   const response = await api.post(API_ROUTES.ORGANIZATIONS.ROOT, { name });
   return response.data;
 }
+
+export async function forgotPassword(email: string) {
+  const response = await api.post(API_ROUTES.AUTH.FORGOT_PASSWORD, { email });
+  return response.data;
+}
+
+export async function resetPassword(token: string, password: string) {
+  const response = await api.post(API_ROUTES.AUTH.RESET_PASSWORD, { token, password });
+  return response.data;
+}

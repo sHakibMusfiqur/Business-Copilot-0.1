@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -39,6 +39,16 @@ export class DepartmentsService {
   }
 
   async create(orgId: string, actorId: string, dto: CreateDepartmentDto) {
+    if (dto.managerId) {
+      const manager = await this.prisma.user.findFirst({
+        where: { id: dto.managerId, organizationId: orgId },
+        select: { id: true },
+      });
+      if (!manager) {
+        throw new BadRequestException('managerId does not belong to this organization');
+      }
+    }
+
     const department = await this.prisma.department.create({
       data: {
         name: dto.name.trim(),

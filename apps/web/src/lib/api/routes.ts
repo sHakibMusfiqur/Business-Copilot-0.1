@@ -6,6 +6,8 @@ export const API_ROUTES = {
     LOGOUT: '/auth/logout',
     ME: '/auth/me',
     REFRESH: '/auth/refresh',
+    FORGOT_PASSWORD: '/auth/forgot-password',
+    RESET_PASSWORD: '/auth/reset-password',
   },
   ORGANIZATIONS: {
     ROOT: '/organizations',
@@ -14,6 +16,10 @@ export const API_ROUTES = {
   },
   DASHBOARD: {
     OVERVIEW: '/dashboard/overview',
+  },
+  AI: {
+    STATUS: '/ai/status',
+    ASK: '/ai/ask',
   },
   ONBOARDING: {
     INDUSTRIES: '/onboarding/industries',
