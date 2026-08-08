@@ -9,14 +9,21 @@ import { join } from 'path';
 import type { Request, Response, NextFunction } from 'express';
 
 import { AppModule } from './app.module';
+import { ConfigService } from './config/config.service';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const requestLogger = new Logger('HTTP');
+
+  // Fail fast and clearly on invalid/insecure environment configuration before
+  // the application boots. The error lists only variable names, never values.
+  const configService = new ConfigService();
+  configService.validate();
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
 
   app.enableShutdownHooks();
-  app.setGlobalPrefix('api');
+  app.setGlobalPrefix(configService.apiPrefix);
 
   app.useStaticAssets(join(process.cwd(), 'uploads'), {
     prefix: '/uploads/',
@@ -31,13 +38,7 @@ async function bootstrap() {
 
   app.enableCors({
     origin(origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
-      const allowed = [
-        process.env.WEB_URL ?? 'http://localhost:3000',
-        'http://localhost:3000',
-        'http://127.0.0.1:3000',
-        'http://localhost:3001',
-        'http://127.0.0.1:3001',
-      ].filter(Boolean) as string[];
+      const allowed = configService.corsOrigins;
       if (!origin || allowed.includes(origin)) {
         callback(null, true);
       } else {
@@ -74,13 +75,11 @@ async function bootstrap() {
 
   // Swagger is an opt-in developer aid and must never be exposed in
   // production. It is disabled automatically when NODE_ENV=production.
-  const isProduction = process.env.NODE_ENV === 'production';
-  const isSwaggerEnabled = !isProduction && process.env.SWAGGER_ENABLED === 'true';
-  if (isSwaggerEnabled) {
+  if (configService.swaggerEnabled) {
     const config = new DocumentBuilder()
-      .setTitle(process.env.SWAGGER_TITLE ?? 'Business Copilot API')
-      .setDescription(process.env.SWAGGER_DESCRIPTION ?? 'Enterprise ERP + AI Business Copilot API')
-      .setVersion(process.env.SWAGGER_VERSION ?? '1.0')
+      .setTitle(configService.swaggerTitle)
+      .setDescription(configService.swaggerDescription)
+      .setVersion(configService.swaggerVersion)
       .addBearerAuth(
         { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
         'access-token',
@@ -99,11 +98,11 @@ async function bootstrap() {
     });
   }
 
-  const port = process.env.PORT ?? 4000;
+  const port = configService.port;
   await app.listen(port);
 
   logger.log(`Server running on http://localhost:${port}`);
-  if (isSwaggerEnabled) {
+  if (configService.swaggerEnabled) {
     logger.log(`Swagger docs at http://localhost:${port}/api/docs`);
   }
 }
