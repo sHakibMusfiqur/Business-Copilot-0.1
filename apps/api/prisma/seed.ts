@@ -255,7 +255,7 @@ async function main() {
         role: 'SUPER_ADMIN',
       },
     });
-    console.log(`  Dev Platform Admin: ${DEV_ADMIN_EMAIL} (${DEV_ADMIN_PASSWORD}) [DEVELOPMENT ONLY]`);
+    console.log(`  Dev Platform Admin: ${DEV_ADMIN_EMAIL} (password set from seed) [DEVELOPMENT ONLY]`);
   }
 
   // ─── Subscription Plans ────────────────────────────────────────

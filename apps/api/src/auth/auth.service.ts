@@ -18,6 +18,7 @@ import { MailService } from '../mail/mail.service';
 
 import { AuditService } from '../audit/audit.service';
 import { AuthRateLimiterService } from './auth-rate-limiter.service';
+import { redactString } from '../common/observability/redact';
 import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
 
@@ -190,9 +191,10 @@ export class AuthService {
     } catch (error) {
       this.logger.error(`=== AUTH SERVICE register() CAUGHT EXCEPTION ===`);
       this.logger.error(`error type=${typeof error} ${error instanceof Error ? error.constructor.name : 'unknown'}`);
-      this.logger.error(`error message=${error instanceof Error ? error.message : String(error)}`);
+      const secretValues = this.authSecretValues();
+      this.logger.error(`error message=${this.redact(error instanceof Error ? error.message : String(error), secretValues)}`);
       if (error instanceof Error) {
-        this.logger.error(`error stack=${error.stack}`);
+        this.logger.error(`error stack=${this.redact(error.stack ?? '', secretValues)}`);
       }
       if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
         const meta = error.meta as Record<string, unknown> | undefined;
@@ -648,5 +650,25 @@ export class AuthService {
     // always paired with an onboarding session, so an org here is a real,
     // pre-existing workspace.
     return !!user.organizationId;
+  }
+
+  /** Secret values used to prevent credential echo when logging error details. */
+  private authSecretValues(): string[] {
+    const values: string[] = [];
+    for (const v of [
+      this.configService.redisUrl,
+      this.configService.jwtSecret,
+      this.configService.jwtRefreshSecret,
+      this.configService.stripeSecretKey,
+      this.configService.stripeWebhookSecret,
+      process.env.DATABASE_URL,
+    ]) {
+      if (v) values.push(v);
+    }
+    return values;
+  }
+
+  private redact(message: string, secrets: string[]): string {
+    return redactString(message, secrets);
   }
 }

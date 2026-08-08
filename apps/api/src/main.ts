@@ -10,6 +10,8 @@ import type { Request, Response, NextFunction } from 'express';
 
 import { AppModule } from './app.module';
 import { ConfigService } from './config/config.service';
+import { redactUrlForLog } from './common/observability/redact';
+import { requestIdMiddleware } from './common/observability/request-id';
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -52,13 +54,32 @@ async function bootstrap() {
 
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
+  // Correlation ID middleware runs first so every request (and its logs and
+  // any error responses) carries a request ID echoed in the x-request-id header.
+  app.use(requestIdMiddleware);
+
+  // Production-safe HTTP request/response logging. Logs only safe request ID,
+  // method, sanitized path, origin, status, and duration. Never logs headers,
+  // cookies, bodies, query strings, or full URLs (which may carry secrets).
   app.use((req: Request, res: Response, next: NextFunction) => {
-    requestLogger.log(`>>> INCOMING ${req.method} ${req.originalUrl} from=${req.ip} origin=${req.headers.origin ?? '(none)'}`);
-    const originalEnd = res.end.bind(res) as (...args: unknown[]) => ReturnType<Response['end']>;
-    res.end = function (this: Response, ...args: unknown[]) {
-      requestLogger.log(`<<< RESPONSE ${req.method} ${req.originalUrl} status=${res.statusCode}`);
-      return originalEnd(...args);
-    } as Response['end'];
+    const requestId = req.requestId ?? '(missing)';
+    const startedAt = Date.now();
+    const method = req.method;
+    const path = redactUrlForLog(req.originalUrl);
+    const origin = req.headers.origin ?? '(none)';
+
+    requestLogger.log(
+      `REQUEST id=${requestId} method=${method} path=${path} from=${req.ip ?? '?'} origin=${origin}`,
+    );
+
+    res.on('finish', () => {
+      const durationMs = Date.now() - startedAt;
+      const { statusCode } = res;
+      requestLogger.log(
+        `RESPONSE id=${requestId} method=${method} path=${path} status=${statusCode} duration=${durationMs}ms`,
+      );
+    });
+
     next();
   });
 
