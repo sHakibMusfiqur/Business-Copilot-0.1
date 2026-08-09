@@ -4,6 +4,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { randomBytes } from 'crypto';
@@ -137,6 +138,10 @@ export class UsersService {
   }
 
   async create(orgId: string, currentUserId: string, dto: CreateUserDto) {
+    if (dto.role === UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Cannot assign the SUPER_ADMIN role');
+    }
+
     const normalizedEmail = dto.email.toLowerCase().trim();
 
     const existingUser = await this.prisma.user.findUnique({
@@ -217,6 +222,10 @@ export class UsersService {
   }
 
   async update(orgId: string, currentUserId: string, userId: string, dto: UpdateUserDto) {
+    if (dto.role === UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException('Cannot assign the SUPER_ADMIN role');
+    }
+
     const user = await this.prisma.user.findFirst({
       where: { id: userId, organizationId: orgId, deletedAt: null },
     });
