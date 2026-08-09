@@ -111,6 +111,10 @@ export class LeadService {
   async create(orgId: string, userId: string, dto: CreateLeadDto) {
     const leadNumber = await this.generateLeadNumber();
 
+    if (dto.assignedToId) {
+      await this.assertAssigneeAccessible(orgId, dto.assignedToId);
+    }
+
     const lead = await this.prisma.lead.create({
       data: {
         leadNumber,
@@ -155,7 +159,14 @@ export class LeadService {
     if (dto.phone !== undefined) updateData.phone = dto.phone;
     if (dto.source !== undefined) updateData.source = dto.source;
     if (dto.estimatedValue !== undefined) updateData.estimatedValue = dto.estimatedValue;
-    if (dto.assignedToId !== undefined) updateData.assignedTo = { connect: { id: dto.assignedToId } };
+    if (dto.assignedToId !== undefined) {
+      if (dto.assignedToId) {
+        await this.assertAssigneeAccessible(orgId, dto.assignedToId);
+      }
+      updateData.assignedTo = dto.assignedToId
+        ? { connect: { id: dto.assignedToId } }
+        : { disconnect: true };
+    }
     if (dto.notes !== undefined) updateData.notes = dto.notes;
 
     if (dto.status !== undefined && dto.status !== existing.status) {
@@ -221,6 +232,10 @@ export class LeadService {
     });
 
     if (!existing) throw new NotFoundException('Lead not found');
+
+    if (assignedToId) {
+      await this.assertAssigneeAccessible(orgId, assignedToId);
+    }
 
     const updated = await this.prisma.lead.update({
       where: { id: leadId },
@@ -367,5 +382,16 @@ export class LeadService {
     }
 
     return `${prefix}${String(nextSeq).padStart(6, '0')}`;
+  }
+
+  private async assertAssigneeAccessible(orgId: string, userId: string): Promise<void> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, organizationId: orgId },
+      select: { id: true },
+    });
+
+    if (!user) {
+      throw new BadRequestException('Assignee not found or not accessible to this organization');
+    }
   }
 }

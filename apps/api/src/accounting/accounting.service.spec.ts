@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 import { AccountingService } from './accounting.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -116,5 +116,77 @@ describe('AccountingService journal-entry numbering (tenant isolation)', () => {
 
     expect(journalEntryFindFirst).not.toHaveBeenCalled();
     expect(journalEntryCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe('AccountingService updateAccount parentId (tenant isolation)', () => {
+  let service: AccountingService;
+  let accountFindFirst: jest.Mock;
+  let accountUpdate: jest.Mock;
+
+  beforeEach(() => {
+    accountFindFirst = jest.fn();
+    accountUpdate = jest.fn();
+
+    const prisma = {
+      account: { findFirst: accountFindFirst, update: accountUpdate },
+    } as unknown as PrismaService;
+
+    service = new AccountingService(prisma);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('throws NotFound when the account does not belong to the organization', async () => {
+    accountFindFirst.mockResolvedValue(null);
+
+    await expect(
+      service.updateAccount(ORG_ID, 'acct-1', { name: 'New' }),
+    ).rejects.toThrow(NotFoundException);
+    expect(accountUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejects setting parentId to an account from another organization', async () => {
+    accountFindFirst
+      .mockResolvedValueOnce({ id: 'acct-1', organizationId: ORG_ID }) // current account exists
+      .mockResolvedValueOnce(null); // parent not in this org
+
+    await expect(
+      service.updateAccount(ORG_ID, 'acct-1', { parentId: 'acct-other-org' }),
+    ).rejects.toThrow(NotFoundException);
+    expect(accountFindFirst).toHaveBeenLastCalledWith({
+      where: { id: 'acct-other-org', organizationId: ORG_ID },
+    });
+    expect(accountUpdate).not.toHaveBeenCalled();
+  });
+
+  it('allows setting parentId to an account in the same organization', async () => {
+    accountFindFirst
+      .mockResolvedValueOnce({ id: 'acct-1', organizationId: ORG_ID }) // current account
+      .mockResolvedValueOnce({ id: 'acct-parent', organizationId: ORG_ID }); // parent exists
+    accountUpdate.mockResolvedValue({ id: 'acct-1', parentId: 'acct-parent' });
+
+    const result = await service.updateAccount(ORG_ID, 'acct-1', { parentId: 'acct-parent' });
+
+    expect(accountFindFirst).toHaveBeenLastCalledWith({
+      where: { id: 'acct-parent', organizationId: ORG_ID },
+    });
+    expect(accountUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ parentId: 'acct-parent' }),
+      }),
+    );
+    expect(result).toBeDefined();
+  });
+
+  it('rejects setting itself as parent', async () => {
+    accountFindFirst.mockResolvedValue({ id: 'acct-1', organizationId: ORG_ID });
+
+    await expect(
+      service.updateAccount(ORG_ID, 'acct-1', { parentId: 'acct-1' }),
+    ).rejects.toThrow(BadRequestException);
+    expect(accountUpdate).not.toHaveBeenCalled();
   });
 });

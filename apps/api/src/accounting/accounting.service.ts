@@ -147,6 +147,13 @@ export class AccountingService {
       throw new BadRequestException('An account cannot be its own parent');
     }
 
+    if (dto.parentId) {
+      const parent = await this.prisma.account.findFirst({
+        where: { id: dto.parentId, organizationId: orgId },
+      });
+      if (!parent) throw new NotFoundException('Parent account not found');
+    }
+
     try {
       const updated = await this.prisma.account.update({
         where: { id: accountId },
