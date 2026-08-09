@@ -2,6 +2,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
@@ -139,6 +140,13 @@ export class ProductsService {
   }
 
   async create(orgId: string, currentUserId: string, dto: CreateProductDto) {
+    if (dto.categoryId) {
+      await this.assertCategoryAccessible(orgId, dto.categoryId);
+    }
+    if (dto.supplierId) {
+      await this.assertSupplierAccessible(orgId, dto.supplierId);
+    }
+
     const data: Prisma.ProductCreateInput = {
       name: dto.name.trim(),
       sku: dto.sku.trim(),
@@ -171,6 +179,13 @@ export class ProductsService {
 
     if (!product) {
       throw new NotFoundException('Product not found');
+    }
+
+    if (dto.categoryId) {
+      await this.assertCategoryAccessible(orgId, dto.categoryId);
+    }
+    if (dto.supplierId) {
+      await this.assertSupplierAccessible(orgId, dto.supplierId);
     }
 
     const updateData: Prisma.ProductUpdateInput = {};
@@ -215,6 +230,31 @@ export class ProductsService {
 
     this.logger.log(`Product updated: ${updated.name} (${productId}) by ${currentUserId}`);
     return updated;
+  }
+
+  private async assertCategoryAccessible(orgId: string, categoryId: string): Promise<void> {
+    const category = await this.prisma.category.findFirst({
+      where: {
+        id: categoryId,
+        OR: [{ organizationId: orgId }, { organizationId: null }],
+      },
+      select: { id: true },
+    });
+
+    if (!category) {
+      throw new BadRequestException('Category not found or not accessible to this organization');
+    }
+  }
+
+  private async assertSupplierAccessible(orgId: string, supplierId: string): Promise<void> {
+    const supplier = await this.prisma.supplier.findFirst({
+      where: { id: supplierId, organizationId: orgId },
+      select: { id: true },
+    });
+
+    if (!supplier) {
+      throw new BadRequestException('Supplier not found or not accessible to this organization');
+    }
   }
 
   async softDelete(orgId: string, currentUserId: string, productId: string) {
