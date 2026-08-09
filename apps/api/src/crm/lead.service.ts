@@ -170,6 +170,9 @@ export class LeadService {
     if (dto.notes !== undefined) updateData.notes = dto.notes;
 
     if (dto.status !== undefined && dto.status !== existing.status) {
+      if (existing.status === LeadStatus.WON || existing.status === LeadStatus.LOST) {
+        throw new BadRequestException('Cannot change status of a closed lead (WON or LOST)');
+      }
       updateData.status = dto.status;
     }
 

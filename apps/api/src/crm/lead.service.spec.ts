@@ -136,6 +136,102 @@ describe('LeadService.update (assignedToId tenant validation)', () => {
   });
 });
 
+describe('LeadService.update (closed-lead status guard / P3-L2)', () => {
+  it('rejects changing the status of a WON lead via generic update()', async () => {
+    const { service, leadFindFirst, leadUpdate } = mockService();
+    leadFindFirst.mockResolvedValue({ id: 'lead-1', organizationId: ORG_ID, status: 'WON' });
+
+    await expect(
+      service.update(ORG_ID, 'actor', 'lead-1', { status: 'NEW' } as never),
+    ).rejects.toThrow(BadRequestException);
+    expect(leadUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejects changing the status of a LOST lead via generic update()', async () => {
+    const { service, leadFindFirst, leadUpdate } = mockService();
+    leadFindFirst.mockResolvedValue({ id: 'lead-1', organizationId: ORG_ID, status: 'LOST' });
+
+    await expect(
+      service.update(ORG_ID, 'actor', 'lead-1', { status: 'CONTACTED' } as never),
+    ).rejects.toThrow(BadRequestException);
+    expect(leadUpdate).not.toHaveBeenCalled();
+  });
+
+  it('allows changing the status of a non-closed lead via generic update()', async () => {
+    const { service, leadFindFirst, leadUpdate } = mockService();
+    leadFindFirst.mockResolvedValue({ id: 'lead-1', organizationId: ORG_ID, status: 'NEW' });
+    leadUpdate.mockResolvedValue({ id: 'lead-1', leadNumber: 'LD-2026-000001', status: 'QUALIFIED' });
+
+    const result = await service.update(ORG_ID, 'actor', 'lead-1', { status: 'QUALIFIED' } as never);
+
+    expect(leadUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'QUALIFIED' }) }),
+    );
+    expect(result.status).toBe('QUALIFIED');
+  });
+
+  it('allows updating non-status fields on a closed lead without triggering the guard', async () => {
+    const { service, leadFindFirst, leadUpdate } = mockService();
+    leadFindFirst.mockResolvedValue({ id: 'lead-1', organizationId: ORG_ID, status: 'WON' });
+    leadUpdate.mockResolvedValue({ id: 'lead-1', leadNumber: 'LD-2026-000001' });
+
+    await service.update(ORG_ID, 'actor', 'lead-1', { notes: 'Follow up on delivery' } as never);
+
+    expect(leadUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ notes: 'Follow up on delivery' }) }),
+    );
+  });
+
+  it('does not trigger the guard when status is unchanged on a closed lead', async () => {
+    const { service, leadFindFirst, leadUpdate } = mockService();
+    leadFindFirst.mockResolvedValue({ id: 'lead-1', organizationId: ORG_ID, status: 'WON' });
+    leadUpdate.mockResolvedValue({ id: 'lead-1', leadNumber: 'LD-2026-000001' });
+
+    await service.update(ORG_ID, 'actor', 'lead-1', { status: 'WON', name: 'New Name' } as never);
+
+    expect(leadUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ name: 'New Name' }) }),
+    );
+  });
+});
+
+describe('LeadService.updateStatus (closed-lead guard intact / P3-L2)', () => {
+  it('rejects changing the status of a WON lead via updateStatus()', async () => {
+    const { service, leadFindFirst, leadUpdate } = mockService();
+    leadFindFirst.mockResolvedValue({ id: 'lead-1', organizationId: ORG_ID, status: 'WON' });
+
+    await expect(service.updateStatus(ORG_ID, 'actor', 'lead-1', 'NEW')).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(leadUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejects changing the status of a LOST lead via updateStatus()', async () => {
+    const { service, leadFindFirst, leadUpdate } = mockService();
+    leadFindFirst.mockResolvedValue({ id: 'lead-1', organizationId: ORG_ID, status: 'LOST' });
+
+    await expect(service.updateStatus(ORG_ID, 'actor', 'lead-1', 'NEW')).rejects.toThrow(
+      BadRequestException,
+    );
+    expect(leadUpdate).not.toHaveBeenCalled();
+  });
+
+  it('allows changing the status of a non-closed lead via updateStatus()', async () => {
+    const { service, leadFindFirst, leadUpdate } = mockService();
+    leadFindFirst.mockResolvedValue({ id: 'lead-1', organizationId: ORG_ID, status: 'NEW' });
+    leadUpdate.mockResolvedValue({ id: 'lead-1', leadNumber: 'LD-2026-000001', status: 'QUALIFIED' });
+
+    const result = await service.updateStatus(ORG_ID, 'actor', 'lead-1', 'QUALIFIED');
+
+    expect(leadUpdate).toHaveBeenCalledWith({
+      where: { id: 'lead-1' },
+      data: { status: 'QUALIFIED' },
+      select: { id: true, leadNumber: true, status: true },
+    });
+    expect(result.status).toBe('QUALIFIED');
+  });
+});
+
 describe('LeadService.create (assignedToId tenant validation)', () => {
   it('rejects creating a lead assigned to a user from another organization', async () => {
     const { service, userFindFirst } = mockService();
