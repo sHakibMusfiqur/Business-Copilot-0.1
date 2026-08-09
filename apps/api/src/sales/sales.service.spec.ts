@@ -184,3 +184,108 @@ describe('SalesService deliver (atomic status gate + guarded decrement)', () => 
     expect(inventoryTransactionCreate).not.toHaveBeenCalled();
   });
 });
+
+describe('SalesService pricing (server-authoritative / P3-M2)', () => {
+  let service: SalesService;
+  let customerFindFirst: jest.Mock;
+  let productFindMany: jest.Mock;
+  let orderFindFirst: jest.Mock;
+  let orderCreate: jest.Mock;
+  let orderUpdate: jest.Mock;
+  let itemDeleteMany: jest.Mock;
+  let itemCreateMany: jest.Mock;
+  let transaction: jest.Mock;
+
+  beforeEach(() => {
+    customerFindFirst = jest.fn().mockResolvedValue({ id: 'cust-1' });
+    productFindMany = jest.fn().mockResolvedValue([{ id: PRODUCT_ID, name: 'Widget', unitPrice: 150 }]);
+    orderFindFirst = jest.fn().mockResolvedValue(null);
+    orderCreate = jest.fn().mockResolvedValue({ id: SALE_ID, orderNumber: 'SO-2026-000001', status: 'DRAFT', total: 0 });
+    orderUpdate = jest.fn().mockResolvedValue({ id: SALE_ID });
+    itemDeleteMany = jest.fn().mockResolvedValue({});
+    itemCreateMany = jest.fn().mockResolvedValue({});
+
+    const mockTx = {
+      salesOrderItem: { deleteMany: itemDeleteMany, createMany: itemCreateMany },
+      salesOrder: { update: orderUpdate },
+    };
+    transaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(mockTx));
+
+    service = new SalesService(
+      {
+        customer: { findFirst: customerFindFirst },
+        product: { findMany: productFindMany },
+        salesOrder: { findFirst: orderFindFirst, create: orderCreate },
+        $transaction: transaction,
+      } as unknown as PrismaService,
+      {} as never,
+    );
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('create() ignores client unitPrice and uses product.unitPrice for stored price and totals', async () => {
+    await service.create(ORG_ID, USER_ID, {
+      customerId: 'cust-1',
+      items: [{ productId: PRODUCT_ID, quantity: 2, unitPrice: 1, discount: 0, tax: 0 }],
+    });
+
+    expect(productFindMany).toHaveBeenCalledWith({
+      where: { id: { in: [PRODUCT_ID] }, organizationId: ORG_ID, deletedAt: null },
+      select: expect.objectContaining({ unitPrice: true }),
+    });
+
+    expect(orderCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          subtotal: 300,
+          discount: 0,
+          tax: 0,
+          total: 300,
+          items: {
+            create: [
+              expect.objectContaining({
+                unitPrice: 150,
+                lineTotal: 300,
+              }),
+            ],
+          },
+        }),
+      }),
+    );
+  });
+
+  it('create() keeps org scoping on the product lookup', async () => {
+    await service.create(ORG_ID, USER_ID, {
+      customerId: 'cust-1',
+      items: [{ productId: PRODUCT_ID, quantity: 1, unitPrice: 1 }],
+    });
+
+    expect(productFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ organizationId: ORG_ID }) }),
+    );
+  });
+
+  it('update() ignores client unitPrice and re-derives prices plus order totals', async () => {
+    orderFindFirst.mockResolvedValue({ id: SALE_ID, organizationId: ORG_ID, status: 'DRAFT' });
+
+    await service.update(ORG_ID, USER_ID, SALE_ID, {
+      items: [{ productId: PRODUCT_ID, quantity: 3, unitPrice: 1, discount: 10, tax: 5 }],
+    });
+
+    expect(itemCreateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: [
+          expect.objectContaining({ unitPrice: 150, lineTotal: 445, discount: 10, tax: 5 }),
+        ],
+      }),
+    );
+    expect(orderUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ subtotal: 450, discount: 10, tax: 5, total: 445 }),
+      }),
+    );
+  });
+});

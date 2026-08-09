@@ -149,7 +149,7 @@ export class SalesService {
     const productIds = dto.items.map((item) => item.productId);
     const products = await this.prisma.product.findMany({
       where: { id: { in: productIds }, organizationId: orgId, deletedAt: null },
-      select: { id: true, name: true },
+      select: { id: true, name: true, unitPrice: true },
     });
 
     if (products.length !== productIds.length) {
@@ -166,12 +166,13 @@ export class SalesService {
       lineTotal: number;
     }> = dto.items.map((item) => {
       const product = products.find((p) => p.id === item.productId);
-      const lineTotal = (item.unitPrice * item.quantity) - (item.discount ?? 0) + (item.tax ?? 0);
+      const unitPrice = Number(product?.unitPrice ?? 0);
+      const lineTotal = (unitPrice * item.quantity) - (item.discount ?? 0) + (item.tax ?? 0);
       return {
         productId: item.productId,
         description: product?.name ?? '',
         quantity: item.quantity,
-        unitPrice: item.unitPrice,
+        unitPrice,
         discount: item.discount ?? 0,
         tax: item.tax ?? 0,
         lineTotal,
@@ -255,7 +256,7 @@ export class SalesService {
       const productIds = dto.items.map((item) => item.productId);
       const products = await this.prisma.product.findMany({
         where: { id: { in: productIds }, organizationId: orgId, deletedAt: null },
-        select: { id: true, name: true },
+        select: { id: true, name: true, unitPrice: true },
       });
 
       if (products.length !== productIds.length) {
@@ -264,12 +265,13 @@ export class SalesService {
 
       const itemsData = dto.items.map((item) => {
         const product = products.find((p) => p.id === item.productId);
-        const lineTotal = (item.unitPrice * item.quantity) - (item.discount ?? 0) + (item.tax ?? 0);
+        const unitPrice = Number(product?.unitPrice ?? 0);
+        const lineTotal = (unitPrice * item.quantity) - (item.discount ?? 0) + (item.tax ?? 0);
         return {
           productId: item.productId,
           description: product?.name ?? '',
           quantity: item.quantity,
-          unitPrice: item.unitPrice,
+          unitPrice,
           discount: item.discount ?? 0,
           tax: item.tax ?? 0,
           lineTotal,
