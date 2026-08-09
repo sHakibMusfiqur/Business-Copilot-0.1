@@ -1,5 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 
+import { PaymentType } from '@prisma/client';
+
 import { AccountingService } from './accounting.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -188,5 +190,283 @@ describe('AccountingService updateAccount parentId (tenant isolation)', () => {
       service.updateAccount(ORG_ID, 'acct-1', { parentId: 'acct-1' }),
     ).rejects.toThrow(BadRequestException);
     expect(accountUpdate).not.toHaveBeenCalled();
+  });
+});
+
+interface TxMock {
+  $queryRaw: jest.Mock;
+  customer: { findFirst: jest.Mock };
+  supplier: { findFirst: jest.Mock };
+  payment: { create: jest.Mock; findUnique: jest.Mock };
+  receivable: { findFirst: jest.Mock; update: jest.Mock };
+  payable: { findFirst: jest.Mock; update: jest.Mock };
+  paymentAllocation: { create: jest.Mock };
+  journalEntry: { findFirst: jest.Mock; create: jest.Mock };
+  account: { findFirst: jest.Mock };
+}
+
+describe('AccountingService processPaymentAllocation (P3-H1 / P3-H2)', () => {
+  let service: AccountingService;
+  let tx: TxMock;
+  let queryRaw: jest.Mock;
+
+  const makeDto = (overrides: Record<string, unknown> = {}) => ({
+    type: PaymentType.CUSTOMER_PAYMENT,
+    customerId: 'cust-1',
+    amount: 60,
+    receivableId: 'rec-1',
+    ...overrides,
+  });
+
+  const receivable = (overrides: Record<string, unknown> = {}) => ({
+    id: 'rec-1',
+    organizationId: ORG_ID,
+    totalAmount: 100,
+    paidAmount: 40,
+    status: 'PARTIALLY_PAID',
+    ...overrides,
+  });
+
+  const payable = (overrides: Record<string, unknown> = {}) => ({
+    id: 'pay-1',
+    organizationId: ORG_ID,
+    totalAmount: 100,
+    paidAmount: 40,
+    status: 'PARTIALLY_PAID',
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    queryRaw = jest.fn().mockResolvedValue([1]);
+
+    tx = {
+      $queryRaw: queryRaw,
+      customer: { findFirst: jest.fn().mockResolvedValue({ id: 'cust-1' }) },
+      supplier: { findFirst: jest.fn().mockResolvedValue({ id: 'sup-1' }) },
+      payment: {
+        create: jest.fn().mockImplementation(async () => ({ id: 'p-1' })),
+        findUnique: jest.fn().mockResolvedValue({ reference: 'REF' }),
+      },
+      receivable: { findFirst: jest.fn().mockResolvedValue(receivable()), update: jest.fn() },
+      payable: { findFirst: jest.fn().mockResolvedValue(payable()), update: jest.fn() },
+      paymentAllocation: { create: jest.fn().mockResolvedValue(undefined) },
+      journalEntry: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: 'je-1' }),
+      },
+      account: { findFirst: jest.fn().mockResolvedValue({ id: 'acct-1' }) },
+    };
+
+    const prisma = {
+      $transaction: jest.fn().mockImplementation(
+        (callback: (client: unknown) => unknown) => callback(tx),
+      ),
+    } as unknown as PrismaService;
+
+    service = new AccountingService(prisma);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  // ─── P3-H1 : Receivable ────────────────────────────────────────
+
+  describe('receivable allocation guards', () => {
+    it('accepts a partial payment within the outstanding balance', async () => {
+      tx.receivable.findFirst.mockResolvedValue(receivable({ paidAmount: 40, status: 'PENDING' }));
+
+      await service.createPayment(ORG_ID, USER_ID, makeDto({ amount: 20 }));
+
+      expect(tx.paymentAllocation.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ receivableId: 'rec-1', amount: 20 }),
+      });
+      expect(tx.receivable.update).toHaveBeenCalledWith({
+        where: { id: 'rec-1' },
+        data: { paidAmount: 60, status: 'PARTIALLY_PAID' },
+      });
+    });
+
+    it('accepts an exact remaining-balance payment and marks the receivable PAID', async () => {
+      tx.receivable.findFirst.mockResolvedValue(receivable({ paidAmount: 40, status: 'PENDING' }));
+
+      await service.createPayment(ORG_ID, USER_ID, makeDto({ amount: 60 }));
+
+      expect(tx.receivable.update).toHaveBeenCalledWith({
+        where: { id: 'rec-1' },
+        data: { paidAmount: 100, status: 'PAID' },
+      });
+    });
+
+    it('rejects an amount greater than the remaining balance', async () => {
+      tx.receivable.findFirst.mockResolvedValue(receivable({ paidAmount: 40, status: 'PENDING' }));
+
+      await expect(
+        service.createPayment(ORG_ID, USER_ID, makeDto({ amount: 61 })),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(tx.paymentAllocation.create).not.toHaveBeenCalled();
+      expect(tx.receivable.update).not.toHaveBeenCalled();
+      expect(tx.journalEntry.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a payment against a PAID receivable', async () => {
+      tx.receivable.findFirst.mockResolvedValue(receivable({ status: 'PAID' }));
+
+      await expect(
+        service.createPayment(ORG_ID, USER_ID, makeDto({ amount: 10 })),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(tx.paymentAllocation.create).not.toHaveBeenCalled();
+      expect(tx.receivable.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a payment against a CANCELLED receivable', async () => {
+      tx.receivable.findFirst.mockResolvedValue(receivable({ status: 'CANCELLED' }));
+
+      await expect(
+        service.createPayment(ORG_ID, USER_ID, makeDto({ amount: 10 })),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(tx.paymentAllocation.create).not.toHaveBeenCalled();
+      expect(tx.receivable.update).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── P3-H1 : Payable ───────────────────────────────────────────
+
+  describe('payable allocation guards', () => {
+    const makeSupplierDto = (overrides: Record<string, unknown> = {}) => ({
+      type: PaymentType.SUPPLIER_PAYMENT,
+      supplierId: 'sup-1',
+      amount: 60,
+      payableId: 'pay-1',
+      ...overrides,
+    });
+
+    it('accepts a partial payment within the outstanding balance', async () => {
+      tx.payable.findFirst.mockResolvedValue(payable({ paidAmount: 40, status: 'PENDING' }));
+
+      await service.createPayment(ORG_ID, USER_ID, makeSupplierDto({ amount: 20 }));
+
+      expect(tx.paymentAllocation.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ payableId: 'pay-1', amount: 20 }),
+      });
+      expect(tx.payable.update).toHaveBeenCalledWith({
+        where: { id: 'pay-1' },
+        data: { paidAmount: 60, status: 'PARTIALLY_PAID' },
+      });
+    });
+
+    it('accepts an exact remaining-balance payment and marks the payable PAID', async () => {
+      tx.payable.findFirst.mockResolvedValue(payable({ paidAmount: 40, status: 'PENDING' }));
+
+      await service.createPayment(ORG_ID, USER_ID, makeSupplierDto({ amount: 60 }));
+
+      expect(tx.payable.update).toHaveBeenCalledWith({
+        where: { id: 'pay-1' },
+        data: { paidAmount: 100, status: 'PAID' },
+      });
+    });
+
+    it('rejects an amount greater than the remaining balance', async () => {
+      tx.payable.findFirst.mockResolvedValue(payable({ paidAmount: 40, status: 'PENDING' }));
+
+      await expect(
+        service.createPayment(ORG_ID, USER_ID, makeSupplierDto({ amount: 61 })),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(tx.paymentAllocation.create).not.toHaveBeenCalled();
+      expect(tx.payable.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a payment against a PAID payable', async () => {
+      tx.payable.findFirst.mockResolvedValue(payable({ status: 'PAID' }));
+
+      await expect(
+        service.createPayment(ORG_ID, USER_ID, makeSupplierDto({ amount: 10 })),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(tx.paymentAllocation.create).not.toHaveBeenCalled();
+      expect(tx.payable.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a payment against a CANCELLED payable', async () => {
+      tx.payable.findFirst.mockResolvedValue(payable({ status: 'CANCELLED' }));
+
+      await expect(
+        service.createPayment(ORG_ID, USER_ID, makeSupplierDto({ amount: 10 })),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(tx.paymentAllocation.create).not.toHaveBeenCalled();
+      expect(tx.payable.update).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── P3-H2 : concurrency / locking ─────────────────────────────
+
+  describe('concurrency guard', () => {
+    it('issues a SELECT ... FOR UPDATE row lock on the target receivable before allocation', async () => {
+      await service.createPayment(ORG_ID, USER_ID, makeDto({ amount: 20 }));
+
+      expect(queryRaw).toHaveBeenCalledTimes(1);
+      const sql: TemplateStringsArray = queryRaw.mock.calls[0][0];
+      const params = queryRaw.mock.calls[0].slice(1);
+      expect(sql.join('')).toContain('SELECT id FROM "Receivable"');
+      expect(sql.join('')).toContain('FOR UPDATE');
+      expect(sql.join('')).toContain('"organizationId"');
+      expect(params).toContain('rec-1');
+      expect(params).toContain(ORG_ID);
+    });
+
+    it('reads the authoritative paidAmount from the locked row before computing the new balance', async () => {
+      // The DB row is authoritative (paidAmount=55); the client-supplied amount
+      // only contributes the increment, so the new balance is 55 + 20 = 75.
+      tx.receivable.findFirst.mockResolvedValue(receivable({ paidAmount: 55, status: 'PENDING' }));
+
+      await service.createPayment(ORG_ID, USER_ID, makeDto({ amount: 20 }));
+
+      expect(tx.receivable.update).toHaveBeenCalledWith({
+        where: { id: 'rec-1' },
+        data: expect.objectContaining({ paidAmount: 75 }),
+      });
+    });
+
+    it('rejects a second allocation after a concurrent winner already consumed the balance', async () => {
+      // Simulate the loser: winner committed first, so the locked row now shows
+      // paidAmount=60 (remaining=40). A second 60 amount must be rejected.
+      tx.receivable.findFirst.mockResolvedValue(receivable({ paidAmount: 60, status: 'PARTIALLY_PAID' }));
+
+      await expect(
+        service.createPayment(ORG_ID, USER_ID, makeDto({ amount: 60 })),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(tx.paymentAllocation.create).not.toHaveBeenCalled();
+      expect(tx.receivable.update).not.toHaveBeenCalled();
+      expect(tx.journalEntry.create).not.toHaveBeenCalled();
+    });
+
+    it('leaves no accounting artifacts when the loser allocation is rejected', async () => {
+      tx.receivable.findFirst.mockResolvedValue(receivable({ paidAmount: 80, status: 'PARTIALLY_PAID' }));
+
+      await expect(
+        service.createPayment(ORG_ID, USER_ID, makeDto({ amount: 100 })),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(tx.paymentAllocation.create).not.toHaveBeenCalled();
+      expect(tx.receivable.update).not.toHaveBeenCalled();
+      expect(tx.journalEntry.create).not.toHaveBeenCalled();
+    });
+
+    it('creates exactly one payment/allocation/journal set for a winning allocation', async () => {
+      tx.receivable.findFirst.mockResolvedValue(receivable({ paidAmount: 40, status: 'PENDING' }));
+
+      const result = await service.createPayment(ORG_ID, USER_ID, makeDto({ amount: 60 }));
+
+      expect(result).toBeDefined();
+      expect(tx.receivable.update).toHaveBeenCalledTimes(1);
+      expect(tx.paymentAllocation.create).toHaveBeenCalledTimes(1);
+      expect(tx.journalEntry.create).toHaveBeenCalledTimes(1);
+    });
   });
 });

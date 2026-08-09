@@ -1232,14 +1232,35 @@ export class AccountingService {
     tx: Prisma.TransactionClient,
   ) {
     if (dto.type === PaymentType.CUSTOMER_PAYMENT && dto.receivableId) {
+      // Serialize concurrent allocations against the same receivable with a row
+      // lock, so only one transaction observes the authoritative paidAmount/status.
+      await tx.$queryRaw`SELECT id FROM "Receivable" WHERE id = ${dto.receivableId} AND "organizationId" = ${orgId} FOR UPDATE`;
+
       const receivable = await tx.receivable.findFirst({
         where: { id: dto.receivableId, organizationId: orgId },
       });
 
       if (!receivable) throw new NotFoundException('Receivable not found');
 
-      const newPaidAmount = Number(receivable.paidAmount) + Number(dto.amount);
+      if (receivable.status === 'PAID') {
+        throw new BadRequestException('Receivable is already fully paid');
+      }
+
+      if (receivable.status === 'CANCELLED') {
+        throw new BadRequestException('Receivable is cancelled and cannot receive payments');
+      }
+
       const totalAmount = Number(receivable.totalAmount);
+      const paidAmount = Number(receivable.paidAmount);
+      const remaining = totalAmount - paidAmount;
+
+      if (Number(dto.amount) > remaining) {
+        throw new BadRequestException(
+          `Payment amount exceeds the remaining balance of ${remaining.toFixed(2)} for this receivable`,
+        );
+      }
+
+      const newPaidAmount = paidAmount + Number(dto.amount);
       const isPaid = newPaidAmount >= totalAmount;
 
       await tx.paymentAllocation.create({
@@ -1262,14 +1283,35 @@ export class AccountingService {
     }
 
     if (dto.type === PaymentType.SUPPLIER_PAYMENT && dto.payableId) {
+      // Serialize concurrent allocations against the same payable with a row
+      // lock, so only one transaction observes the authoritative paidAmount/status.
+      await tx.$queryRaw`SELECT id FROM "Payable" WHERE id = ${dto.payableId} AND "organizationId" = ${orgId} FOR UPDATE`;
+
       const payable = await tx.payable.findFirst({
         where: { id: dto.payableId, organizationId: orgId },
       });
 
       if (!payable) throw new NotFoundException('Payable not found');
 
-      const newPaidAmount = Number(payable.paidAmount) + Number(dto.amount);
+      if (payable.status === 'PAID') {
+        throw new BadRequestException('Payable is already fully paid');
+      }
+
+      if (payable.status === 'CANCELLED') {
+        throw new BadRequestException('Payable is cancelled and cannot receive payments');
+      }
+
       const totalAmount = Number(payable.totalAmount);
+      const paidAmount = Number(payable.paidAmount);
+      const remaining = totalAmount - paidAmount;
+
+      if (Number(dto.amount) > remaining) {
+        throw new BadRequestException(
+          `Payment amount exceeds the remaining balance of ${remaining.toFixed(2)} for this payable`,
+        );
+      }
+
+      const newPaidAmount = paidAmount + Number(dto.amount);
       const isPaid = newPaidAmount >= totalAmount;
 
       await tx.paymentAllocation.create({
