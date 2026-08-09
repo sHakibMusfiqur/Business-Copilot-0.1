@@ -59,3 +59,92 @@ describe('MailService fallback logging (no token leakage)', () => {
     expect(logged).not.toContain('full private body');
   });
 });
+
+jest.mock('nodemailer', () => ({
+  createTransport: jest.fn().mockReturnValue({
+    sendMail: jest.fn().mockResolvedValue({ messageId: 'test-message-id' }),
+  }),
+}));
+
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const nodemailer = require('nodemailer');
+
+describe('MailService SMTP transport (TLS certificate verification)', () => {
+  let orgSettingsFindUnique: jest.Mock;
+
+  beforeEach(() => {
+    orgSettingsFindUnique = jest.fn();
+    nodemailer.createTransport.mockClear();
+    nodemailer.createTransport.mockReturnValue({
+      sendMail: jest.fn().mockResolvedValue({ messageId: 'test-message-id' }),
+    });
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('does not disable TLS certificate verification for STARTTLS connections', async () => {
+    orgSettingsFindUnique.mockResolvedValue({
+      settings: {
+        email: {
+          smtpHost: 'smtp.example.com',
+          smtpPort: 587,
+          smtpUsername: 'user@example.com',
+          smtpPassword: 'password',
+          fromEmail: 'from@example.com',
+          fromName: 'Test',
+          useSSL: false,
+        },
+      },
+    });
+
+    const service = new MailService(
+      { organizationSettings: { findUnique: orgSettingsFindUnique } } as unknown as PrismaService,
+      { buildEmailBrand: jest.fn().mockResolvedValue({}) } as unknown as SettingsService,
+    );
+
+    await service.sendMail('org-1', {
+      to: 'recipient@example.com',
+      subject: 'Test',
+      html: '<p>Test</p>',
+    });
+
+    expect(nodemailer.createTransport).toHaveBeenCalledTimes(1);
+    const options = nodemailer.createTransport.mock.calls[0][0];
+    expect(options.tls).toBeUndefined();
+    expect(options.secure).toBe(false);
+  });
+
+  it('does not disable TLS certificate verification for implicit SSL connections', async () => {
+    orgSettingsFindUnique.mockResolvedValue({
+      settings: {
+        email: {
+          smtpHost: 'smtp.example.com',
+          smtpPort: 465,
+          smtpUsername: 'user@example.com',
+          smtpPassword: 'password',
+          fromEmail: 'from@example.com',
+          fromName: 'Test',
+          useSSL: true,
+        },
+      },
+    });
+
+    const service = new MailService(
+      { organizationSettings: { findUnique: orgSettingsFindUnique } } as unknown as PrismaService,
+      { buildEmailBrand: jest.fn().mockResolvedValue({}) } as unknown as SettingsService,
+    );
+
+    await service.sendMail('org-1', {
+      to: 'recipient@example.com',
+      subject: 'Test',
+      html: '<p>Test</p>',
+    });
+
+    expect(nodemailer.createTransport).toHaveBeenCalledTimes(1);
+    const options = nodemailer.createTransport.mock.calls[0][0];
+    expect(options.secure).toBe(true);
+    expect(options.tls).toBeUndefined();
+  });
+});

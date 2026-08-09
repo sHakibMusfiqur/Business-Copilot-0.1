@@ -142,7 +142,6 @@ export class MailService {
         port: config.port,
         secure: config.useSSL,
         auth: config.user ? { user: config.user, pass: config.pass } : undefined,
-        tls: config.useSSL ? undefined : { rejectUnauthorized: false },
       });
     } catch (error) {
       this.logger.error(`Failed to build SMTP transport for org ${orgId}: ${(error as Error).message}`);
