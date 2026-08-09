@@ -15,6 +15,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { SettingsService } from '../settings/settings.service';
 import { MailService } from '../mail/mail.service';
+import { RbacService } from '../rbac/rbac.service';
 
 import type { CreateInvitationDto } from './dto/create-invitation.dto';
 import type { AcceptInvitationDto } from './dto/accept-invitation.dto';
@@ -40,6 +41,7 @@ export class InvitationsService {
     private readonly settingsService: SettingsService,
     private readonly mailService: MailService,
     private readonly auditService: AuditService,
+    private readonly rbacService: RbacService,
   ) {}
 
   async create(
@@ -75,6 +77,7 @@ export class InvitationsService {
 
     if (dto.roleIds && dto.roleIds.length > 0) {
       await this.assertRolesBelongToOrg(orgId, dto.roleIds);
+      await this.rbacService.assertCanGrantOwnerRole(orgId, inviterId, dto.roleIds);
     }
 
     const tokenExpiresAt = new Date(Date.now() + INVITATION_TTL_DAYS * 24 * 60 * 60 * 1000);

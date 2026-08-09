@@ -12,6 +12,7 @@ import { Prisma, UserRole } from '@prisma/client';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { RbacService } from '../rbac/rbac.service';
 
 import type { QueryUsersDto } from './dto/query-users.dto';
 import type { CreateUserDto } from './dto/create-user.dto';
@@ -24,6 +25,7 @@ export class UsersService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly rbacService: RbacService,
   ) {}
 
   async findAssignable(orgId: string) {
@@ -158,6 +160,8 @@ export class UsersService {
     const password = this.generateSecurePassword();
     const hashedPassword = await argon2.hash(password);
 
+    await this.rbacService.assertCanGrantOwnerRole(orgId, currentUserId, dto.roleIds);
+
     let user: { id: string; email: string; name: string; role: string; isActive: boolean };
     try {
       user = await this.prisma.$transaction(async (tx) => {
@@ -236,6 +240,7 @@ export class UsersService {
 
     if (dto.roleIds !== undefined) {
       await this.ensureNotLastOwnerWithRole(orgId, userId, dto.roleIds);
+      await this.rbacService.assertCanGrantOwnerRole(orgId, currentUserId, dto.roleIds);
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {

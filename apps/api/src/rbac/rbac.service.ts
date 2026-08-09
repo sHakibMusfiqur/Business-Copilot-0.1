@@ -4,6 +4,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -91,7 +92,7 @@ export class RbacService {
       data: {
         name: dto.name,
         description: dto.description,
-        isSystem: dto.isSystem ?? false,
+        isSystem: false,
         organizationId: orgId,
       },
     });
@@ -138,7 +139,6 @@ export class RbacService {
       data: {
         ...(dto.name !== undefined && { name: dto.name }),
         ...(dto.description !== undefined && { description: dto.description }),
-        ...(dto.isSystem !== undefined && { isSystem: dto.isSystem }),
       },
     });
 
@@ -287,6 +287,10 @@ export class RbacService {
       throw new NotFoundException('Role not found');
     }
 
+    if (role.isSystem) {
+      throw new BadRequestException('System roles cannot be modified');
+    }
+
     const permissions = await this.prisma.permission.findMany({
       where: { name: { in: dto.permissionNames } },
     });
@@ -409,6 +413,30 @@ export class RbacService {
   async userHasAnyPermission(userId: string, orgId: string, permissionNames: string[]): Promise<boolean> {
     const userPerms = new Set(await this.getUserPermissions(userId, orgId));
     return permissionNames.some((p) => userPerms.has(p));
+  }
+
+  /**
+   * Guards role-assignment: a caller may only grant the organization Owner role
+   * if they already hold `organization.manage` (the Owner-level permission).
+   * Other roles (ADMIN/MANAGER/USER/VIEWER + custom) remain unrestricted so the
+   * caller can assign them per their existing authorization.
+   */
+  async assertCanGrantOwnerRole(orgId: string, actorId: string, roleIds?: string[]): Promise<void> {
+    if (!roleIds || roleIds.length === 0) return;
+
+    const ownerRole = await this.prisma.role.findUnique({
+      where: { organizationId_name: { organizationId: orgId, name: 'Owner' } },
+      select: { id: true },
+    });
+
+    if (!ownerRole || !roleIds.includes(ownerRole.id)) return;
+
+    const canManage = await this.userHasAllPermissions(actorId, orgId, ['organization.manage']);
+    if (!canManage) {
+      throw new ForbiddenException(
+        'You do not have permission to assign the Owner role',
+      );
+    }
   }
 
   async getMyPermissions(userId: string, orgId: string): Promise<string[]> {

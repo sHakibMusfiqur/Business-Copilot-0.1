@@ -129,8 +129,8 @@ export class MailService {
 
     if (!config.configured) {
       this.logger.log(
-        `SMTP not configured for org ${orgId || '(platform)'}; email to ${options.to} logged instead.\n` +
-          `Subject: ${options.subject}\n${options.text ?? options.html}`,
+        `SMTP not configured for org ${orgId || '(platform)'}; email to ${options.to} queued (${options.subject}). ` +
+          'Email body is not logged to avoid exposing sensitive tokens or content.',
       );
       return { sent: false, reason: 'smtp-not-configured' };
     }
