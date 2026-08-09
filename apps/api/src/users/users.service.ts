@@ -238,6 +238,14 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
+    if (dto.isActive === false && userId === currentUserId) {
+      throw new BadRequestException('You cannot deactivate your own account');
+    }
+
+    if (dto.isActive === false) {
+      await this.ensureNotLastOwner(orgId, userId);
+    }
+
     if (dto.roleIds !== undefined) {
       await this.ensureNotLastOwnerWithRole(orgId, userId, dto.roleIds);
       await this.rbacService.assertCanGrantOwnerRole(orgId, currentUserId, dto.roleIds);

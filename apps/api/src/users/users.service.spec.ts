@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, BadRequestException } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
 
 import { UsersService } from './users.service';
@@ -246,5 +246,154 @@ describe('UsersService', () => {
       expect(transaction).not.toHaveBeenCalled();
       expect(txUserCreate).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('UsersService update (deactivation protection / P3-M1)', () => {
+  let service: UsersService;
+  let m1findFirst: jest.Mock;
+  let m1update: jest.Mock;
+  let m1roleFindUnique: jest.Mock;
+  let m1assignmentFindUnique: jest.Mock;
+  let m1assignmentCount: jest.Mock;
+  let m1transaction: jest.Mock;
+  let m1AssertCanGrantOwnerRole: jest.Mock;
+
+  const stubOwnerRole = () =>
+    m1roleFindUnique.mockImplementation((args: { where: { organizationId_name?: { name: string } } }) =>
+      args?.where?.organizationId_name?.name === 'Owner' ? { id: OWNER_ROLE_ID } : null,
+    );
+
+  beforeEach(() => {
+    m1findFirst = jest.fn();
+    m1update = jest.fn();
+    m1roleFindUnique = jest.fn();
+    m1assignmentFindUnique = jest.fn();
+    m1assignmentCount = jest.fn();
+    m1transaction = jest.fn();
+    m1AssertCanGrantOwnerRole = jest.fn().mockResolvedValue(undefined);
+
+    const mockTx = {
+      user: { findFirst: jest.fn(), update: m1update },
+      organizationMember: { upsert: jest.fn().mockResolvedValue({}) },
+      role: {
+        findMany: jest.fn().mockImplementation(async (args: { where: { id?: { in: string[] } } }) =>
+          (args?.where?.id?.in ?? []).map((id) => ({ id })),
+        ),
+      },
+      userRoleAssignment: {
+        deleteMany: jest.fn().mockResolvedValue({}),
+        createMany: jest.fn().mockResolvedValue({}),
+      },
+    };
+    m1transaction.mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(mockTx));
+
+    service = new UsersService(
+      {
+        user: { findFirst: m1findFirst, update: m1update },
+        role: { findUnique: m1roleFindUnique },
+        userRoleAssignment: { findUnique: m1assignmentFindUnique, count: m1assignmentCount },
+        $transaction: m1transaction,
+      } as unknown as PrismaService,
+      { assertCanGrantOwnerRole: m1AssertCanGrantOwnerRole } as unknown as RbacService,
+    );
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('rejects deactivating the last Owner through update() without roleIds', async () => {
+    m1findFirst.mockResolvedValue({ id: 'owner-1', organizationId: ORG_ID });
+    stubOwnerRole();
+    m1assignmentFindUnique.mockResolvedValue({ userId: 'owner-1', roleId: OWNER_ROLE_ID });
+    m1assignmentCount.mockResolvedValue(1);
+
+    await expect(
+      service.update(ORG_ID, ACTOR_ID, 'owner-1', { isActive: false } as UpdateUserDto),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(m1assignmentCount).toHaveBeenCalled();
+    expect(m1update).not.toHaveBeenCalled();
+    expect(m1transaction).not.toHaveBeenCalled();
+  });
+
+  it('allows deactivating a non-last Owner through update()', async () => {
+    m1findFirst.mockResolvedValue({ id: 'owner-1', organizationId: ORG_ID });
+    stubOwnerRole();
+    m1assignmentFindUnique.mockResolvedValue({ userId: 'owner-1', roleId: OWNER_ROLE_ID });
+    m1assignmentCount.mockResolvedValue(2);
+    m1update.mockResolvedValue({
+      id: 'owner-1',
+      email: 'a@x.com',
+      name: 'A',
+      role: 'ADMIN',
+      isActive: false,
+      updatedAt: new Date(),
+    });
+
+    const result = await service.update(ORG_ID, ACTOR_ID, 'owner-1', { isActive: false } as UpdateUserDto);
+
+    expect(result.isActive).toBe(false);
+    expect(m1update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ isActive: false }) }),
+    );
+  });
+
+  it('allows deactivating a normal non-Owner user through update()', async () => {
+    m1findFirst.mockResolvedValue({ id: 'user-1', organizationId: ORG_ID });
+    stubOwnerRole();
+    m1assignmentFindUnique.mockResolvedValue(null);
+    m1update.mockResolvedValue({
+      id: 'user-1',
+      email: 'u@x.com',
+      name: 'U',
+      role: 'USER',
+      isActive: false,
+      updatedAt: new Date(),
+    });
+
+    const result = await service.update(ORG_ID, ACTOR_ID, 'user-1', { isActive: false } as UpdateUserDto);
+
+    expect(result.isActive).toBe(false);
+    expect(m1update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ isActive: false }) }),
+    );
+  });
+
+  it('rejects self-deactivation through update()', async () => {
+    m1findFirst.mockResolvedValue({ id: ACTOR_ID, organizationId: ORG_ID });
+
+    await expect(
+      service.update(ORG_ID, ACTOR_ID, ACTOR_ID, { isActive: false } as UpdateUserDto),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(m1update).not.toHaveBeenCalled();
+    expect(m1transaction).not.toHaveBeenCalled();
+  });
+
+  it('leaves roleIds-based Owner protection and grant behavior intact', async () => {
+    m1findFirst.mockResolvedValue({ id: 'target-1', organizationId: ORG_ID });
+    stubOwnerRole();
+    m1assignmentFindUnique.mockResolvedValue(null);
+    m1update.mockResolvedValue({
+      id: 'target-1',
+      email: 'a@x.com',
+      name: 'A',
+      role: 'USER',
+      isActive: true,
+      updatedAt: new Date(),
+    });
+
+    const result = await service.update(ORG_ID, ACTOR_ID, 'target-1', {
+      roleIds: ['role-user'],
+      name: 'Renamed',
+    } as UpdateUserDto);
+
+    expect(m1AssertCanGrantOwnerRole).toHaveBeenCalledWith(ORG_ID, ACTOR_ID, ['role-user']);
+    expect(result.id).toBe('target-1');
+    expect(m1update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ name: 'Renamed' }) }),
+    );
   });
 });
