@@ -156,44 +156,81 @@ export class InventoryService {
         where: { productId: product.id, warehouseId: null },
       });
 
-      const previousQuantity = inventory ? Number(inventory.quantity) : 0;
+      const existingInventoryId = inventory?.id;
+      let previousQuantity: number;
       let newQuantity: number;
 
       switch (dto.type) {
-        case TransactionType.IN:
-          newQuantity = previousQuantity + dto.quantity;
-          break;
-        case TransactionType.OUT:
-          newQuantity = previousQuantity - dto.quantity;
-          if (newQuantity < 0) {
-            throw new BadRequestException(
-              `Insufficient stock. Available: ${previousQuantity}, requested: ${dto.quantity}`,
-            );
+        case TransactionType.IN: {
+          if (existingInventoryId) {
+            // Atomic increment — safe under concurrent IN operations.
+            await tx.inventory.updateMany({
+              where: { id: existingInventoryId },
+              data: { quantity: { increment: dto.quantity } },
+            });
+            const refreshed = await tx.inventory.findUnique({ where: { id: existingInventoryId } });
+            newQuantity = Number(refreshed?.quantity ?? 0);
+            previousQuantity = newQuantity - dto.quantity;
+          } else {
+            // No inventory row — create with requested quantity.
+            previousQuantity = 0;
+            newQuantity = dto.quantity;
+            await tx.inventory.create({
+              data: { productId: product.id, quantity: newQuantity },
+            });
           }
           break;
-        case TransactionType.ADJUSTMENT:
-          newQuantity = dto.quantity;
+        }
+
+        case TransactionType.OUT: {
+          if (!existingInventoryId) {
+            // No inventory row — implicit stock is 0.
+            throw new BadRequestException(
+              `Insufficient stock. Available: 0, requested: ${dto.quantity}`,
+            );
+          }
+
+          // Atomic guarded decrement — the WHERE clause prevents overselling.
+          // Under concurrent OUT requests, only one will see quantity >= requested.
+          const result = await tx.inventory.updateMany({
+            where: { id: existingInventoryId, quantity: { gte: dto.quantity } },
+            data: { quantity: { decrement: dto.quantity } },
+          });
+
+          if (result.count === 0) {
+            const current = await tx.inventory.findUnique({ where: { id: existingInventoryId } });
+            const available = current ? Number(current.quantity) : 0;
+            throw new BadRequestException(
+              `Insufficient stock. Available: ${available}, requested: ${dto.quantity}`,
+            );
+          }
+
+          const refreshed = await tx.inventory.findUnique({ where: { id: existingInventoryId } });
+          newQuantity = Number(refreshed?.quantity ?? 0);
+          previousQuantity = newQuantity + dto.quantity;
           break;
+        }
+
+        case TransactionType.ADJUSTMENT: {
+          // Absolute set — last-write-wins is the intended semantics.
+          newQuantity = dto.quantity;
+          previousQuantity = inventory ? Number(inventory.quantity) : 0;
+
+          if (existingInventoryId) {
+            await tx.inventory.update({
+              where: { id: existingInventoryId },
+              data: { quantity: newQuantity },
+            });
+          } else {
+            await tx.inventory.create({
+              data: { productId: product.id, quantity: newQuantity },
+            });
+          }
+          break;
+        }
+
         default:
           throw new BadRequestException(`Invalid transaction type: ${dto.type}`);
-      }
-
-      const existingInventory = await tx.inventory.findFirst({
-        where: { productId: product.id, warehouseId: null },
-      });
-
-      if (existingInventory) {
-        await tx.inventory.update({
-          where: { id: existingInventory.id },
-          data: { quantity: newQuantity },
-        });
-      } else {
-        await tx.inventory.create({
-          data: {
-            productId: product.id,
-            quantity: newQuantity,
-          },
-        });
       }
 
       await tx.inventoryTransaction.create({
