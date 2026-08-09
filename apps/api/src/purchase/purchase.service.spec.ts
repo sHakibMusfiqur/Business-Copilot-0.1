@@ -1,7 +1,9 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 
 import { PurchaseService } from './purchase.service';
+import { PurchaseController } from './purchase.controller';
 import { PrismaService } from '../prisma/prisma.service';
+import { PERMISSIONS_KEY } from '../common/decorators/permissions.decorator';
 
 const ORG_ID = 'org-1';
 const USER_ID = 'user-1';
@@ -299,5 +301,100 @@ describe('PurchaseService pricing (server-authoritative / P3-M2)', () => {
         data: expect.objectContaining({ subtotal: 400, discount: 20, tax: 7, total: 387 }),
       }),
     );
+  });
+});
+
+describe('PurchaseService submit + approve lifecycle (P3-M3/P3-L1)', () => {
+  let service: PurchaseService;
+  let orderFindFirst: jest.Mock;
+  let orderUpdate: jest.Mock;
+
+  beforeEach(() => {
+    orderFindFirst = jest.fn().mockResolvedValue({ id: PURCHASE_ID, organizationId: ORG_ID, status: 'DRAFT' });
+    orderUpdate = jest.fn().mockImplementation(async ({ data }) => ({ id: PURCHASE_ID, orderNumber: 'PO-2026-000001', status: data.status }));
+
+    service = new PurchaseService(
+      {
+        purchaseOrder: { findFirst: orderFindFirst, update: orderUpdate },
+      } as unknown as PrismaService,
+      {} as never,
+    );
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('throws NotFoundException when the purchase does not exist', async () => {
+    orderFindFirst.mockResolvedValue(null);
+
+    await expect(service.submit(ORG_ID, USER_ID, PURCHASE_ID)).rejects.toThrow(NotFoundException);
+    expect(orderUpdate).not.toHaveBeenCalled();
+  });
+
+  it('submit() transitions a DRAFT purchase to PENDING', async () => {
+    const result = await service.submit(ORG_ID, USER_ID, PURCHASE_ID);
+
+    expect(orderFindFirst).toHaveBeenCalledWith({
+      where: { id: PURCHASE_ID, organizationId: ORG_ID, deletedAt: null },
+    });
+    expect(orderUpdate).toHaveBeenCalledWith({
+      where: { id: PURCHASE_ID },
+      data: { status: 'PENDING' },
+      select: { id: true, orderNumber: true, status: true },
+    });
+    expect(result.status).toBe('PENDING');
+  });
+
+  it('submit() rejects non-DRAFT purchase orders', async () => {
+    orderFindFirst.mockResolvedValue({ id: PURCHASE_ID, organizationId: ORG_ID, status: 'APPROVED' });
+
+    await expect(service.submit(ORG_ID, USER_ID, PURCHASE_ID)).rejects.toThrow(ConflictException);
+    expect(orderUpdate).not.toHaveBeenCalled();
+  });
+
+  it('submit() enforces organization scoping', async () => {
+    await service.submit(ORG_ID, USER_ID, PURCHASE_ID);
+
+    expect(orderFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ organizationId: ORG_ID }) }),
+    );
+  });
+
+  it('approve() now succeeds for a PENDING purchase (previously unreachable)', async () => {
+    orderFindFirst.mockResolvedValue({ id: PURCHASE_ID, organizationId: ORG_ID, status: 'PENDING' });
+
+    const result = await service.approve(ORG_ID, USER_ID, PURCHASE_ID);
+
+    expect(orderUpdate).toHaveBeenCalledWith({
+      where: { id: PURCHASE_ID },
+      data: { status: 'APPROVED' },
+      select: { id: true, orderNumber: true, status: true },
+    });
+    expect(result.status).toBe('APPROVED');
+  });
+
+  it('approve() still rejects non-PENDING purchase orders', async () => {
+    orderFindFirst.mockResolvedValue({ id: PURCHASE_ID, organizationId: ORG_ID, status: 'DRAFT' });
+
+    await expect(service.approve(ORG_ID, USER_ID, PURCHASE_ID)).rejects.toThrow(ConflictException);
+    expect(orderUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('PurchaseController permission metadata (P3-L1)', () => {
+  it('submit() requires purchase.update', () => {
+    const metadata = Reflect.getMetadata(PERMISSIONS_KEY, PurchaseController.prototype.submit);
+    expect(metadata).toEqual({ permissions: ['purchase.update'], mode: 'AND' });
+  });
+
+  it('approve() requires purchase.approve, not purchase.update', () => {
+    const metadata = Reflect.getMetadata(PERMISSIONS_KEY, PurchaseController.prototype.approve);
+    expect(metadata).toEqual({ permissions: ['purchase.approve'], mode: 'AND' });
+  });
+
+  it('approve() must not be protected by purchase.update', () => {
+    const metadata = Reflect.getMetadata(PERMISSIONS_KEY, PurchaseController.prototype.approve);
+    expect(metadata.permissions).not.toContain('purchase.update');
   });
 });

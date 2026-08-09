@@ -1,7 +1,9 @@
 import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 
 import { SalesService } from './sales.service';
+import { SalesController } from './sales.controller';
 import { PrismaService } from '../prisma/prisma.service';
+import { PERMISSIONS_KEY } from '../common/decorators/permissions.decorator';
 
 const ORG_ID = 'org-1';
 const USER_ID = 'user-1';
@@ -287,5 +289,100 @@ describe('SalesService pricing (server-authoritative / P3-M2)', () => {
         data: expect.objectContaining({ subtotal: 450, discount: 10, tax: 5, total: 445 }),
       }),
     );
+  });
+});
+
+describe('SalesService submit + confirm lifecycle (P3-M3/P3-L1)', () => {
+  let service: SalesService;
+  let orderFindFirst: jest.Mock;
+  let orderUpdate: jest.Mock;
+
+  beforeEach(() => {
+    orderFindFirst = jest.fn().mockResolvedValue({ id: SALE_ID, organizationId: ORG_ID, status: 'DRAFT' });
+    orderUpdate = jest.fn().mockImplementation(async ({ data }) => ({ id: SALE_ID, orderNumber: 'SO-2026-000001', status: data.status }));
+
+    service = new SalesService(
+      {
+        salesOrder: { findFirst: orderFindFirst, update: orderUpdate },
+      } as unknown as PrismaService,
+      {} as never,
+    );
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('throws NotFoundException when the sale does not exist', async () => {
+    orderFindFirst.mockResolvedValue(null);
+
+    await expect(service.submit(ORG_ID, USER_ID, SALE_ID)).rejects.toThrow(NotFoundException);
+    expect(orderUpdate).not.toHaveBeenCalled();
+  });
+
+  it('submit() transitions a DRAFT sale to PENDING', async () => {
+    const result = await service.submit(ORG_ID, USER_ID, SALE_ID);
+
+    expect(orderFindFirst).toHaveBeenCalledWith({
+      where: { id: SALE_ID, organizationId: ORG_ID, deletedAt: null },
+    });
+    expect(orderUpdate).toHaveBeenCalledWith({
+      where: { id: SALE_ID },
+      data: { status: 'PENDING' },
+      select: { id: true, orderNumber: true, status: true },
+    });
+    expect(result.status).toBe('PENDING');
+  });
+
+  it('submit() rejects non-DRAFT sales orders', async () => {
+    orderFindFirst.mockResolvedValue({ id: SALE_ID, organizationId: ORG_ID, status: 'CONFIRMED' });
+
+    await expect(service.submit(ORG_ID, USER_ID, SALE_ID)).rejects.toThrow(ConflictException);
+    expect(orderUpdate).not.toHaveBeenCalled();
+  });
+
+  it('submit() enforces organization scoping', async () => {
+    await service.submit(ORG_ID, USER_ID, SALE_ID);
+
+    expect(orderFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ organizationId: ORG_ID }) }),
+    );
+  });
+
+  it('confirm() now succeeds for a PENDING sale (previously unreachable)', async () => {
+    orderFindFirst.mockResolvedValue({ id: SALE_ID, organizationId: ORG_ID, status: 'PENDING' });
+
+    const result = await service.confirm(ORG_ID, USER_ID, SALE_ID);
+
+    expect(orderUpdate).toHaveBeenCalledWith({
+      where: { id: SALE_ID },
+      data: { status: 'CONFIRMED' },
+      select: { id: true, orderNumber: true, status: true },
+    });
+    expect(result.status).toBe('CONFIRMED');
+  });
+
+  it('confirm() still rejects non-PENDING sales orders', async () => {
+    orderFindFirst.mockResolvedValue({ id: SALE_ID, organizationId: ORG_ID, status: 'DRAFT' });
+
+    await expect(service.confirm(ORG_ID, USER_ID, SALE_ID)).rejects.toThrow(ConflictException);
+    expect(orderUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('SalesController permission metadata (P3-L1)', () => {
+  it('submit() requires sales.update', () => {
+    const metadata = Reflect.getMetadata(PERMISSIONS_KEY, SalesController.prototype.submit);
+    expect(metadata).toEqual({ permissions: ['sales.update'], mode: 'AND' });
+  });
+
+  it('confirm() requires sales.approve, not sales.update', () => {
+    const metadata = Reflect.getMetadata(PERMISSIONS_KEY, SalesController.prototype.confirm);
+    expect(metadata).toEqual({ permissions: ['sales.approve'], mode: 'AND' });
+  });
+
+  it('confirm() must not be protected by sales.update', () => {
+    const metadata = Reflect.getMetadata(PERMISSIONS_KEY, SalesController.prototype.confirm);
+    expect(metadata.permissions).not.toContain('sales.update');
   });
 });

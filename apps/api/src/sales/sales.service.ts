@@ -324,6 +324,29 @@ export class SalesService {
     return updated;
   }
 
+  async submit(orgId: string, userId: string, saleId: string) {
+    const sale = await this.prisma.salesOrder.findFirst({
+      where: { id: saleId, organizationId: orgId, deletedAt: null },
+    });
+
+    if (!sale) {
+      throw new NotFoundException('Sales order not found');
+    }
+
+    if (sale.status !== SalesStatus.DRAFT) {
+      throw new ConflictException('Only DRAFT sales orders can be submitted');
+    }
+
+    const updated = await this.prisma.salesOrder.update({
+      where: { id: saleId },
+      data: { status: SalesStatus.PENDING },
+      select: { id: true, orderNumber: true, status: true },
+    });
+
+    this.logger.log(`Sales order submitted: ${updated.orderNumber} (${saleId}) by ${userId}`);
+    return updated;
+  }
+
   async confirm(orgId: string, userId: string, saleId: string) {
     const sale = await this.prisma.salesOrder.findFirst({
       where: { id: saleId, organizationId: orgId, deletedAt: null },

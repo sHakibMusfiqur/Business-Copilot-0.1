@@ -88,9 +88,22 @@ export class PurchaseController {
     return this.purchaseService.update(orgId, user.id, id, dto);
   }
 
-  @Post(':id/approve')
+  @Post(':id/submit')
   @UseGuards(PermissionGuard)
   @Permissions(['purchase.update'])
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  async submit(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id') id: string,
+  ) {
+    const orgId = this.requireOrg(user);
+    return this.purchaseService.submit(orgId, user.id, id);
+  }
+
+  @Post(':id/approve')
+  @UseGuards(PermissionGuard)
+  @Permissions(['purchase.approve'])
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
   async approve(

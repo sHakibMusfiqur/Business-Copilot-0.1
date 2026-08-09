@@ -297,6 +297,29 @@ export class PurchaseService {
     return updated;
   }
 
+  async submit(orgId: string, userId: string, purchaseId: string) {
+    const purchase = await this.prisma.purchaseOrder.findFirst({
+      where: { id: purchaseId, organizationId: orgId, deletedAt: null },
+    });
+
+    if (!purchase) {
+      throw new NotFoundException('Purchase order not found');
+    }
+
+    if (purchase.status !== PurchaseStatus.DRAFT) {
+      throw new ConflictException('Only DRAFT purchase orders can be submitted');
+    }
+
+    const updated = await this.prisma.purchaseOrder.update({
+      where: { id: purchaseId },
+      data: { status: PurchaseStatus.PENDING },
+      select: { id: true, orderNumber: true, status: true },
+    });
+
+    this.logger.log(`Purchase submitted: ${updated.orderNumber} (${purchaseId}) by ${userId}`);
+    return updated;
+  }
+
   async approve(orgId: string, userId: string, purchaseId: string) {
     const purchase = await this.prisma.purchaseOrder.findFirst({
       where: { id: purchaseId, organizationId: orgId, deletedAt: null },

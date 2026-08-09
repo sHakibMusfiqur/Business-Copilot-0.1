@@ -88,9 +88,22 @@ export class SalesController {
     return this.salesService.update(orgId, user.id, id, dto);
   }
 
-  @Post(':id/confirm')
+  @Post(':id/submit')
   @UseGuards(PermissionGuard)
   @Permissions(['sales.update'])
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  async submit(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id') id: string,
+  ) {
+    const orgId = this.requireOrg(user);
+    return this.salesService.submit(orgId, user.id, id);
+  }
+
+  @Post(':id/confirm')
+  @UseGuards(PermissionGuard)
+  @Permissions(['sales.approve'])
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
   async confirm(
