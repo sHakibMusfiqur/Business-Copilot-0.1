@@ -360,6 +360,28 @@ export class SalesService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      const gate = await tx.salesOrder.updateMany({
+        where: {
+          id: saleId,
+          organizationId: orgId,
+          status: SalesStatus.CONFIRMED,
+        },
+        data: { status: SalesStatus.DELIVERED },
+      });
+
+      if (gate.count === 0) {
+        const now = await tx.salesOrder.findUnique({
+          where: { id: saleId },
+          select: { orderNumber: true },
+        });
+
+        if (!now) {
+          throw new NotFoundException('Sales order not found');
+        }
+
+        throw new ConflictException('Only CONFIRMED sales orders can be delivered');
+      }
+
       for (const item of sale.items) {
         if (!item.productId) continue;
 
@@ -367,23 +389,33 @@ export class SalesService {
           where: { productId: item.productId, warehouseId: null },
         });
 
-        const previousQuantity = inventory ? Number(inventory.quantity) : 0;
         const requestedQuantity = Number(item.quantity);
 
-        if (previousQuantity < requestedQuantity) {
+        if (!inventory) {
           throw new BadRequestException(
-            `Insufficient stock for product ${item.productId}. Available: ${previousQuantity}, requested: ${requestedQuantity}`,
+            `Insufficient stock for product ${item.productId}. Available: 0, requested: ${requestedQuantity}`,
           );
         }
 
-        const newQuantity = previousQuantity - requestedQuantity;
+        const result = await tx.inventory.updateMany({
+          where: {
+            id: inventory.id,
+            quantity: { gte: requestedQuantity },
+          },
+          data: { quantity: { decrement: requestedQuantity } },
+        });
 
-        if (inventory) {
-          await tx.inventory.update({
-            where: { id: inventory.id },
-            data: { quantity: newQuantity },
-          });
+        if (result.count === 0) {
+          const current = await tx.inventory.findUnique({ where: { id: inventory.id } });
+          const available = current ? Number(current.quantity) : 0;
+          throw new BadRequestException(
+            `Insufficient stock for product ${item.productId}. Available: ${available}, requested: ${requestedQuantity}`,
+          );
         }
+
+        const refreshed = await tx.inventory.findUnique({ where: { id: inventory.id } });
+        const newQuantity = Number(refreshed?.quantity ?? 0);
+        const previousQuantity = newQuantity + requestedQuantity;
 
         await tx.inventoryTransaction.create({
           data: {
@@ -404,11 +436,14 @@ export class SalesService {
       await this.accountingService.createRevenueJournalEntry(orgId, userId, saleId, tx);
       await this.accountingService.createCOGSJournalEntry(orgId, userId, saleId, tx);
 
-      const updated = await tx.salesOrder.update({
+      const updated = await tx.salesOrder.findUnique({
         where: { id: saleId },
-        data: { status: SalesStatus.DELIVERED },
         select: { id: true, orderNumber: true, status: true, updatedAt: true },
       });
+
+      if (!updated) {
+        throw new NotFoundException('Sales order not found');
+      }
 
       this.logger.log(`Sales order delivered: ${updated.orderNumber} (${saleId}) by ${userId}`);
       return updated;

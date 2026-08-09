@@ -333,6 +333,28 @@ export class PurchaseService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      const gate = await tx.purchaseOrder.updateMany({
+        where: {
+          id: purchaseId,
+          organizationId: orgId,
+          status: PurchaseStatus.APPROVED,
+        },
+        data: { status: PurchaseStatus.RECEIVED },
+      });
+
+      if (gate.count === 0) {
+        const now = await tx.purchaseOrder.findUnique({
+          where: { id: purchaseId },
+          select: { orderNumber: true },
+        });
+
+        if (!now) {
+          throw new NotFoundException('Purchase order not found');
+        }
+
+        throw new ConflictException('Only APPROVED purchase orders can be received');
+      }
+
       for (const item of purchase.items) {
         if (!item.productId) continue;
 
@@ -340,46 +362,70 @@ export class PurchaseService {
           where: { productId: item.productId, warehouseId: null },
         });
 
-        const previousQuantity = inventory ? Number(inventory.quantity) : 0;
-        const newQuantity = previousQuantity + Number(item.quantity);
+        const receivedQuantity = Number(item.quantity);
 
         if (inventory) {
-          await tx.inventory.update({
+          const result = await tx.inventory.updateMany({
             where: { id: inventory.id },
-            data: { quantity: newQuantity },
+            data: { quantity: { increment: receivedQuantity } },
+          });
+
+          if (result.count === 0) {
+            throw new NotFoundException('Inventory record not found');
+          }
+
+          const refreshed = await tx.inventory.findUnique({ where: { id: inventory.id } });
+          const newQuantity = Number(refreshed?.quantity ?? 0);
+          const previousQuantity = newQuantity - receivedQuantity;
+
+          await tx.inventoryTransaction.create({
+            data: {
+              organizationId: orgId,
+              productId: item.productId,
+              type: 'IN',
+              quantity: receivedQuantity,
+              previousQuantity,
+              newQuantity,
+              reference: purchase.orderNumber,
+              notes: notes ?? `Purchase received: ${purchase.orderNumber}`,
+              createdById: userId,
+            },
           });
         } else {
           await tx.inventory.create({
             data: {
               productId: item.productId,
-              quantity: newQuantity,
+              quantity: receivedQuantity,
+            },
+          });
+
+          await tx.inventoryTransaction.create({
+            data: {
+              organizationId: orgId,
+              productId: item.productId,
+              type: 'IN',
+              quantity: receivedQuantity,
+              previousQuantity: 0,
+              newQuantity: receivedQuantity,
+              reference: purchase.orderNumber,
+              notes: notes ?? `Purchase received: ${purchase.orderNumber}`,
+              createdById: userId,
             },
           });
         }
-
-        await tx.inventoryTransaction.create({
-          data: {
-            organizationId: orgId,
-            productId: item.productId,
-            type: 'IN',
-            quantity: Number(item.quantity),
-            previousQuantity,
-            newQuantity,
-            reference: purchase.orderNumber,
-            notes: notes ?? `Purchase received: ${purchase.orderNumber}`,
-            createdById: userId,
-          },
-        });
       }
 
       await this.accountingService.createPayableForPurchase(orgId, purchaseId, tx);
       await this.accountingService.createJournalForPurchaseReceive(orgId, userId, purchaseId, tx);
 
-      const updated = await tx.purchaseOrder.update({
+      const updated = await tx.purchaseOrder.findUnique({
         where: { id: purchaseId },
-        data: { status: PurchaseStatus.RECEIVED },
         select: { id: true, orderNumber: true, status: true, updatedAt: true },
       });
+
+      if (!updated) {
+        throw new NotFoundException('Purchase order not found');
+      }
 
       this.logger.log(`Purchase received: ${updated.orderNumber} (${purchaseId}) by ${userId}`);
       return updated;
