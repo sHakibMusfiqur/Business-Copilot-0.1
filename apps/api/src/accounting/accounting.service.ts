@@ -313,7 +313,7 @@ export class AccountingService {
 
     await this.validateAccountIds(orgId, dto.lines.map((l) => l.accountId));
 
-    const entryNumber = await this.generateJournalEntryNumber();
+    const entryNumber = await this.generateJournalEntryNumber(orgId);
 
     const entry = await this.prisma.journalEntry.create({
       data: {
@@ -953,7 +953,7 @@ export class AccountingService {
     const apAccount = await this.findAccountByCode(orgId, '2000', client);
 
     const amount = Number(purchase.total);
-    const entryNumber = await this.generateJournalEntryNumber(client);
+    const entryNumber = await this.generateJournalEntryNumber(orgId, client);
 
     return client.journalEntry.create({
       data: {
@@ -1069,7 +1069,7 @@ export class AccountingService {
     const revenueAccount = await this.findAccountByCode(orgId, '4000', client);
 
     const amount = Number(sale.total);
-    const entryNumber = await this.generateJournalEntryNumber(client);
+    const entryNumber = await this.generateJournalEntryNumber(orgId, client);
 
     return client.journalEntry.create({
       data: {
@@ -1173,7 +1173,7 @@ export class AccountingService {
     const cogsAccount = await this.findAccountByCode(orgId, '5000', client);
     const inventoryAccount = await this.findAccountByCode(orgId, '1200', client);
 
-    const entryNumber = await this.generateJournalEntryNumber(client);
+    const entryNumber = await this.generateJournalEntryNumber(orgId, client);
 
     return client.journalEntry.create({
       data: {
@@ -1303,7 +1303,7 @@ export class AccountingService {
       const cashAccount = await this.findAccountByCode(orgId, '1000', tx);
       const arAccount = await this.findAccountByCode(orgId, '1100', tx);
 
-      const entryNumber = await this.generateJournalEntryNumber(tx);
+      const entryNumber = await this.generateJournalEntryNumber(orgId, tx);
       const existing = await tx.journalEntry.findFirst({
         where: {
           referenceId: paymentId,
@@ -1355,7 +1355,7 @@ export class AccountingService {
       const apAccount = await this.findAccountByCode(orgId, '2000', tx);
       const cashAccount = await this.findAccountByCode(orgId, '1000', tx);
 
-      const entryNumber = await this.generateJournalEntryNumber(tx);
+      const entryNumber = await this.generateJournalEntryNumber(orgId, tx);
       const existing = await tx.journalEntry.findFirst({
         where: {
           referenceId: paymentId,
@@ -1458,13 +1458,17 @@ export class AccountingService {
   }
 
   private async generateJournalEntryNumber(
+    orgId: string,
     client: Prisma.TransactionClient | PrismaService = this.prisma,
   ): Promise<string> {
     const year = new Date().getFullYear();
     const prefix = `JE-${year}-`;
 
     const lastEntry = await client.journalEntry.findFirst({
-      where: { entryNumber: { startsWith: prefix } },
+      where: {
+        organizationId: orgId,
+        entryNumber: { startsWith: prefix },
+      },
       orderBy: { entryNumber: 'desc' },
       select: { entryNumber: true },
     });

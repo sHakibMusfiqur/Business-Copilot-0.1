@@ -229,7 +229,10 @@ export class LeadService {
     });
 
     const user = assignedToId
-      ? await this.prisma.user.findUnique({ where: { id: assignedToId }, select: { name: true } })
+      ? await this.prisma.user.findUnique({
+          where: { id: assignedToId, organizationId: orgId },
+          select: { name: true },
+        })
       : null;
 
     await this.createTimelineEvent(
