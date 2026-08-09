@@ -13,7 +13,6 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { PaymentType } from '@prisma/client';
 
 import { CurrentUser, type CurrentUserPayload } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -28,6 +27,9 @@ import { CreateJournalEntryDto } from './dto/create-journal-entry.dto';
 import { UpdateJournalEntryDto } from './dto/update-journal-entry.dto';
 import { QueryJournalEntryDto } from './dto/query-journal-entry.dto';
 import { CreatePaymentDto } from './dto/create-payment.dto';
+import { QueryReceivableDto } from './dto/query-receivable.dto';
+import { QueryPayableDto } from './dto/query-payable.dto';
+import { QueryPaymentDto } from './dto/query-payment.dto';
 
 @ApiTags('Accounting')
 @Controller('accounting')
@@ -204,18 +206,10 @@ export class AccountingController {
   @ApiBearerAuth('access-token')
   async findAllReceivables(
     @CurrentUser() user: CurrentUserPayload,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-    @Query('status') status?: string,
-    @Query('search') search?: string,
+    @Query() query: QueryReceivableDto,
   ) {
     const orgId = this.requireOrg(user);
-    return this.accountingService.findAllReceivables(orgId, {
-      page: page ? Number(page) : undefined,
-      limit: limit ? Number(limit) : undefined,
-      status,
-      search,
-    });
+    return this.accountingService.findAllReceivables(orgId, query);
   }
 
   // ─── Payables ─────────────────────────────────────────────────
@@ -226,18 +220,10 @@ export class AccountingController {
   @ApiBearerAuth('access-token')
   async findAllPayables(
     @CurrentUser() user: CurrentUserPayload,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-    @Query('status') status?: string,
-    @Query('search') search?: string,
+    @Query() query: QueryPayableDto,
   ) {
     const orgId = this.requireOrg(user);
-    return this.accountingService.findAllPayables(orgId, {
-      page: page ? Number(page) : undefined,
-      limit: limit ? Number(limit) : undefined,
-      status,
-      search,
-    });
+    return this.accountingService.findAllPayables(orgId, query);
   }
 
   // ─── Payments ─────────────────────────────────────────────────
@@ -248,16 +234,10 @@ export class AccountingController {
   @ApiBearerAuth('access-token')
   async findAllPayments(
     @CurrentUser() user: CurrentUserPayload,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-    @Query('type') type?: PaymentType,
+    @Query() query: QueryPaymentDto,
   ) {
     const orgId = this.requireOrg(user);
-    return this.accountingService.findAllPayments(orgId, {
-      page: page ? Number(page) : undefined,
-      limit: limit ? Number(limit) : undefined,
-      type,
-    });
+    return this.accountingService.findAllPayments(orgId, query);
   }
 
   @Post('payments')
