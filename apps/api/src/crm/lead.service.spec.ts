@@ -400,4 +400,28 @@ describe('LeadService.generateLeadNumber (org-scoped sequencing / FS4)', () => {
       }),
     );
   });
+
+  it('gives two organizations independent sequences that both start at the first number', async () => {
+    const { service, leadFindFirst, leadCreate } = mockService();
+    // Org A has no leads yet -> its first is 000001.
+    leadFindFirst.mockResolvedValueOnce(null);
+    await service.create(ORG_ID, 'actor', { name: 'Org A' } as never);
+
+    expect(leadCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ leadNumber: `LD-${year}-000001` }),
+      }),
+    );
+
+    // Org B also has no leads -> its first is independently 000001 (allowed by composite uniqueness).
+    leadCreate.mockClear();
+    leadFindFirst.mockResolvedValueOnce(null);
+    await service.create('org-2', 'actor', { name: 'Org B' } as never);
+
+    expect(leadCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ organizationId: 'org-2', leadNumber: `LD-${year}-000001` }),
+      }),
+    );
+  });
 });

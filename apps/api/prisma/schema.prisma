@@ -888,7 +888,7 @@ model Lead {
   id                    String     @id @default(cuid())
   organizationId        String
   organization          Organization @relation(fields: [organizationId], references: [id])
-  leadNumber            String     @unique
+  leadNumber            String
   name                  String
   company               String?
   email                 String?
@@ -912,6 +912,7 @@ model Lead {
   @@index([status])
   @@index([assignedToId])
   @@index([deletedAt])
+  @@unique([organizationId, leadNumber])
 }
 
 model Activity {
