@@ -1,4 +1,9 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  InternalServerErrorException,
+  NotFoundException,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 
 import { LeadService } from './lead.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -401,27 +406,127 @@ describe('LeadService.generateLeadNumber (org-scoped sequencing / FS4)', () => {
     );
   });
 
-  it('gives two organizations independent sequences that both start at the first number', async () => {
+  });
+
+function prismaError(code: string): Prisma.PrismaClientKnownRequestError {
+  return new Prisma.PrismaClientKnownRequestError(`Unique constraint failed (${code})`, {
+    code,
+    clientVersion: '5.0.0',
+    meta: { target: ['organizationId', 'leadNumber'] },
+  });
+}
+
+describe('LeadService.create (number sequence + P2002 retry / FS5)', () => {
+  const year = new Date().getFullYear();
+
+  it('A. creates a lead normally, starting at the first sequence number', async () => {
     const { service, leadFindFirst, leadCreate } = mockService();
-    // Org A has no leads yet -> its first is 000001.
     leadFindFirst.mockResolvedValueOnce(null);
-    await service.create(ORG_ID, 'actor', { name: 'Org A' } as never);
+    leadCreate.mockResolvedValue({
+      id: 'lead-1',
+      leadNumber: `LD-${year}-000001`,
+      name: 'X',
+      status: 'NEW',
+      createdAt: new Date(),
+    });
 
+    const result = await service.create(ORG_ID, 'actor', { name: 'X' } as never);
+
+    expect(leadCreate).toHaveBeenCalledTimes(1);
     expect(leadCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ leadNumber: `LD-${year}-000001` }),
-      }),
+      expect.objectContaining({ data: expect.objectContaining({ leadNumber: `LD-${year}-000001` }) }),
     );
+    expect(result.name).toBe('X');
+  });
 
-    // Org B also has no leads -> its first is independently 000001 (allowed by composite uniqueness).
-    leadCreate.mockClear();
-    leadFindFirst.mockResolvedValueOnce(null);
+  it('B. gives two empty organizations independent sequences that both start at 000001', async () => {
+    const { service, leadFindFirst, leadCreate } = mockService();
+    leadFindFirst.mockImplementation((args) =>
+      args?.where?.leadNumber
+        ? Promise.resolve(null)
+        : Promise.resolve({ id: 'lead-1', organizationId: ORG_ID, leadNumber: `LD-${year}-000001` }),
+    );
+    leadCreate.mockResolvedValue({ id: 'lead-1', leadNumber: `LD-${year}-000001` });
+
+    await service.create(ORG_ID, 'actor', { name: 'Org A' } as never);
     await service.create('org-2', 'actor', { name: 'Org B' } as never);
 
+    expect(leadCreate).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      data: expect.objectContaining({ organizationId: ORG_ID, leadNumber: `LD-${year}-000001` }),
+    }));
+    expect(leadCreate).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      data: expect.objectContaining({ organizationId: 'org-2', leadNumber: `LD-${year}-000001` }),
+    }));
+  });
+
+  it('C. continues an existing same-org sequence (000007 -> 000008)', async () => {
+    const { service, leadFindFirst, leadCreate } = mockService();
+    leadFindFirst.mockResolvedValueOnce({
+      id: 'lead-1',
+      organizationId: ORG_ID,
+      leadNumber: `LD-${year}-000007`,
+    });
+
+    await service.create(ORG_ID, 'actor', { name: 'X' } as never);
+
     expect(leadCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ organizationId: 'org-2', leadNumber: `LD-${year}-000001` }),
-      }),
+      expect.objectContaining({ data: expect.objectContaining({ leadNumber: `LD-${year}-000008` }) }),
     );
+  });
+
+  it('D. retries on a P2002 collision, regenerates the number, and succeeds', async () => {
+    const { service, leadFindFirst, leadCreate } = mockService();
+    leadFindFirst.mockResolvedValueOnce(null);
+    leadFindFirst.mockResolvedValueOnce({
+      id: 'lead-2',
+      organizationId: ORG_ID,
+      leadNumber: `LD-${year}-000001`,
+    });
+    leadCreate
+      .mockRejectedValueOnce(prismaError('P2002'))
+      .mockResolvedValueOnce({
+        id: 'lead-2',
+        leadNumber: `LD-${year}-000002`,
+        name: 'X',
+        status: 'NEW',
+        createdAt: new Date(),
+      });
+
+    const result = await service.create(ORG_ID, 'actor', { name: 'X' } as never);
+
+    expect(leadCreate).toHaveBeenCalledTimes(2);
+    expect(leadCreate).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      data: expect.objectContaining({ leadNumber: `LD-${year}-000001` }),
+    }));
+    expect(leadCreate).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      data: expect.objectContaining({ leadNumber: `LD-${year}-000002` }),
+    }));
+    expect(leadFindFirst).toHaveBeenCalledTimes(3);
+    expect(result.leadNumber).toBe(`LD-${year}-000002`);
+  });
+
+  it('E. bails out to a clean exception after retries are exhausted', async () => {
+    const { service, leadCreate } = mockService();
+    leadCreate.mockRejectedValue(prismaError('P2002'));
+
+    await expect(service.create(ORG_ID, 'actor', { name: 'X' } as never)).rejects.toThrow(
+      InternalServerErrorException,
+    );
+    expect(leadCreate).toHaveBeenCalledTimes(5);
+  });
+
+  it('F. does not retry non-P2002 Prisma errors and propagates them', async () => {
+    const { service, leadCreate } = mockService();
+    const otherErr = new Prisma.PrismaClientKnownRequestError('Connection interrupted', {
+      code: 'P2024',
+      clientVersion: '5.0.0',
+      meta: {},
+    });
+    leadCreate.mockRejectedValue(otherErr);
+
+    await expect(service.create(ORG_ID, 'actor', { name: 'X' } as never)).rejects.toThrow(
+      'Connection interrupted',
+    );
+    expect(leadCreate).toHaveBeenCalledTimes(1);
   });
 });

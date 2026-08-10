@@ -3,6 +3,7 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { Prisma, LeadStatus } from '@prisma/client';
 
@@ -109,39 +110,55 @@ export class LeadService {
   }
 
   async create(orgId: string, userId: string, dto: CreateLeadDto) {
-    const leadNumber = await this.generateLeadNumber(orgId);
-
     if (dto.assignedToId) {
       await this.assertAssigneeAccessible(orgId, dto.assignedToId);
     }
 
-    const lead = await this.prisma.lead.create({
-      data: {
-        leadNumber,
-        organizationId: orgId,
-        name: dto.name,
-        company: dto.company ?? null,
-        email: dto.email ?? null,
-        phone: dto.phone ?? null,
-        source: dto.source ?? null,
-        status: dto.status ?? LeadStatus.NEW,
-        estimatedValue: dto.estimatedValue ?? 0,
-        assignedToId: dto.assignedToId ?? null,
-        notes: dto.notes ?? null,
-      },
-      select: {
-        id: true,
-        leadNumber: true,
-        name: true,
-        status: true,
-        createdAt: true,
-      },
-    });
+    const maxRetries = 5;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const leadNumber = await this.generateLeadNumber(orgId);
 
-    await this.createTimelineEvent(orgId, lead.id, userId, 'CREATED', `Lead created: ${lead.leadNumber}`);
+      try {
+        const lead = await this.prisma.lead.create({
+          data: {
+            leadNumber,
+            organizationId: orgId,
+            name: dto.name,
+            company: dto.company ?? null,
+            email: dto.email ?? null,
+            phone: dto.phone ?? null,
+            source: dto.source ?? null,
+            status: dto.status ?? LeadStatus.NEW,
+            estimatedValue: dto.estimatedValue ?? 0,
+            assignedToId: dto.assignedToId ?? null,
+            notes: dto.notes ?? null,
+          },
+          select: {
+            id: true,
+            leadNumber: true,
+            name: true,
+            status: true,
+            createdAt: true,
+          },
+        });
 
-    this.logger.log(`Lead created: ${lead.leadNumber} (${lead.id}) by ${userId}`);
-    return lead;
+        await this.createTimelineEvent(orgId, lead.id, userId, 'CREATED', `Lead created: ${lead.leadNumber}`);
+
+        this.logger.log(`Lead created: ${lead.leadNumber} (${lead.id}) by ${userId}`);
+        return lead;
+      } catch (err) {
+        if ((err as Prisma.PrismaClientKnownRequestError)?.code === 'P2002') {
+          if (attempt < maxRetries) {
+            this.logger.warn(`Lead number collision for ${leadNumber}, retrying (${attempt}/${maxRetries})`);
+            continue;
+          }
+          break;
+        }
+        throw err;
+      }
+    }
+
+    throw new InternalServerErrorException('Failed to create lead due to lead number collision. Please try again.');
   }
 
   async update(orgId: string, userId: string, leadId: string, dto: UpdateLeadDto) {
