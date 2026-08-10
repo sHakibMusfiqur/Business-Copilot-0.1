@@ -193,17 +193,24 @@ export class LeadService {
       updateData.status = dto.status;
     }
 
-    const updated = await this.prisma.lead.update({
-      where: { id: leadId },
-      data: updateData,
-      select: {
-        id: true,
-        leadNumber: true,
-        name: true,
-        status: true,
-        updatedAt: true,
-      },
-    });
+    const updated = await this.prisma.lead
+      .update({
+        where: { id: leadId, organizationId: orgId, deletedAt: null },
+        data: updateData,
+        select: {
+          id: true,
+          leadNumber: true,
+          name: true,
+          status: true,
+          updatedAt: true,
+        },
+      })
+      .catch((err: unknown) => {
+        if ((err as Prisma.PrismaClientKnownRequestError)?.code === 'P2025') {
+          throw new NotFoundException('Lead not found');
+        }
+        throw err;
+      });
 
     let timelineDescription = `Lead updated: ${updated.leadNumber}`;
     if (dto.status && dto.status !== existing.status) {
@@ -231,11 +238,18 @@ export class LeadService {
       throw new BadRequestException('Cannot change status of a closed lead (WON or LOST)');
     }
 
-    const updated = await this.prisma.lead.update({
-      where: { id: leadId },
-      data: { status },
-      select: { id: true, leadNumber: true, status: true },
-    });
+    const updated = await this.prisma.lead
+      .update({
+        where: { id: leadId, organizationId: orgId, deletedAt: null },
+        data: { status },
+        select: { id: true, leadNumber: true, status: true },
+      })
+      .catch((err: unknown) => {
+        if ((err as Prisma.PrismaClientKnownRequestError)?.code === 'P2025') {
+          throw new NotFoundException('Lead not found');
+        }
+        throw err;
+      });
 
     await this.createTimelineEvent(
       orgId, leadId, userId, 'STATUS_CHANGE',
@@ -257,11 +271,18 @@ export class LeadService {
       await this.assertAssigneeAccessible(orgId, assignedToId);
     }
 
-    const updated = await this.prisma.lead.update({
-      where: { id: leadId },
-      data: { assignedToId },
-      select: { id: true, leadNumber: true, assignedToId: true },
-    });
+    const updated = await this.prisma.lead
+      .update({
+        where: { id: leadId, organizationId: orgId, deletedAt: null },
+        data: { assignedToId },
+        select: { id: true, leadNumber: true, assignedToId: true },
+      })
+      .catch((err: unknown) => {
+        if ((err as Prisma.PrismaClientKnownRequestError)?.code === 'P2025') {
+          throw new NotFoundException('Lead not found');
+        }
+        throw err;
+      });
 
     const user = assignedToId
       ? await this.prisma.user.findUnique({
@@ -286,10 +307,17 @@ export class LeadService {
 
     if (!existing) throw new NotFoundException('Lead not found');
 
-    await this.prisma.lead.update({
-      where: { id: leadId },
-      data: { deletedAt: new Date() },
-    });
+    await this.prisma.lead
+      .update({
+        where: { id: leadId, organizationId: orgId, deletedAt: null },
+        data: { deletedAt: new Date() },
+      })
+      .catch((err: unknown) => {
+        if ((err as Prisma.PrismaClientKnownRequestError)?.code === 'P2025') {
+          throw new NotFoundException('Lead not found');
+        }
+        throw err;
+      });
 
     this.logger.log(`Lead deleted: ${existing.leadNumber} (${leadId}) by ${userId}`);
     return { message: 'Lead deleted successfully' };

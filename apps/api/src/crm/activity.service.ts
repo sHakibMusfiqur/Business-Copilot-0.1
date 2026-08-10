@@ -101,11 +101,14 @@ export class ActivityService {
 
     if (!activity) throw new NotFoundException('Activity not found');
 
-    const updated = await this.prisma.activity.update({
-      where: { id: activityId },
+    const result = await this.prisma.activity.updateMany({
+      where: { id: activityId, lead: { organizationId: orgId } },
       data: { completed: !activity.completed },
-      select: { id: true, completed: true },
     });
+
+    if (result.count === 0) throw new NotFoundException('Activity not found');
+
+    const updated = { id: activityId, completed: !activity.completed };
 
     await this.leadService.createTimelineEvent(
       orgId, activity.leadId, userId, 'ACTIVITY_UPDATED',
@@ -122,7 +125,11 @@ export class ActivityService {
 
     if (!activity) throw new NotFoundException('Activity not found');
 
-    await this.prisma.activity.delete({ where: { id: activityId } });
+    const result = await this.prisma.activity.deleteMany({
+      where: { id: activityId, lead: { organizationId: orgId } },
+    });
+
+    if (result.count === 0) throw new NotFoundException('Activity not found');
 
     this.logger.log(`Activity deleted: ${activityId} by ${userId}`);
     return { message: 'Activity deleted successfully' };

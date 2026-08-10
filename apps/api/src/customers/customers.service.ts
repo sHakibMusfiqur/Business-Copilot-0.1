@@ -140,14 +140,6 @@ export class CustomersService {
   }
 
   async update(orgId: string, currentUserId: string, customerId: string, dto: UpdateCustomerDto) {
-    const customer = await this.prisma.customer.findFirst({
-      where: { id: customerId, organizationId: orgId, deletedAt: null },
-    });
-
-    if (!customer) {
-      throw new NotFoundException('Customer not found');
-    }
-
     const updateData: Prisma.CustomerUpdateInput = {};
 
     if (dto.name !== undefined) { updateData.name = dto.name.trim(); }
@@ -163,63 +155,67 @@ export class CustomersService {
     if (dto.notes !== undefined) { updateData.notes = dto.notes.trim(); }
     if (dto.isActive !== undefined) { updateData.isActive = dto.isActive; }
 
-    const updated = await this.prisma.customer.update({
-      where: { id: customerId },
-      data: updateData,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        company: true,
-        taxId: true,
-        isActive: true,
-        updatedAt: true,
-      },
-    });
+    let updated;
+    try {
+      updated = await this.prisma.customer.update({
+        where: { id: customerId, organizationId: orgId, deletedAt: null },
+        data: updateData,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          company: true,
+          taxId: true,
+          isActive: true,
+          updatedAt: true,
+        },
+      });
+    } catch (err) {
+      if ((err as Prisma.PrismaClientKnownRequestError)?.code === 'P2025') {
+        throw new NotFoundException('Customer not found');
+      }
+      throw err;
+    }
 
     this.logger.log(`Customer updated: ${updated.name} (${customerId}) by ${currentUserId}`);
     return updated;
   }
 
   async softDelete(orgId: string, currentUserId: string, customerId: string) {
-    const customer = await this.prisma.customer.findFirst({
+    const result = await this.prisma.customer.updateMany({
       where: { id: customerId, organizationId: orgId, deletedAt: null },
-    });
-
-    if (!customer) {
-      throw new NotFoundException('Customer not found');
-    }
-
-    await this.prisma.customer.update({
-      where: { id: customerId },
       data: { deletedAt: new Date(), isActive: false },
     });
 
-    this.logger.log(`Customer soft-deleted: ${customer.name} (${customerId}) by ${currentUserId}`);
+    if (result.count === 0) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    this.logger.log(`Customer soft-deleted: (${customerId}) by ${currentUserId}`);
     return { message: 'Customer deleted successfully' };
   }
 
   async updateStatus(orgId: string, currentUserId: string, customerId: string, dto: UpdateCustomerStatusDto) {
-    const customer = await this.prisma.customer.findFirst({
-      where: { id: customerId, organizationId: orgId, deletedAt: null },
-    });
-
-    if (!customer) {
-      throw new NotFoundException('Customer not found');
+    let updated;
+    try {
+      updated = await this.prisma.customer.update({
+        where: { id: customerId, organizationId: orgId, deletedAt: null },
+        data: { isActive: dto.isActive },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          isActive: true,
+          updatedAt: true,
+        },
+      });
+    } catch (err) {
+      if ((err as Prisma.PrismaClientKnownRequestError)?.code === 'P2025') {
+        throw new NotFoundException('Customer not found');
+      }
+      throw err;
     }
-
-    const updated = await this.prisma.customer.update({
-      where: { id: customerId },
-      data: { isActive: dto.isActive },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        isActive: true,
-        updatedAt: true,
-      },
-    });
 
     this.logger.log(`Customer ${dto.isActive ? 'activated' : 'deactivated'}: ${updated.name} (${customerId}) by ${currentUserId}`);
     return updated;

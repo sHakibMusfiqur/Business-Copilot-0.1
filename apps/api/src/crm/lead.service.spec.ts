@@ -249,7 +249,7 @@ describe('LeadService.updateStatus (closed-lead guard intact / P3-L2)', () => {
     const result = await service.updateStatus(ORG_ID, 'actor', 'lead-1', 'QUALIFIED');
 
     expect(leadUpdate).toHaveBeenCalledWith({
-      where: { id: 'lead-1' },
+      where: { id: 'lead-1', organizationId: ORG_ID, deletedAt: null },
       data: { status: 'QUALIFIED' },
       select: { id: true, leadNumber: true, status: true },
     });
@@ -528,5 +528,108 @@ describe('LeadService.create (number sequence + P2002 retry / FS5)', () => {
       'Connection interrupted',
     );
     expect(leadCreate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('LeadService mutation tenant scoping (FS6-2)', () => {
+  const baseLead = { id: 'lead-1', organizationId: ORG_ID, status: 'NEW', leadNumber: 'LD-2026-000007' };
+
+  it('update succeeds for a lead in the same organization', async () => {
+    const { service, leadFindFirst, leadUpdate } = mockService();
+    leadFindFirst.mockResolvedValue({ ...baseLead });
+    leadUpdate.mockResolvedValue({ id: 'lead-1', leadNumber: 'LD-2026-000007', name: 'New', status: 'NEW', updatedAt: new Date() });
+
+    const result = await service.update(ORG_ID, 'actor', 'lead-1', { name: 'New' } as never);
+
+    expect(leadUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'lead-1', organizationId: ORG_ID, deletedAt: null },
+        data: expect.objectContaining({ name: 'New' }),
+      }),
+    );
+    expect(result.name).toBe('New');
+  });
+
+  it('update rejects a lead from another organization', async () => {
+    const { service, leadFindFirst, leadUpdate } = mockService();
+    leadFindFirst.mockResolvedValue(null);
+
+    await expect(service.update(ORG_ID, 'actor', 'lead-other', { name: 'X' } as never)).rejects.toThrow(
+      NotFoundException,
+    );
+    expect(leadUpdate).not.toHaveBeenCalled();
+  });
+
+  it('updateStatus succeeds for a lead in the same organization', async () => {
+    const { service, leadFindFirst, leadUpdate } = mockService();
+    leadFindFirst.mockResolvedValue({ ...baseLead });
+    leadUpdate.mockResolvedValue({ id: 'lead-1', leadNumber: 'LD-2026-000007', status: 'QUALIFIED' });
+
+    const result = await service.updateStatus(ORG_ID, 'actor', 'lead-1', 'QUALIFIED');
+
+    expect(leadUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'lead-1', organizationId: ORG_ID, deletedAt: null },
+        data: { status: 'QUALIFIED' },
+      }),
+    );
+    expect(result.status).toBe('QUALIFIED');
+  });
+
+  it('updateStatus rejects a lead from another organization', async () => {
+    const { service, leadFindFirst, leadUpdate } = mockService();
+    leadFindFirst.mockResolvedValue(null);
+
+    await expect(service.updateStatus(ORG_ID, 'actor', 'lead-other', 'NEW')).rejects.toThrow(NotFoundException);
+    expect(leadUpdate).not.toHaveBeenCalled();
+  });
+
+  it('assignUser succeeds for a lead in the same organization', async () => {
+    const { service, leadFindFirst, leadUpdate, userFindFirst } = mockService();
+    leadFindFirst.mockResolvedValue({ ...baseLead });
+    userFindFirst.mockResolvedValue({ id: 'u-same' });
+    leadUpdate.mockResolvedValue({ id: 'lead-1', leadNumber: 'LD-2026-000007', assignedToId: 'u-same' });
+
+    const result = await service.assignUser(ORG_ID, 'actor', 'lead-1', 'u-same');
+
+    expect(leadUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'lead-1', organizationId: ORG_ID, deletedAt: null },
+        data: { assignedToId: 'u-same' },
+      }),
+    );
+    expect(result.assignedToId).toBe('u-same');
+  });
+
+  it('assignUser rejects a lead from another organization', async () => {
+    const { service, leadFindFirst, leadUpdate } = mockService();
+    leadFindFirst.mockResolvedValue(null);
+
+    await expect(service.assignUser(ORG_ID, 'actor', 'lead-other', 'u-same')).rejects.toThrow(NotFoundException);
+    expect(leadUpdate).not.toHaveBeenCalled();
+  });
+
+  it('softDelete succeeds for a lead in the same organization', async () => {
+    const { service, leadFindFirst, leadUpdate } = mockService();
+    leadFindFirst.mockResolvedValue({ ...baseLead });
+    leadUpdate.mockResolvedValue({ id: 'lead-1' });
+
+    const result = await service.softDelete(ORG_ID, 'actor', 'lead-1');
+
+    expect(leadUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'lead-1', organizationId: ORG_ID, deletedAt: null },
+        data: expect.objectContaining({ deletedAt: expect.any(Date) }),
+      }),
+    );
+    expect(result.message).toContain('deleted');
+  });
+
+  it('softDelete rejects a lead from another organization', async () => {
+    const { service, leadFindFirst, leadUpdate } = mockService();
+    leadFindFirst.mockResolvedValue(null);
+
+    await expect(service.softDelete(ORG_ID, 'actor', 'lead-other')).rejects.toThrow(NotFoundException);
+    expect(leadUpdate).not.toHaveBeenCalled();
   });
 });

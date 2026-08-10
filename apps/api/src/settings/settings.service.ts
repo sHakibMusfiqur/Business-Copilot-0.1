@@ -115,6 +115,7 @@ export class SettingsService {
       const file = list[0];
       const record = await this.prisma.file.create({
         data: {
+          organizationId: orgId,
           originalName: file.originalname,
           fileName: file.filename,
           mimeType: file.mimetype,

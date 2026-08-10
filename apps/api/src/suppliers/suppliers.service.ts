@@ -141,14 +141,6 @@ export class SuppliersService {
   }
 
   async update(orgId: string, currentUserId: string, supplierId: string, dto: UpdateSupplierDto) {
-    const supplier = await this.prisma.supplier.findFirst({
-      where: { id: supplierId, organizationId: orgId, deletedAt: null },
-    });
-
-    if (!supplier) {
-      throw new NotFoundException('Supplier not found');
-    }
-
     const updateData: Prisma.SupplierUpdateInput = {};
 
     if (dto.name !== undefined) { updateData.name = dto.name.trim(); }
@@ -165,63 +157,67 @@ export class SuppliersService {
     if (dto.notes !== undefined) { updateData.notes = dto.notes.trim(); }
     if (dto.isActive !== undefined) { updateData.isActive = dto.isActive; }
 
-    const updated = await this.prisma.supplier.update({
-      where: { id: supplierId },
-      data: updateData,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        phone: true,
-        company: true,
-        taxId: true,
-        isActive: true,
-        updatedAt: true,
-      },
-    });
+    let updated;
+    try {
+      updated = await this.prisma.supplier.update({
+        where: { id: supplierId, organizationId: orgId, deletedAt: null },
+        data: updateData,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          company: true,
+          taxId: true,
+          isActive: true,
+          updatedAt: true,
+        },
+      });
+    } catch (err) {
+      if ((err as Prisma.PrismaClientKnownRequestError)?.code === 'P2025') {
+        throw new NotFoundException('Supplier not found');
+      }
+      throw err;
+    }
 
     this.logger.log(`Supplier updated: ${updated.name} (${supplierId}) by ${currentUserId}`);
     return updated;
   }
 
   async softDelete(orgId: string, currentUserId: string, supplierId: string) {
-    const supplier = await this.prisma.supplier.findFirst({
+    const result = await this.prisma.supplier.updateMany({
       where: { id: supplierId, organizationId: orgId, deletedAt: null },
-    });
-
-    if (!supplier) {
-      throw new NotFoundException('Supplier not found');
-    }
-
-    await this.prisma.supplier.update({
-      where: { id: supplierId },
       data: { deletedAt: new Date(), isActive: false },
     });
 
-    this.logger.log(`Supplier soft-deleted: ${supplier.name} (${supplierId}) by ${currentUserId}`);
+    if (result.count === 0) {
+      throw new NotFoundException('Supplier not found');
+    }
+
+    this.logger.log(`Supplier soft-deleted: (${supplierId}) by ${currentUserId}`);
     return { message: 'Supplier deleted successfully' };
   }
 
   async updateStatus(orgId: string, currentUserId: string, supplierId: string, dto: UpdateSupplierStatusDto) {
-    const supplier = await this.prisma.supplier.findFirst({
-      where: { id: supplierId, organizationId: orgId, deletedAt: null },
-    });
-
-    if (!supplier) {
-      throw new NotFoundException('Supplier not found');
+    let updated;
+    try {
+      updated = await this.prisma.supplier.update({
+        where: { id: supplierId, organizationId: orgId, deletedAt: null },
+        data: { isActive: dto.isActive },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          isActive: true,
+          updatedAt: true,
+        },
+      });
+    } catch (err) {
+      if ((err as Prisma.PrismaClientKnownRequestError)?.code === 'P2025') {
+        throw new NotFoundException('Supplier not found');
+      }
+      throw err;
     }
-
-    const updated = await this.prisma.supplier.update({
-      where: { id: supplierId },
-      data: { isActive: dto.isActive },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        isActive: true,
-        updatedAt: true,
-      },
-    });
 
     this.logger.log(`Supplier ${dto.isActive ? 'activated' : 'deactivated'}: ${updated.name} (${supplierId}) by ${currentUserId}`);
     return updated;
