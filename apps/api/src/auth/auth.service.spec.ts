@@ -204,13 +204,14 @@ describe('AuthService (refresh / logout / reset security)', () => {
     });
 
     it('invalidates all sessions after a valid reset', async () => {
-      jwtService.verify.mockReturnValue({ sub: uId, purpose: 'password-reset' });
+      jwtService.verify.mockReturnValue({ sub: uId, purpose: 'password-reset', iat: Math.floor(Date.now() / 1000) });
       prisma.user.findUnique.mockResolvedValue({
         id: uId,
         email: 'a@a.com',
         organizationId: 'org1',
         deletedAt: null,
         isActive: true,
+        updatedAt: new Date(Date.now() - 10000),
       });
       (argon2.hash as jest.Mock).mockResolvedValue('new-hash');
 
@@ -218,6 +219,57 @@ describe('AuthService (refresh / logout / reset security)', () => {
 
       expect(prisma.user.update).toHaveBeenCalled();
       expect(prisma.refreshToken.deleteMany).toHaveBeenCalledWith({ where: { userId: uId } });
+    });
+
+    it('rejects a password-reset token that has already been used', async () => {
+      const tokenIat = Math.floor(Date.now() / 1000);
+      jwtService.verify.mockReturnValue({ sub: uId, purpose: 'password-reset', iat: tokenIat });
+
+      // First call: user's updatedAt is BEFORE the token's iat → allowed
+      prisma.user.findUnique.mockResolvedValueOnce({
+        id: uId,
+        email: 'a@a.com',
+        organizationId: 'org1',
+        deletedAt: null,
+        isActive: true,
+        updatedAt: new Date((tokenIat - 60) * 1000),
+      });
+      (argon2.hash as jest.Mock).mockResolvedValue('new-hash');
+
+      await service.resetPassword('valid-token', 'NewPass1!');
+
+      // Second call with the same token: user's updatedAt was advanced by
+      // the first reset (via @updatedAt), so now iat < updatedAt → rejected
+      prisma.user.findUnique.mockResolvedValueOnce({
+        id: uId,
+        email: 'a@a.com',
+        organizationId: 'org1',
+        deletedAt: null,
+        isActive: true,
+        updatedAt: new Date((tokenIat + 60) * 1000),
+      });
+
+      await expect(service.resetPassword('valid-token', 'NewPass2!')).rejects.toThrow(BadRequestException);
+      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a reset token older than the user updatedAt', async () => {
+      const tokenIat = Math.floor(Date.now() / 1000);
+      jwtService.verify.mockReturnValue({ sub: uId, purpose: 'password-reset', iat: tokenIat });
+
+      // User's updatedAt is AFTER the token's iat → stale token
+      prisma.user.findUnique.mockResolvedValue({
+        id: uId,
+        email: 'a@a.com',
+        organizationId: 'org1',
+        deletedAt: null,
+        isActive: true,
+        updatedAt: new Date((tokenIat + 300) * 1000),
+      });
+
+      await expect(service.resetPassword('old-token', 'NewPass1!')).rejects.toThrow(BadRequestException);
+      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect(prisma.refreshToken.deleteMany).not.toHaveBeenCalled();
     });
   });
 });

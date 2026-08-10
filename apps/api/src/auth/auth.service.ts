@@ -500,9 +500,9 @@ export class AuthService {
   }
 
   async resetPassword(token: string, newPassword: string, ip?: string, userAgent?: string): Promise<{ message: string }> {
-    let payload: { sub?: string; purpose?: string };
+    let payload: { sub?: string; purpose?: string; iat?: number };
     try {
-      payload = this.jwtService.verify<{ sub?: string; purpose?: string }>(token, {
+      payload = this.jwtService.verify<{ sub?: string; purpose?: string; iat?: number }>(token, {
         secret: this.configService.jwtSecret,
         issuer: PASSWORD_RESET_ISSUER,
         audience: PASSWORD_RESET_AUDIENCE,
@@ -517,7 +517,7 @@ export class AuthService {
 
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, email: true, organizationId: true, deletedAt: true, isActive: true },
+      select: { id: true, email: true, organizationId: true, deletedAt: true, isActive: true, updatedAt: true },
     });
 
     if (!user || user.deletedAt) {
@@ -525,6 +525,16 @@ export class AuthService {
     }
     if (!user.isActive) {
       throw new BadRequestException('This account has been deactivated');
+    }
+
+    // Reject reuse of a password-reset token. After a successful reset the
+    // user's updatedAt is advanced by Prisma's @updatedAt directive. Any
+    // older token (iat < updatedAt) is therefore stale and must be rejected.
+    if (payload.iat && user.updatedAt) {
+      const tokenIssuedAt = payload.iat * 1000; // jwt iat is in seconds
+      if (tokenIssuedAt < user.updatedAt.getTime()) {
+        throw new BadRequestException('This reset link has already been used');
+      }
     }
 
     const hashedPassword = await argon2.hash(newPassword);
