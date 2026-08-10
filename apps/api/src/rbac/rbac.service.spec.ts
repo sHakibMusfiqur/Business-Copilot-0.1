@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 
 import { RbacService } from './rbac.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -146,6 +146,115 @@ describe('RbacService', () => {
 
       await expect(service.assertCanGrantOwnerRole('org-1', 'actor', ['role-admin'])).resolves.toBeUndefined();
       expect(getUserPermissions).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe('RbacService deletedAt guard on user-role assignment (P3-L3)', () => {
+  let service: RbacService;
+  let userFindFirst: jest.Mock;
+  let roleFindMany: jest.Mock;
+  let roleFindUnique: jest.Mock;
+  let roleFindFirst: jest.Mock;
+  let userRoleAssignmentDeleteMany: jest.Mock;
+  let userRoleAssignmentCreateMany: jest.Mock;
+  let transaction: jest.Mock;
+
+  beforeEach(() => {
+    userFindFirst = jest.fn();
+    roleFindMany = jest.fn();
+    roleFindUnique = jest.fn();
+    roleFindFirst = jest.fn();
+    userRoleAssignmentDeleteMany = jest.fn().mockResolvedValue({});
+    userRoleAssignmentCreateMany = jest.fn().mockResolvedValue({});
+
+    transaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) =>
+      cb({
+        userRoleAssignment: { deleteMany: userRoleAssignmentDeleteMany, createMany: userRoleAssignmentCreateMany },
+      }),
+    );
+
+    service = new RbacService({
+      user: { findFirst: userFindFirst },
+      role: {
+        findFirst: roleFindFirst,
+        findUnique: roleFindUnique,
+        findMany: roleFindMany,
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+      userRoleAssignment: { deleteMany: userRoleAssignmentDeleteMany, createMany: userRoleAssignmentCreateMany },
+      $transaction: transaction,
+    } as unknown as PrismaService);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('assignUserRoles', () => {
+    it('rejects role assignment to a soft-deleted user', async () => {
+      userFindFirst.mockResolvedValue(null);
+
+      await expect(
+        service.assignUserRoles('org-1', 'deleted-user', { roleIds: ['role-1'] }),
+      ).rejects.toThrow(NotFoundException);
+      expect(transaction).not.toHaveBeenCalled();
+    });
+
+    it('enforces deletedAt: null when looking up the target user', async () => {
+      userFindFirst.mockResolvedValue(null);
+
+      await expect(
+        service.assignUserRoles('org-1', 'deleted-user', { roleIds: ['role-1'] }),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(userFindFirst).toHaveBeenCalledWith({
+        where: { id: 'deleted-user', organizationId: 'org-1', deletedAt: null },
+      });
+    });
+
+    it('allows role assignment to an active (non-deleted) user', async () => {
+      userFindFirst.mockResolvedValue({ id: 'active-user' });
+      roleFindMany.mockResolvedValue([{ id: 'role-1' }]);
+
+      await service.assignUserRoles('org-1', 'active-user', { roleIds: ['role-1'] });
+
+      expect(userRoleAssignmentDeleteMany).toHaveBeenCalledWith({ where: { userId: 'active-user' } });
+      expect(userRoleAssignmentCreateMany).toHaveBeenCalledWith({
+        data: [{ userId: 'active-user', roleId: 'role-1' }],
+      });
+    });
+  });
+
+  describe('getUserRoles', () => {
+    it('rejects role retrieval for a soft-deleted user', async () => {
+      userFindFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getUserRoles('org-1', 'deleted-user'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('enforces deletedAt: null when looking up the target user', async () => {
+      userFindFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getUserRoles('org-1', 'deleted-user'),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(userFindFirst).toHaveBeenCalledWith({
+        where: { id: 'deleted-user', organizationId: 'org-1', deletedAt: null },
+      });
+    });
+
+    it('returns roles for an active (non-deleted) user', async () => {
+      userFindFirst.mockResolvedValue({ id: 'active-user' });
+      roleFindMany.mockResolvedValue([{ id: 'role-1', name: 'Admin' }]);
+
+      const result = await service.getUserRoles('org-1', 'active-user');
+
+      expect(result).toEqual([{ id: 'role-1', name: 'Admin' }]);
     });
   });
 });

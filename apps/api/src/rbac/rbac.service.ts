@@ -340,7 +340,7 @@ export class RbacService {
 
   async assignUserRoles(orgId: string, userId: string, dto: AssignUserRolesDto) {
     const user = await this.prisma.user.findFirst({
-      where: { id: userId, organizationId: orgId },
+      where: { id: userId, organizationId: orgId, deletedAt: null },
     });
 
     if (!user) {
@@ -373,7 +373,7 @@ export class RbacService {
 
   async getUserRoles(orgId: string, userId: string) {
     const user = await this.prisma.user.findFirst({
-      where: { id: userId, organizationId: orgId },
+      where: { id: userId, organizationId: orgId, deletedAt: null },
     });
 
     if (!user) {
