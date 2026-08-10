@@ -130,6 +130,29 @@ describe('PurchaseService receive (atomic status gate + atomic increment)', () =
     expect(inventoryUpdate).not.toHaveBeenCalled();
   });
 
+  it('scopes the inventory lookup to the purchase organization', async () => {
+    await service.receive(ORG_ID, USER_ID, PURCHASE_ID);
+
+    expect(inventoryFindFirst).toHaveBeenCalledWith({
+      where: { productId: PRODUCT_ID, warehouseId: null, product: { organizationId: ORG_ID } },
+    });
+  });
+
+  it('does not select inventory on a product from another organization', async () => {
+    inventoryFindFirst.mockResolvedValue(null);
+
+    await service.receive(ORG_ID, USER_ID, PURCHASE_ID);
+
+    // Cross-org inventory is never selected; a missing row safely creates stock for the org's product.
+    expect(inventoryFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ product: { organizationId: ORG_ID } }),
+      }),
+    );
+    expect(inventoryUpdateMany).not.toHaveBeenCalled();
+    expect(inventoryCreate).toHaveBeenCalled();
+  });
+
   it('creates an inventory row when missing and records history', async () => {
     inventoryFindFirst.mockResolvedValue(null);
 

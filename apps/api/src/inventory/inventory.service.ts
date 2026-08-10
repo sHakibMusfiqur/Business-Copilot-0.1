@@ -153,7 +153,7 @@ export class InventoryService {
 
     return this.prisma.$transaction(async (tx) => {
       const inventory = await tx.inventory.findFirst({
-        where: { productId: product.id, warehouseId: null },
+        where: { productId: product.id, warehouseId: null, product: { organizationId: orgId } },
       });
 
       const existingInventoryId = inventory?.id;

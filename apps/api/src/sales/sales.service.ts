@@ -411,7 +411,7 @@ export class SalesService {
         if (!item.productId) continue;
 
         const inventory = await tx.inventory.findFirst({
-          where: { productId: item.productId, warehouseId: null },
+          where: { productId: item.productId, warehouseId: null, product: { organizationId: orgId } },
         });
 
         const requestedQuantity = Number(item.quantity);

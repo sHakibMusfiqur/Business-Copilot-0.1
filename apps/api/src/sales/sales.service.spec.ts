@@ -142,6 +142,23 @@ describe('SalesService deliver (atomic status gate + guarded decrement)', () => 
     expect(cogsJournal).not.toHaveBeenCalled();
   });
 
+  it('scopes the inventory lookup to the sale organization', async () => {
+    await service.deliver(ORG_ID, USER_ID, SALE_ID);
+
+    expect(inventoryFindFirst).toHaveBeenCalledWith({
+      where: { productId: PRODUCT_ID, warehouseId: null, product: { organizationId: ORG_ID } },
+    });
+  });
+
+  it('rejects delivery when the inventory row belongs to another organization', async () => {
+    inventoryFindFirst.mockResolvedValue(null);
+
+    await expect(service.deliver(ORG_ID, USER_ID, SALE_ID)).rejects.toThrow(BadRequestException);
+    expect(inventoryUpdateMany).not.toHaveBeenCalled();
+    expect(inventoryTransactionCreate).not.toHaveBeenCalled();
+    expect(receivable).not.toHaveBeenCalled();
+  });
+
   it('records correct previousQuantity and newQuantity in history', async () => {
     await service.deliver(ORG_ID, USER_ID, SALE_ID);
 

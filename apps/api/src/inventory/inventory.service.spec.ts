@@ -264,6 +264,25 @@ describe('InventoryService (concurrency-safe stock adjustments)', () => {
       await expect(service.adjust(ORG_ID, USER_ID, outDto(6))).rejects.toThrow(NotFoundException);
       expect(inventoryFindFirst).not.toHaveBeenCalled();
     });
+
+    it('scopes the initial inventory lookup to the product organization', async () => {
+      inventoryFindFirst.mockResolvedValue({ id: 'inv-1', quantity: 10 });
+      inventoryFindUnique.mockResolvedValue({ id: 'inv-1', quantity: 15 });
+
+      await service.adjust(ORG_ID, USER_ID, inDto(5));
+
+      expect(inventoryFindFirst).toHaveBeenCalledWith({
+        where: { productId: PRODUCT_ID, warehouseId: null, product: { organizationId: ORG_ID } },
+      });
+    });
+
+    it('treats inventory on a cross-organization product as absent', async () => {
+      inventoryFindFirst.mockResolvedValue(null);
+
+      await expect(service.adjust(ORG_ID, USER_ID, outDto(6))).rejects.toThrow(BadRequestException);
+      expect(inventoryUpdateMany).not.toHaveBeenCalled();
+      expect(inventoryTransactionCreate).not.toHaveBeenCalled();
+    });
   });
 
   describe('Edge cases', () => {
