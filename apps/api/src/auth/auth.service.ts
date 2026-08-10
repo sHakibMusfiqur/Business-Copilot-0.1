@@ -6,6 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
+import { TokenExpiredError, JsonWebTokenError, NotBeforeError } from 'jsonwebtoken';
 import * as argon2 from 'argon2';
 
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
@@ -426,7 +427,23 @@ export class AuthService {
       };
     } catch (error) {
       if (error instanceof UnauthorizedException) throw error;
-      this.logger.error('Refresh token failed');
+
+      // JWT verification failures are expected for expired / tampered tokens and
+      // do not indicate a system error.  Throw a clean UnauthorizedException so
+      // the client receives a 401 without an opaque ERROR polluting the logs.
+      if (error instanceof TokenExpiredError) {
+        throw new UnauthorizedException('Refresh token expired');
+      }
+      if (error instanceof JsonWebTokenError || error instanceof NotBeforeError) {
+        throw new UnauthorizedException('Invalid refresh token');
+      }
+
+      // Anything else (DB errors, unexpected runtime failures) is genuinely
+      // unexpected and should be logged with enough detail to diagnose.
+      this.logger.error(
+        `Refresh token failed: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
+      );
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
   }
