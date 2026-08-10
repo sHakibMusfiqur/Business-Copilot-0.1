@@ -49,7 +49,7 @@ describe('LeadService.assignUser (tenant isolation)', () => {
     const result = await service.assignUser(ORG_ID, 'actor', 'lead-1', 'u-same');
 
     expect(userFindFirst).toHaveBeenCalledWith({
-      where: { id: 'u-same', organizationId: ORG_ID },
+      where: { id: 'u-same', organizationId: ORG_ID, deletedAt: null },
       select: { id: true },
     });
     expect(timelineEventCreate).toHaveBeenCalled();
@@ -64,6 +64,15 @@ describe('LeadService.assignUser (tenant isolation)', () => {
     ).rejects.toThrow(BadRequestException);
     expect(leadUpdate).not.toHaveBeenCalled();
     expect(timelineEventCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects assigning to a soft-deleted user', async () => {
+    userFindFirst.mockResolvedValue(null);
+
+    await expect(
+      service.assignUser(ORG_ID, 'actor', 'lead-1', 'u-deleted'),
+    ).rejects.toThrow(BadRequestException);
+    expect(leadUpdate).not.toHaveBeenCalled();
   });
 
 it('does not validate when unassigning (assignedToId null)', async () => {
@@ -110,7 +119,7 @@ describe('LeadService.update (assignedToId tenant validation)', () => {
     await service.update(ORG_ID, 'actor', 'lead-1', { assignedToId: 'u-same' } as never);
 
     expect(userFindFirst).toHaveBeenCalledWith({
-      where: { id: 'u-same', organizationId: ORG_ID },
+      where: { id: 'u-same', organizationId: ORG_ID, deletedAt: null },
       select: { id: true },
     });
     expect(leadUpdate).toHaveBeenCalledWith(
@@ -118,6 +127,17 @@ describe('LeadService.update (assignedToId tenant validation)', () => {
         data: expect.objectContaining({ assignedTo: { connect: { id: 'u-same' } } }),
       }),
     );
+  });
+
+  it('rejects assigning to a soft-deleted user via update()', async () => {
+    const { service, leadFindFirst, userFindFirst, leadUpdate } = mockService();
+    leadFindFirst.mockResolvedValue({ id: 'lead-1', organizationId: ORG_ID, status: 'NEW' });
+    userFindFirst.mockResolvedValue(null);
+
+    await expect(
+      service.update(ORG_ID, 'actor', 'lead-1', { assignedToId: 'u-deleted' } as never),
+    ).rejects.toThrow(BadRequestException);
+    expect(leadUpdate).not.toHaveBeenCalled();
   });
 
   it('allows clearing assignment without validation', async () => {
@@ -250,8 +270,17 @@ describe('LeadService.create (assignedToId tenant validation)', () => {
       service.create(ORG_ID, 'actor', { name: 'X', assignedToId: 'u-same' } as never),
     ).resolves.toBeDefined();
     expect(userFindFirst).toHaveBeenCalledWith({
-      where: { id: 'u-same', organizationId: ORG_ID },
+      where: { id: 'u-same', organizationId: ORG_ID, deletedAt: null },
       select: { id: true },
     });
+  });
+
+  it('rejects creating a lead assigned to a soft-deleted user', async () => {
+    const { service, userFindFirst } = mockService();
+    userFindFirst.mockResolvedValue(null);
+
+    await expect(
+      service.create(ORG_ID, 'actor', { name: 'X', assignedToId: 'u-deleted' } as never),
+    ).rejects.toThrow(BadRequestException);
   });
 });

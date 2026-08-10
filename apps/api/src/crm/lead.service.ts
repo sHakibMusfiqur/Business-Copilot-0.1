@@ -389,7 +389,7 @@ export class LeadService {
 
   private async assertAssigneeAccessible(orgId: string, userId: string): Promise<void> {
     const user = await this.prisma.user.findFirst({
-      where: { id: userId, organizationId: orgId },
+      where: { id: userId, organizationId: orgId, deletedAt: null },
       select: { id: true },
     });
 
