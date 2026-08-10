@@ -350,13 +350,20 @@ export class LeadService {
   }
 
   async createTimelineEvent(
-    _orgId: string,
+    orgId: string,
     leadId: string,
     userId: string,
     type: string,
     description: string,
     metadata?: Record<string, unknown>,
   ) {
+    const lead = await this.prisma.lead.findFirst({
+      where: { id: leadId, organizationId: orgId, deletedAt: null },
+      select: { id: true },
+    });
+
+    if (!lead) throw new NotFoundException('Lead not found');
+
     return this.prisma.timelineEvent.create({
       data: {
         leadId,

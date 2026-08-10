@@ -284,3 +284,58 @@ describe('LeadService.create (assignedToId tenant validation)', () => {
     ).rejects.toThrow(BadRequestException);
   });
 });
+
+describe('LeadService.createTimelineEvent (tenant isolation / FS2)', () => {
+  it('creates a timeline event for a lead in the same organization, scoping the lead lookup', async () => {
+    const { service, leadFindFirst, timelineEventCreate } = mockService();
+    leadFindFirst.mockResolvedValue({ id: 'lead-1', organizationId: ORG_ID });
+    timelineEventCreate.mockResolvedValue({ id: 'event-1' });
+
+    await service.createTimelineEvent(ORG_ID, 'lead-1', 'actor', 'CREATED', 'Lead created: LD-2026-000001');
+
+    expect(leadFindFirst).toHaveBeenCalledWith({
+      where: { id: 'lead-1', organizationId: ORG_ID, deletedAt: null },
+      select: { id: true },
+    });
+    expect(timelineEventCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        leadId: 'lead-1',
+        type: 'CREATED',
+        description: 'Lead created: LD-2026-000001',
+        createdById: 'actor',
+      }),
+    });
+  });
+
+  it('rejects a leadId belonging to another organization', async () => {
+    const { service, leadFindFirst, timelineEventCreate } = mockService();
+    leadFindFirst.mockResolvedValue(null);
+
+    await expect(
+      service.createTimelineEvent(ORG_ID, 'lead-other', 'actor', 'CREATED', 'Cross-org'),
+    ).rejects.toThrow(NotFoundException);
+    expect(timelineEventCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects when the lead does not exist', async () => {
+    const { service, leadFindFirst, timelineEventCreate } = mockService();
+    leadFindFirst.mockResolvedValue(null);
+
+    await expect(
+      service.createTimelineEvent(ORG_ID, 'lead-missing', 'actor', 'CREATED', 'Missing lead'),
+    ).rejects.toThrow(NotFoundException);
+    expect(timelineEventCreate).not.toHaveBeenCalled();
+  });
+
+  it('keeps existing same-org callers working (update still creates a timeline event)', async () => {
+    const { service, leadFindFirst, leadUpdate, timelineEventCreate } = mockService();
+    leadFindFirst.mockResolvedValue({ id: 'lead-1', organizationId: ORG_ID, status: 'NEW' });
+    leadUpdate.mockResolvedValue({ id: 'lead-1', leadNumber: 'LD-2026-000001', status: 'QUALIFIED' });
+    timelineEventCreate.mockResolvedValue({ id: 'event-2' });
+
+    await service.update(ORG_ID, 'actor', 'lead-1', { notes: 'Follow up' } as never);
+
+    expect(leadUpdate).toHaveBeenCalled();
+    expect(timelineEventCreate).toHaveBeenCalled();
+  });
+});
