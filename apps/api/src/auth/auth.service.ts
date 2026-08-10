@@ -364,6 +364,7 @@ export class AuthService {
           role: true,
           organizationId: true,
           isActive: true,
+          deletedAt: true,
         },
       });
 
@@ -394,6 +395,23 @@ export class AuthService {
           userAgent,
         });
         throw new UnauthorizedException('Account is deactivated. Contact your administrator.');
+      }
+
+      if (user.deletedAt) {
+        await this.prisma.refreshToken.delete({ where: { id: storedToken.id } });
+        await this.rateLimiter.recordAttempt(`ip:${ip}`);
+        await this.rateLimiter.recordAttempt(`user:${user.id}`);
+        await this.auditService.record({
+          userId: user.id,
+          action: 'REFRESH_TOKEN',
+          status: 'FAILURE',
+          entity: 'User',
+          entityId: user.id,
+          metadata: { reason: 'User soft-deleted' },
+          ipAddress: ip,
+          userAgent,
+        });
+        throw new UnauthorizedException('User not found');
       }
 
       await this.prisma.refreshToken.delete({ where: { id: storedToken.id } });

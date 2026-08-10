@@ -156,6 +156,36 @@ describe('AuthService (refresh / logout / reset security)', () => {
       expect(prisma.refreshToken.create).not.toHaveBeenCalled();
     });
 
+    it('rejects a refresh for a soft-deleted user even when isActive is true', async () => {
+      jwtService.verify.mockReturnValue({ id: uId });
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        id: 'rt-id',
+        token: oldRefreshToken,
+        userId: uId,
+        expiresAt: new Date(Date.now() + 10000),
+      });
+      prisma.user.findUnique.mockResolvedValue({
+        ...userOfRefresh(uId),
+        isActive: true,
+        deletedAt: new Date(),
+      });
+
+      await expect(service.refreshToken(oldRefreshToken, '1.1.1.1')).rejects.toThrow(
+        UnauthorizedException,
+      );
+
+      expect(prisma.refreshToken.delete).toHaveBeenCalledWith({ where: { id: 'rt-id' } });
+      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+      expect(audit.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'REFRESH_TOKEN',
+          status: 'FAILURE',
+          userId: uId,
+          metadata: expect.objectContaining({ reason: 'User soft-deleted' }),
+        }),
+      );
+    });
+
     it('rotates the refresh token (old deleted, new stored) on success', async () => {
       jwtService.verify.mockReturnValue({ id: uId });
       prisma.refreshToken.findUnique.mockResolvedValue({
