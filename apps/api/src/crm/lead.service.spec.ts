@@ -339,3 +339,65 @@ describe('LeadService.createTimelineEvent (tenant isolation / FS2)', () => {
     expect(timelineEventCreate).toHaveBeenCalled();
   });
 });
+
+describe('LeadService.generateLeadNumber (org-scoped sequencing / FS4)', () => {
+  const year = new Date().getFullYear();
+
+  it('generates the next number after an existing lead in the same organization', async () => {
+    const { service, leadFindFirst, leadCreate } = mockService();
+    // generateLeadNumber lookup (first findFirst call) sees org-1's highest lead.
+    leadFindFirst.mockResolvedValueOnce({
+      id: 'lead-1',
+      organizationId: ORG_ID,
+      leadNumber: `LD-${year}-000007`,
+    });
+
+    await service.create(ORG_ID, 'actor', { name: 'X' } as never);
+
+    expect(leadCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ leadNumber: `LD-${year}-000008` }),
+      }),
+    );
+  });
+
+  it('scopes the lead-number lookup to the organization', async () => {
+    const { service, leadFindFirst } = mockService();
+    // Simulate a high-numbered cross-org lead that must be filtered out by the scoped where.
+    leadFindFirst.mockResolvedValueOnce({
+      id: 'lead-other',
+      organizationId: 'org-2',
+      leadNumber: `LD-${year}-000099`,
+    });
+
+    await service.create(ORG_ID, 'actor', { name: 'X' } as never);
+
+    expect(leadFindFirst).toHaveBeenCalledWith({
+      where: {
+        organizationId: ORG_ID,
+        leadNumber: { startsWith: expect.any(String) },
+      },
+      orderBy: { leadNumber: 'desc' },
+      select: { leadNumber: true },
+    });
+  });
+
+  it('does not let another organization lead affect the sequence', async () => {
+    const { service, leadFindFirst, leadCreate } = mockService();
+    // org-1 has no scoped lead (cross-org rows are filtered out) -> next is the first number.
+    leadFindFirst.mockResolvedValueOnce(null);
+
+    await service.create(ORG_ID, 'actor', { name: 'X' } as never);
+
+    expect(leadFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ organizationId: ORG_ID }),
+      }),
+    );
+    expect(leadCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ leadNumber: `LD-${year}-000001` }),
+      }),
+    );
+  });
+});

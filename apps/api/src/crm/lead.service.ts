@@ -109,7 +109,7 @@ export class LeadService {
   }
 
   async create(orgId: string, userId: string, dto: CreateLeadDto) {
-    const leadNumber = await this.generateLeadNumber();
+    const leadNumber = await this.generateLeadNumber(orgId);
 
     if (dto.assignedToId) {
       await this.assertAssigneeAccessible(orgId, dto.assignedToId);
@@ -375,12 +375,12 @@ export class LeadService {
     });
   }
 
-  private async generateLeadNumber(): Promise<string> {
+  private async generateLeadNumber(orgId: string): Promise<string> {
     const year = new Date().getFullYear();
     const prefix = `LD-${year}-`;
 
     const lastLead = await this.prisma.lead.findFirst({
-      where: { leadNumber: { startsWith: prefix } },
+      where: { organizationId: orgId, leadNumber: { startsWith: prefix } },
       orderBy: { leadNumber: 'desc' },
       select: { leadNumber: true },
     });
