@@ -258,3 +258,121 @@ describe('RbacService deletedAt guard on user-role assignment (P3-L3)', () => {
     });
   });
 });
+
+describe('RbacService assignUserRoles Owner protection (D-4)', () => {
+  let service: RbacService;
+  let userFindFirst: jest.Mock;
+  let roleFindMany: jest.Mock;
+  let roleFindUnique: jest.Mock;
+  let assignmentFindUnique: jest.Mock;
+  let assignmentCount: jest.Mock;
+  let assignmentDeleteMany: jest.Mock;
+  let assignmentCreateMany: jest.Mock;
+  let transaction: jest.Mock;
+
+  const OWNER_ROLE_ID = 'role-owner';
+
+  beforeEach(() => {
+    userFindFirst = jest.fn();
+    roleFindMany = jest.fn();
+    roleFindUnique = jest.fn();
+    assignmentFindUnique = jest.fn();
+    assignmentCount = jest.fn();
+    assignmentDeleteMany = jest.fn().mockResolvedValue({});
+    assignmentCreateMany = jest.fn().mockResolvedValue({});
+
+    transaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) =>
+      cb({
+        userRoleAssignment: { deleteMany: assignmentDeleteMany, createMany: assignmentCreateMany },
+      }),
+    );
+
+    const stubOwnerRole = () =>
+      roleFindUnique.mockImplementation(
+        (args: { where: { organizationId_name?: { name: string } } }) =>
+          args?.where?.organizationId_name?.name === 'Owner' ? { id: OWNER_ROLE_ID } : null,
+      );
+
+    service = new RbacService({
+      user: { findFirst: userFindFirst },
+      role: {
+        findFirst: jest.fn(),
+        findUnique: roleFindUnique,
+        findMany: roleFindMany,
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+      userRoleAssignment: {
+        findUnique: assignmentFindUnique,
+        count: assignmentCount,
+        deleteMany: assignmentDeleteMany,
+        createMany: assignmentCreateMany,
+      },
+      $transaction: transaction,
+    } as unknown as PrismaService);
+
+    stubOwnerRole();
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('allows demoting one Owner when another Owner remains', async () => {
+    userFindFirst.mockResolvedValue({ id: 'owner-1' });
+    roleFindMany.mockResolvedValue([{ id: 'role-admin' }]);
+    assignmentFindUnique.mockResolvedValue({ userId: 'owner-1', roleId: OWNER_ROLE_ID });
+    assignmentCount.mockResolvedValue(2);
+
+    await service.assignUserRoles('org-1', 'owner-1', { roleIds: ['role-admin'] });
+
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(assignmentDeleteMany).toHaveBeenCalledWith({ where: { userId: 'owner-1' } });
+    expect(assignmentCreateMany).toHaveBeenCalledWith({
+      data: [{ userId: 'owner-1', roleId: 'role-admin' }],
+    });
+  });
+
+  it('rejects removing the Owner role from the last Owner', async () => {
+    userFindFirst.mockResolvedValue({ id: 'owner-1' });
+    roleFindMany.mockResolvedValue([{ id: 'role-admin' }]);
+    assignmentFindUnique.mockResolvedValue({ userId: 'owner-1', roleId: OWNER_ROLE_ID });
+    assignmentCount.mockResolvedValue(1);
+
+    await expect(
+      service.assignUserRoles('org-1', 'owner-1', { roleIds: ['role-admin'] }),
+    ).rejects.toThrow(BadRequestException);
+
+    expect(transaction).not.toHaveBeenCalled();
+    expect(assignmentDeleteMany).not.toHaveBeenCalled();
+  });
+
+  it('allows assigning a non-Owner role to a non-Owner user', async () => {
+    userFindFirst.mockResolvedValue({ id: 'user-1' });
+    roleFindMany.mockResolvedValue([{ id: 'role-user' }]);
+    assignmentFindUnique.mockResolvedValue(null);
+
+    await service.assignUserRoles('org-1', 'user-1', { roleIds: ['role-user'] });
+
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(assignmentCreateMany).toHaveBeenCalledWith({
+      data: [{ userId: 'user-1', roleId: 'role-user' }],
+    });
+  });
+
+  it('allows reassignment that retains the Owner role', async () => {
+    userFindFirst.mockResolvedValue({ id: 'owner-1' });
+    roleFindMany.mockResolvedValue([
+      { id: OWNER_ROLE_ID },
+      { id: 'role-admin' },
+    ]);
+    assignmentFindUnique.mockResolvedValue({ userId: 'owner-1', roleId: OWNER_ROLE_ID });
+
+    await service.assignUserRoles('org-1', 'owner-1', {
+      roleIds: [OWNER_ROLE_ID, 'role-admin'],
+    });
+
+    expect(assignmentCount).not.toHaveBeenCalled();
+    expect(transaction).toHaveBeenCalledTimes(1);
+  });
+});

@@ -247,7 +247,7 @@ export class UsersService {
     }
 
     if (dto.roleIds !== undefined) {
-      await this.ensureNotLastOwnerWithRole(orgId, userId, dto.roleIds);
+      await this.rbacService.ensureNotLastOwnerWithRole(orgId, userId, dto.roleIds);
       await this.rbacService.assertCanGrantOwnerRole(orgId, currentUserId, dto.roleIds);
     }
 
@@ -393,36 +393,6 @@ export class UsersService {
     if (ownerCount <= 1) {
       throw new BadRequestException(
         'Cannot modify the last Owner. Assign another user to the Owner role first.',
-      );
-    }
-  }
-
-  private async ensureNotLastOwnerWithRole(orgId: string, userId: string, targetRoleIds: string[]): Promise<void> {
-    const ownerRole = await this.prisma.role.findUnique({
-      where: { organizationId_name: { organizationId: orgId, name: 'Owner' } },
-    });
-
-    if (!ownerRole) return;
-
-    const currentlyHasOwner = await this.prisma.userRoleAssignment.findUnique({
-      where: { userId_roleId: { userId, roleId: ownerRole.id } },
-    });
-
-    if (!currentlyHasOwner) return;
-
-    const willRetainOwner = targetRoleIds.includes(ownerRole.id);
-    if (willRetainOwner) return;
-
-    const ownerCount = await this.prisma.userRoleAssignment.count({
-      where: {
-        roleId: ownerRole.id,
-        user: { deletedAt: null, isActive: true },
-      },
-    });
-
-    if (ownerCount <= 1) {
-      throw new BadRequestException(
-        'Cannot remove the Owner role from the last Owner. Assign another user to the Owner role first.',
       );
     }
   }

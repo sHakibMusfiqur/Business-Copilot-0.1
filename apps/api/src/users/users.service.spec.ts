@@ -49,7 +49,7 @@ describe('UsersService', () => {
         role: { findUnique: jest.fn().mockResolvedValue(null) },
         $transaction: transaction,
       } as unknown as PrismaService,
-      { assertCanGrantOwnerRole } as unknown as RbacService,
+      { assertCanGrantOwnerRole, ensureNotLastOwnerWithRole: jest.fn().mockResolvedValue(undefined) } as unknown as RbacService,
     );
 
     userFindUnique.mockResolvedValue(null);
@@ -295,7 +295,7 @@ describe('UsersService update (deactivation protection / P3-M1)', () => {
         userRoleAssignment: { findUnique: m1assignmentFindUnique, count: m1assignmentCount },
         $transaction: m1transaction,
       } as unknown as PrismaService,
-      { assertCanGrantOwnerRole: m1AssertCanGrantOwnerRole } as unknown as RbacService,
+      { assertCanGrantOwnerRole: m1AssertCanGrantOwnerRole, ensureNotLastOwnerWithRole: jest.fn().mockResolvedValue(undefined) } as unknown as RbacService,
     );
   });
 

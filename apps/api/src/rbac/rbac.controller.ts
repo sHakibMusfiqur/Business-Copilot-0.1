@@ -44,6 +44,7 @@ export class RbacController {
   // ─── Permissions ───────────────────────────────────────────────
 
   @Get('permissions')
+  @Permissions(['organization.manage'])
   @ApiBearerAuth('access-token')
   @ApiOkResponse({ description: 'All permissions retrieved' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
@@ -53,6 +54,7 @@ export class RbacController {
   }
 
   @Get('permissions/grouped')
+  @Permissions(['organization.manage'])
   @ApiBearerAuth('access-token')
   @ApiOkResponse({ description: 'Permissions grouped by module' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
@@ -73,6 +75,7 @@ export class RbacController {
   // ─── Roles ─────────────────────────────────────────────────────
 
   @Get('roles')
+  @Permissions(['organization.manage'])
   @ApiBearerAuth('access-token')
   @ApiOkResponse({ description: 'All roles retrieved' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
@@ -146,6 +149,7 @@ export class RbacController {
   // ─── Role Permissions ──────────────────────────────────────────
 
   @Get('roles/:id/permissions')
+  @Permissions(['organization.manage'])
   @ApiBearerAuth('access-token')
   @ApiOkResponse({ description: 'Role permissions retrieved' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
@@ -193,6 +197,7 @@ export class RbacController {
   // ─── User Roles ────────────────────────────────────────────────
 
   @Get('users/:id/roles')
+  @Permissions(['organization.manage'])
   @ApiBearerAuth('access-token')
   @ApiOkResponse({ description: 'User roles retrieved' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
