@@ -213,12 +213,15 @@ export class StripeProvider implements PaymentGateway {
       throw new Error('Cannot refund a payment without a transaction reference');
     }
 
-    const refund = await client.refunds.create({
-      payment_intent: paymentIntentId,
-      ...(input.amount !== undefined
-        ? { amount: Math.round(input.amount * 100) }
-        : {}),
-    });
+    const refund = await client.refunds.create(
+      {
+        payment_intent: paymentIntentId,
+        ...(input.amount !== undefined
+          ? { amount: Math.round(input.amount * 100) }
+          : {}),
+      },
+      input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : undefined,
+    );
 
     const succeeded = refund.status === 'succeeded' || refund.status === 'pending';
     this.logger.log(`Stripe refund ${refund.status} for payment intent ${paymentIntentId}`);

@@ -70,6 +70,11 @@ export interface RefundPaymentInput {
   };
   amount?: number;
   reason?: string;
+  /**
+   * Stable key binding a refund to exactly one gateway refund operation, so that
+   * concurrent or retried refund requests can never double-refund at the gateway.
+   */
+  idempotencyKey?: string;
 }
 
 export interface RefundPaymentResult {

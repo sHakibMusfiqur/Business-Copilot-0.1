@@ -251,16 +251,38 @@ export class PaymentProcessingService {
     const gateway = payment.gateway;
     if (!gateway) throw new BadRequestException('Payment has no gateway assigned');
 
+    // Only full refunds are producible today. The schema has no PARTIALLY_REFUNDED
+    // state nor a refundedAmount column, so a partial amount is explicitly rejected
+    // rather than being silently mis-recorded as a full refund. The refunded amount
+    // can never exceed the original amount actually paid.
+    const paidAmount = Number(payment.amount);
+    const refundAmount = paidAmount;
+    if (amount !== undefined) {
+      const requested = Number(amount);
+      if (!Number.isFinite(requested) || requested <= 0) {
+        throw new BadRequestException('Refund amount must be a positive number');
+      }
+      if (requested > paidAmount) {
+        throw new BadRequestException('Refund amount cannot exceed the original payment amount');
+      }
+      if (requested !== paidAmount) {
+        throw new BadRequestException('Partial refunds are not supported; the refund amount must equal the full payment amount');
+      }
+    }
+
     const provider = await this.gatewayRegistry.getProviderByCode(gateway);
     const result = await provider.refundPayment({
       payment: {
         id: payment.id,
-        amount: Number(payment.amount),
+        amount: paidAmount,
         currency: payment.currency,
         transactionRef: payment.transactionRef,
         gatewayData: (payment.gatewayData ?? {}) as Record<string, unknown>,
       },
-      amount,
+      amount: refundAmount,
+      // Ties every refund attempt for this payment to a single gateway refund, so
+      // concurrent or retried requests cannot double-refund at the gateway.
+      idempotencyKey: `refund:${payment.id}`,
     });
 
     if (!result.refunded) {
@@ -272,7 +294,7 @@ export class PaymentProcessingService {
       handled: true,
       status: 'REFUNDED',
       transactionRef: payment.transactionRef,
-      metadata: { refundId: result.refundRef ?? undefined },
+      metadata: { refundId: result.refundRef ?? undefined, refundedAmount: refundAmount },
       raw: result.raw,
     });
   }
@@ -496,46 +518,58 @@ export class PaymentProcessingService {
     result: WebhookHandlingResult,
   ): Promise<VerifyResult> {
     const refundId = (result.metadata?.refundId as string | undefined) ?? null;
+    const refundedAmount = Number(result.metadata?.refundedAmount ?? payment.amount);
 
     const updated = await this.prisma.$transaction(async (tx) => {
-      const current = await tx.subscriptionPayment.findUnique({ where: { id: payment.id } });
-      if (!current) throw new NotFoundException('Payment not found');
-      // Only a SUCCEEDED payment can be refunded. Ignores out-of-order
-      // `charge.refunded` events that arrive before the session is finalized.
-      if (current.status !== 'SUCCEEDED') {
-        this.logger.warn(
-          `Ignoring refund event for payment ${payment.id}: current status is ${current.status}`,
-        );
-        return current;
-      }
-
-      await tx.subscriptionInvoice.updateMany({
-        where: { paymentId: current.id, status: { not: 'VOID' } },
-        data: { status: 'VOID' },
-      });
-
-      return tx.subscriptionPayment.update({
-        where: { id: current.id },
+      // Atomic, single-winner status transition: only a SUCCEEDED payment can be
+      // refunded. Under concurrent refund requests exactly one transaction observes
+      // SUCCEEDED and flips it to REFUNDED (plus voids the invoice); any other request
+      // has its guarded update match no rows and becomes an idempotent no-op, so the
+      // money, the invoice and the status can never be reversed more than once.
+      const flip = await tx.subscriptionPayment.updateMany({
+        where: { id: payment.id, status: 'SUCCEEDED' },
         data: {
           status: 'REFUNDED',
-          gatewayData: this.mergeGatewayData(current.gatewayData, {
+          gatewayData: this.mergeGatewayData(payment.gatewayData, {
             status: 'REFUNDED',
             refundId,
+            refundedAmount,
           }),
         },
       });
+
+      if (flip.count === 0) {
+        const current = await tx.subscriptionPayment.findUnique({ where: { id: payment.id } });
+        return { payment: current ?? payment, voided: false };
+      }
+
+      // Reversal of the invoice: the subscription invoice is the financial record
+      // created on success, so a full refund voids it exactly once.
+      await tx.subscriptionInvoice.updateMany({
+        where: { paymentId: payment.id, status: { not: 'VOID' } },
+        data: { status: 'VOID' },
+      });
+
+      return {
+        payment: (await tx.subscriptionPayment.findUnique({ where: { id: payment.id } })) ?? payment,
+        voided: true,
+      };
     });
 
-    await this.auditService.record({
-      organizationId: payment.organizationId,
-      action: 'PAYMENT.REFUNDED',
-      entity: 'SubscriptionPayment',
-      entityId: payment.id,
-      status: 'SUCCESS',
-      metadata: { gateway: payment.gateway, refundId },
-    });
+    // Only the single transition that actually performed the refund records the
+    // audit event, keeping duplicate/concurrent refunds silent.
+    if (updated.voided) {
+      await this.auditService.record({
+        organizationId: payment.organizationId,
+        action: 'PAYMENT.REFUNDED',
+        entity: 'SubscriptionPayment',
+        entityId: payment.id,
+        status: 'SUCCESS',
+        metadata: { gateway: payment.gateway, refundId, refundedAmount },
+      });
+    }
 
-    return this.buildVerifyResult(updated, payment.organizationId);
+    return this.buildVerifyResult(updated.payment, payment.organizationId);
   }
 
   private async findPaymentByWebhook(result: WebhookHandlingResult) {
