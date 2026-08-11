@@ -156,33 +156,16 @@ export class SalesService {
       throw new BadRequestException('One or more products not found');
     }
 
-    const itemsData: Array<{
-      productId: string;
-      description: string;
-      quantity: number;
-      unitPrice: number;
-      discount: number;
-      tax: number;
-      lineTotal: number;
-    }> = dto.items.map((item) => {
-      const product = products.find((p) => p.id === item.productId);
-      const unitPrice = Number(product?.unitPrice ?? 0);
-      const lineTotal = (unitPrice * item.quantity) - (item.discount ?? 0) + (item.tax ?? 0);
-      return {
-        productId: item.productId,
-        description: product?.name ?? '',
-        quantity: item.quantity,
-        unitPrice,
-        discount: item.discount ?? 0,
-        tax: item.tax ?? 0,
-        lineTotal,
-      };
-    });
+    const itemsData = this.buildSaleItems(dto.items, products);
 
     const subtotal = itemsData.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
     const totalDiscount = itemsData.reduce((sum, item) => sum + item.discount, 0);
     const totalTax = itemsData.reduce((sum, item) => sum + item.tax, 0);
     const total = subtotal - totalDiscount + totalTax;
+
+    if (total < 0) {
+      throw new BadRequestException('Sales order total cannot be negative');
+    }
 
     const maxRetries = 5;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -263,25 +246,16 @@ export class SalesService {
         throw new BadRequestException('One or more products not found');
       }
 
-      const itemsData = dto.items.map((item) => {
-        const product = products.find((p) => p.id === item.productId);
-        const unitPrice = Number(product?.unitPrice ?? 0);
-        const lineTotal = (unitPrice * item.quantity) - (item.discount ?? 0) + (item.tax ?? 0);
-        return {
-          productId: item.productId,
-          description: product?.name ?? '',
-          quantity: item.quantity,
-          unitPrice,
-          discount: item.discount ?? 0,
-          tax: item.tax ?? 0,
-          lineTotal,
-        };
-      });
+      const itemsData = this.buildSaleItems(dto.items, products);
 
       const subtotal = itemsData.reduce((sum, item) => sum + (item.unitPrice * item.quantity), 0);
       const totalDiscount = itemsData.reduce((sum, item) => sum + item.discount, 0);
       const totalTax = itemsData.reduce((sum, item) => sum + item.tax, 0);
       const total = subtotal - totalDiscount + totalTax;
+
+      if (total < 0) {
+        throw new BadRequestException('Sales order total cannot be negative');
+      }
 
       await this.prisma.$transaction(async (tx) => {
         await tx.salesOrderItem.deleteMany({
@@ -495,6 +469,56 @@ export class SalesService {
 
     this.logger.log(`Sales order deleted: ${sale.orderNumber} (${saleId}) by ${userId}`);
     return { message: 'Sales order deleted successfully' };
+  }
+
+  private buildSaleItems(
+    dtoItems: Array<{ productId: string; quantity: number; discount?: number; tax?: number }>,
+    products: Array<{ id: string; name: string; unitPrice: unknown }>,
+  ): Array<{
+    productId: string;
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    discount: number;
+    tax: number;
+    lineTotal: number;
+  }> {
+    return dtoItems.map((item) => {
+      const product = products.find((p) => p.id === item.productId);
+      const unitPrice = Number(product?.unitPrice ?? 0);
+      const quantity = Number(item.quantity);
+      const discount = Number(item.discount ?? 0);
+      const tax = Number(item.tax ?? 0);
+      const lineSubtotal = unitPrice * quantity;
+
+      if (!Number.isFinite(discount) || discount < 0) {
+        throw new BadRequestException('Discount must be a non-negative number');
+      }
+
+      if (discount > lineSubtotal) {
+        throw new BadRequestException('Discount cannot exceed the line subtotal');
+      }
+
+      if (!Number.isFinite(tax) || tax < 0) {
+        throw new BadRequestException('Tax must be a non-negative number');
+      }
+
+      const lineTotal = lineSubtotal - discount + tax;
+
+      if (lineTotal < 0) {
+        throw new BadRequestException('Line total cannot be negative');
+      }
+
+      return {
+        productId: item.productId,
+        description: product?.name ?? '',
+        quantity,
+        unitPrice,
+        discount,
+        tax,
+        lineTotal,
+      };
+    });
   }
 
   private async generateOrderNumber(): Promise<string> {

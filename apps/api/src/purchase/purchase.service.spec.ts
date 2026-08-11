@@ -1,4 +1,4 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
 
 import { PurchaseService } from './purchase.service';
 import { PurchaseController } from './purchase.controller';
@@ -419,5 +419,145 @@ describe('PurchaseController permission metadata (P3-L1)', () => {
   it('approve() must not be protected by purchase.update', () => {
     const metadata = Reflect.getMetadata(PERMISSIONS_KEY, PurchaseController.prototype.approve);
     expect(metadata.permissions).not.toContain('purchase.update');
+  });
+});
+
+describe('PurchaseService pricing validation (V-1)', () => {
+  let service: PurchaseService;
+  let supplierFindFirst: jest.Mock;
+  let productFindMany: jest.Mock;
+  let orderFindFirst: jest.Mock;
+  let orderCreate: jest.Mock;
+  let orderUpdate: jest.Mock;
+  let itemDeleteMany: jest.Mock;
+  let itemCreateMany: jest.Mock;
+
+  beforeEach(() => {
+    supplierFindFirst = jest.fn().mockResolvedValue({ id: 'sup-1' });
+    productFindMany = jest.fn().mockResolvedValue([{ id: PRODUCT_ID, name: 'Widget', costPrice: 80 }]);
+    orderFindFirst = jest.fn().mockResolvedValue(null);
+    orderCreate = jest.fn().mockResolvedValue({ id: PURCHASE_ID, orderNumber: 'PO-2026-000001', status: 'DRAFT', total: 0 });
+    orderUpdate = jest.fn().mockResolvedValue({ id: PURCHASE_ID });
+    itemDeleteMany = jest.fn().mockResolvedValue({});
+    itemCreateMany = jest.fn().mockResolvedValue({});
+
+    service = new PurchaseService(
+      {
+        supplier: { findFirst: supplierFindFirst },
+        product: { findMany: productFindMany },
+        purchaseOrder: { findFirst: orderFindFirst, create: orderCreate, update: orderUpdate },
+        purchaseOrderItem: { deleteMany: itemDeleteMany, createMany: itemCreateMany },
+      } as unknown as PrismaService,
+      {} as never,
+    );
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('create() rejects a discount that exceeds the line subtotal', async () => {
+    await expect(
+      service.create(ORG_ID, USER_ID, {
+        supplierId: 'sup-1',
+        items: [{ productId: PRODUCT_ID, quantity: 1, unitCost: 0, discount: 200, tax: 0 }],
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('create() accepts a discount equal to the line subtotal (zero-value line)', async () => {
+    await service.create(ORG_ID, USER_ID, {
+      supplierId: 'sup-1',
+      items: [{ productId: PRODUCT_ID, quantity: 1, unitCost: 0, discount: 80, tax: 0 }],
+    });
+
+    expect(orderCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ subtotal: 80, discount: 80, tax: 0, total: 0 }),
+      }),
+    );
+  });
+
+  it('create() accepts a discount below the line subtotal', async () => {
+    await service.create(ORG_ID, USER_ID, {
+      supplierId: 'sup-1',
+      items: [{ productId: PRODUCT_ID, quantity: 1, unitCost: 0, discount: 40, tax: 0 }],
+    });
+
+    expect(orderCreate).toHaveBeenCalled();
+  });
+
+  it('create() rejects a negative discount', async () => {
+    await expect(
+      service.create(ORG_ID, USER_ID, {
+        supplierId: 'sup-1',
+        items: [{ productId: PRODUCT_ID, quantity: 1, unitCost: 0, discount: -5, tax: 0 }],
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('create() rejects a negative tax', async () => {
+    await expect(
+      service.create(ORG_ID, USER_ID, {
+        supplierId: 'sup-1',
+        items: [{ productId: PRODUCT_ID, quantity: 1, unitCost: 0, discount: 0, tax: -5 }],
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('create() rejects a request whose total would be negative and persists nothing', async () => {
+    await expect(
+      service.create(ORG_ID, USER_ID, {
+        supplierId: 'sup-1',
+        items: [{ productId: PRODUCT_ID, quantity: 1, unitCost: 0, discount: 9999, tax: 0 }],
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('create() succeeds for a valid multi-line order', async () => {
+    productFindMany.mockResolvedValue([
+      { id: PRODUCT_ID, name: 'Widget', costPrice: 80 },
+      { id: 'prod-2', name: 'Gadget', costPrice: 40 },
+    ]);
+
+    await service.create(ORG_ID, USER_ID, {
+      supplierId: 'sup-1',
+      items: [
+        { productId: PRODUCT_ID, quantity: 1, unitCost: 0, discount: 0, tax: 0 },
+        { productId: 'prod-2', quantity: 1, unitCost: 0, discount: 0, tax: 0 },
+      ],
+    });
+
+    expect(orderCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ subtotal: 120, discount: 0, tax: 0, total: 120 }),
+      }),
+    );
+  });
+
+  it('update() rejects a discount that would make the total negative and persists nothing', async () => {
+    orderFindFirst.mockResolvedValue({ id: PURCHASE_ID, organizationId: ORG_ID, status: 'DRAFT' });
+
+    await expect(
+      service.update(ORG_ID, USER_ID, PURCHASE_ID, {
+        items: [{ productId: PRODUCT_ID, quantity: 1, unitCost: 0, discount: 9999, tax: 0 }],
+      }),
+    ).rejects.toThrow(BadRequestException);
+    expect(itemDeleteMany).not.toHaveBeenCalled();
+    expect(itemCreateMany).not.toHaveBeenCalled();
+  });
+
+  it('update() succeeds for a valid order', async () => {
+    orderFindFirst.mockResolvedValue({ id: PURCHASE_ID, organizationId: ORG_ID, status: 'DRAFT' });
+
+    await service.update(ORG_ID, USER_ID, PURCHASE_ID, {
+      items: [{ productId: PRODUCT_ID, quantity: 1, unitCost: 0, discount: 0, tax: 0 }],
+    });
+
+    expect(orderUpdate).toHaveBeenCalled();
   });
 });
