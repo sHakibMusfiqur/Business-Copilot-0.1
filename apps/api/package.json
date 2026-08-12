@@ -29,6 +29,7 @@
     "@nestjs/swagger": "^11.0.0",
     "@nestjs/throttler": "^6.0.0",
     "@bc/db": "*",
+    "@bc/core": "*",
     "@prisma/client": "^6.0.0",
     "argon2": "^0.41.0",
     "class-transformer": "^0.5.1",
