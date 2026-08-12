@@ -635,6 +635,50 @@ export class AccountingService {
         }
       }
 
+      // D-B2: Enforce amount <= remaining balance BEFORE creating the payment
+      // record. This is defense-in-depth — processPaymentAllocation re-validates
+      // under a FOR UPDATE lock, but failing fast here avoids creating an
+      // oversized payment record that only gets rolled back.
+      if (dto.type === PaymentType.CUSTOMER_PAYMENT && dto.receivableId) {
+        const receivable = await tx.receivable.findFirst({
+          where: { id: dto.receivableId, organizationId: orgId },
+          select: { totalAmount: true, paidAmount: true, status: true },
+        });
+        if (!receivable) throw new NotFoundException('Receivable not found');
+        if (receivable.status === 'PAID') {
+          throw new BadRequestException('Receivable is already fully paid');
+        }
+        if (receivable.status === 'CANCELLED') {
+          throw new BadRequestException('Receivable is cancelled and cannot receive payments');
+        }
+        const remaining = Number(receivable.totalAmount) - Number(receivable.paidAmount);
+        if (Number(dto.amount) > remaining) {
+          throw new BadRequestException(
+            `Payment amount exceeds the remaining balance of ${remaining.toFixed(2)} for this receivable`,
+          );
+        }
+      }
+
+      if (dto.type === PaymentType.SUPPLIER_PAYMENT && dto.payableId) {
+        const payable = await tx.payable.findFirst({
+          where: { id: dto.payableId, organizationId: orgId },
+          select: { totalAmount: true, paidAmount: true, status: true },
+        });
+        if (!payable) throw new NotFoundException('Payable not found');
+        if (payable.status === 'PAID') {
+          throw new BadRequestException('Payable is already fully paid');
+        }
+        if (payable.status === 'CANCELLED') {
+          throw new BadRequestException('Payable is cancelled and cannot receive payments');
+        }
+        const remaining = Number(payable.totalAmount) - Number(payable.paidAmount);
+        if (Number(dto.amount) > remaining) {
+          throw new BadRequestException(
+            `Payment amount exceeds the remaining balance of ${remaining.toFixed(2)} for this payable`,
+          );
+        }
+      }
+
       const payment = await tx.payment.create({
         data: {
           organizationId: orgId,

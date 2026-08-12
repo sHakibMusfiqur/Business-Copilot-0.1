@@ -1,5 +1,6 @@
 import { Test, type TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, InternalServerErrorException, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -916,6 +917,153 @@ describe('PaymentProcessingService', () => {
               refundedAmount: 79,
             }),
           }),
+        }),
+      );
+    });
+  });
+
+  describe('D-B3: invoice number concurrency (P2002 retry)', () => {
+    const year = new Date().getFullYear();
+
+    function prismaError(code: string): Prisma.PrismaClientKnownRequestError {
+      return new Prisma.PrismaClientKnownRequestError(`Unique constraint failed (${code})`, {
+        code,
+        clientVersion: '5.0.0',
+        meta: { target: ['organizationId', 'invoiceNumber'] },
+      });
+    }
+
+    function setupSuccessfulVerify() {
+      mockPrisma.subscriptionPayment.findFirst.mockResolvedValue(makePayment());
+      mockProvider.verifyPayment.mockResolvedValue({
+        verified: true,
+        status: 'SUCCEEDED',
+        transactionRef: 'pi_1',
+        raw: { paymentIntentId: 'pi_1' },
+      });
+      mockPrisma.subscriptionPayment.findUnique.mockResolvedValue(makePayment());
+      mockPrisma.subscriptionPlan.findUnique.mockResolvedValue(makePlan());
+      mockPrisma.subscription.upsert.mockResolvedValue(makeSubscription());
+      mockPrisma.subscriptionPayment.update.mockResolvedValue(
+        makePayment({ status: 'SUCCEEDED', subscriptionId: 'sub-1', transactionRef: 'pi_1' }),
+      );
+    }
+
+    it('sequential invoice generation uses incrementing sequence numbers', async () => {
+      setupSuccessfulVerify();
+      mockPrisma.subscriptionInvoice.findMany
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([{ invoiceNumber: `INV-${year}-0001` }]);
+      mockPrisma.subscriptionInvoice.create
+        .mockResolvedValueOnce(makeInvoice({ invoiceNumber: `INV-${year}-0001` }))
+        .mockResolvedValueOnce(makeInvoice({ invoiceNumber: `INV-${year}-0002` }));
+
+      await service.verifyPayment(orgId, userId, 'pay-1');
+      expect(mockPrisma.subscriptionInvoice.create).toHaveBeenNthCalledWith(1,
+        expect.objectContaining({ data: expect.objectContaining({ invoiceNumber: `INV-${year}-0001` }) }),
+      );
+
+      mockPrisma.subscriptionPayment.findFirst.mockResolvedValue(makePayment({ id: 'pay-2' }));
+      mockProvider.verifyPayment.mockResolvedValue({
+        verified: true,
+        status: 'SUCCEEDED',
+        transactionRef: 'pi_2',
+        raw: { paymentIntentId: 'pi_2' },
+      });
+      mockPrisma.subscriptionPayment.findUnique.mockResolvedValue(makePayment({ id: 'pay-2' }));
+      mockPrisma.subscriptionPlan.findUnique.mockResolvedValue(makePlan());
+      mockPrisma.subscription.upsert.mockResolvedValue(makeSubscription());
+      mockPrisma.subscriptionPayment.update.mockResolvedValue(
+        makePayment({ id: 'pay-2', status: 'SUCCEEDED', subscriptionId: 'sub-1', transactionRef: 'pi_2' }),
+      );
+
+      await service.verifyPayment(orgId, userId, 'pay-2');
+      expect(mockPrisma.subscriptionInvoice.create).toHaveBeenNthCalledWith(2,
+        expect.objectContaining({ data: expect.objectContaining({ invoiceNumber: `INV-${year}-0002` }) }),
+      );
+    });
+
+    it('retries on a P2002 collision and succeeds with a regenerated number', async () => {
+      setupSuccessfulVerify();
+      mockPrisma.subscriptionInvoice.findMany.mockResolvedValue([]);
+      mockPrisma.subscriptionInvoice.create
+        .mockRejectedValueOnce(prismaError('P2002'))
+        .mockResolvedValueOnce(makeInvoice({ invoiceNumber: `INV-${year}-0001` }));
+
+      const result = await service.verifyPayment(orgId, userId, 'pay-1');
+
+      expect(mockPrisma.subscriptionInvoice.create).toHaveBeenCalledTimes(2);
+      expect(mockPrisma.subscriptionInvoice.create).toHaveBeenNthCalledWith(1,
+        expect.objectContaining({ data: expect.objectContaining({ invoiceNumber: `INV-${year}-0001` }) }),
+      );
+      expect(result.payment.status).toBe('SUCCEEDED');
+    });
+
+    it('throws InternalServerErrorException after max retries exhausted', async () => {
+      setupSuccessfulVerify();
+      mockPrisma.subscriptionInvoice.findMany.mockResolvedValue([]);
+      mockPrisma.subscriptionInvoice.create.mockRejectedValue(prismaError('P2002'));
+
+      await expect(service.verifyPayment(orgId, userId, 'pay-1')).rejects.toThrow(
+        InternalServerErrorException,
+      );
+      expect(mockPrisma.subscriptionInvoice.create).toHaveBeenCalledTimes(5);
+    });
+
+    it('does not retry non-P2002 Prisma errors', async () => {
+      setupSuccessfulVerify();
+      mockPrisma.subscriptionInvoice.findMany.mockResolvedValue([]);
+      const otherErr = new Prisma.PrismaClientKnownRequestError('Connection interrupted', {
+        code: 'P2024',
+        clientVersion: '5.0.0',
+        meta: {},
+      });
+      mockPrisma.subscriptionInvoice.create.mockRejectedValue(otherErr);
+
+      await expect(service.verifyPayment(orgId, userId, 'pay-1')).rejects.toThrow(
+        'Connection interrupted',
+      );
+      expect(mockPrisma.subscriptionInvoice.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('scopes invoice numbering to the organization', async () => {
+      setupSuccessfulVerify();
+      mockPrisma.subscriptionInvoice.findMany.mockResolvedValue([
+        { invoiceNumber: `INV-${year}-0001` },
+        { invoiceNumber: `INV-${year}-0002` },
+      ]);
+      mockPrisma.subscriptionInvoice.create.mockResolvedValue(
+        makeInvoice({ invoiceNumber: `INV-${year}-0003` }),
+      );
+
+      await service.verifyPayment(orgId, userId, 'pay-1');
+
+      expect(mockPrisma.subscriptionInvoice.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            invoiceNumber: `INV-${year}-0003`,
+            organizationId: orgId,
+          }),
+        }),
+      );
+      expect(mockPrisma.subscriptionInvoice.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { organizationId: orgId } }),
+      );
+    });
+
+    it('existing invoice/payment behavior remains unchanged after retry logic', async () => {
+      setupSuccessfulVerify();
+      mockPrisma.subscriptionInvoice.findMany.mockResolvedValue([]);
+      mockPrisma.subscriptionInvoice.create.mockResolvedValue(makeInvoice());
+
+      const result = await service.verifyPayment(orgId, userId, 'pay-1');
+
+      expect(result.payment.status).toBe('SUCCEEDED');
+      expect(result.subscription).toEqual(expect.objectContaining({ status: 'ACTIVE' }));
+      expect(result.invoice).toEqual(expect.objectContaining({ status: 'PAID' }));
+      expect(mockPrisma.subscriptionPayment.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'SUCCEEDED', subscriptionId: 'sub-1' }),
         }),
       );
     });

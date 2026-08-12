@@ -1,10 +1,12 @@
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import type { Prisma, SubscriptionPayment } from '@prisma/client';
+import { Prisma } from '@prisma/client';
+import type { SubscriptionPayment } from '@prisma/client';
 
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -424,23 +426,42 @@ export class PaymentProcessingService {
     subscriptionId: string,
     issuedAt: Date,
   ) {
-    const invoiceNumber = await this.nextInvoiceNumber(tx, payment.organizationId);
-    return tx.subscriptionInvoice.create({
-      data: {
-        organizationId: payment.organizationId,
-        subscriptionId,
-        paymentId: payment.id,
-        invoiceNumber,
-        amount: payment.amount,
-        currency: payment.currency,
-        billingInterval: payment.billingInterval,
-        status: 'PAID',
-        issuedAt,
-        dueAt: issuedAt,
-        paidAt: issuedAt,
-        metadata: { generatedBy: 'billing' },
-      },
-    });
+    const maxRetries = 5;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const invoiceNumber = await this.nextInvoiceNumber(tx, payment.organizationId);
+
+      try {
+        return await tx.subscriptionInvoice.create({
+          data: {
+            organizationId: payment.organizationId,
+            subscriptionId,
+            paymentId: payment.id,
+            invoiceNumber,
+            amount: payment.amount,
+            currency: payment.currency,
+            billingInterval: payment.billingInterval,
+            status: 'PAID',
+            issuedAt,
+            dueAt: issuedAt,
+            paidAt: issuedAt,
+            metadata: { generatedBy: 'billing' },
+          },
+        });
+      } catch (err) {
+        const isP2002 = (err as Prisma.PrismaClientKnownRequestError)?.code === 'P2002';
+        if (!isP2002) throw err;
+        if (attempt < maxRetries) {
+          this.logger.warn(
+            `Invoice number collision for ${invoiceNumber}, retrying (${attempt}/${maxRetries})`,
+          );
+          continue;
+        }
+        // Last attempt — fall through to exhaustion throw below
+      }
+    }
+    throw new InternalServerErrorException(
+      'Failed to generate invoice number due to collision. Please try again.',
+    );
   }
 
   private async nextInvoiceNumber(
