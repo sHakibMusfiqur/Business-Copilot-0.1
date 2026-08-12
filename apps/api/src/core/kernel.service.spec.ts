@@ -2,6 +2,7 @@ import type { ModuleManifest } from '@bc/core';
 
 import { KernelService } from './kernel.service';
 import { ModuleRegistry } from './module-registry';
+import { ServiceRegistry } from './service-registry';
 
 function makeModule(id: string): ModuleManifest {
   return {
@@ -19,7 +20,7 @@ describe('KernelService', () => {
   let kernel: KernelService;
 
   beforeEach(() => {
-    kernel = new KernelService(new ModuleRegistry());
+    kernel = new KernelService(new ModuleRegistry(), new ServiceRegistry());
   });
 
   it('registers and exposes a module', () => {
