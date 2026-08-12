@@ -20,6 +20,8 @@ describe('ServiceBootstrapper (Nest DI registration)', () => {
 
     expect(config).toBeInstanceOf(ConfigService);
     expect(redis).toBeInstanceOf(RedisService);
+
+    await moduleRef.close();
   });
 
   it('registers config and redis services into the ServiceRegistry via KernelService exactly once', async () => {
@@ -38,6 +40,8 @@ describe('ServiceBootstrapper (Nest DI registration)', () => {
     // Registered exactly once regardless of repeated bootstrap.
     expect(kernel.listServices().filter((s) => s.name === 'config')).toHaveLength(1);
     expect(kernel.listServices().filter((s) => s.name === 'redis')).toHaveLength(1);
+
+    await moduleRef.close();
   });
 
   it('lets KernelService retrieve the registered services', async () => {
@@ -53,6 +57,8 @@ describe('ServiceBootstrapper (Nest DI registration)', () => {
 
     expect(kernel.getService<ConfigService>('config')).toBeInstanceOf(ConfigService);
     expect(kernel.getService<RedisService>('redis')).toBeInstanceOf(RedisService);
+
+    await moduleRef.close();
   });
 
   it('keeps existing CoreModule bootstrap registering CRM/Billing manifests', async () => {
@@ -65,6 +71,8 @@ describe('ServiceBootstrapper (Nest DI registration)', () => {
 
     expect(kernel.hasModule('crm')).toBe(true);
     expect(kernel.hasModule('billing')).toBe(true);
+
+    await moduleRef.close();
   });
 
   it('initializes and shuts down the application lifecycle without errors', async () => {

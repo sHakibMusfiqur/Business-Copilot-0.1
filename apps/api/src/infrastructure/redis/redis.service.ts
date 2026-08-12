@@ -93,6 +93,11 @@ export class RedisService implements OnModuleDestroy {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.warn(`Redis shutdown error: ${message}`);
     }
+    // Force-disconnect after the graceful quit so no TCP socket, reconnect
+    // backoff timer, or pending command can keep the process (or a test runner)
+    // alive. Reaching a live server resolves `quit()`; on a broken connection
+    // `disconnect()` guarantees the client fully releases its resources.
+    this.client.disconnect();
   }
 
   private readRedisUrl(): string {
