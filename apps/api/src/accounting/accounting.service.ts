@@ -604,6 +604,17 @@ export class AccountingService {
       throw new BadRequestException('supplierId is required for supplier payments');
     }
 
+    // D-B1: customer/supplier payments must be allocated to an existing receivable/payable.
+    // Without this, payments can exist without any accounting journal, creating
+    // orphan/unreconciled entries. The allocation method below validates org-scoping.
+    if (dto.type === PaymentType.CUSTOMER_PAYMENT && !dto.receivableId) {
+      throw new BadRequestException('receivableId is required for customer payments');
+    }
+
+    if (dto.type === PaymentType.SUPPLIER_PAYMENT && !dto.payableId) {
+      throw new BadRequestException('payableId is required for supplier payments');
+    }
+
     return this.prisma.$transaction(async (tx) => {
       if (dto.customerId) {
         const customer = await tx.customer.findFirst({

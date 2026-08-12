@@ -469,4 +469,74 @@ describe('AccountingService processPaymentAllocation (P3-H1 / P3-H2)', () => {
       expect(tx.journalEntry.create).toHaveBeenCalledTimes(1);
     });
   });
+
+  // ─── D-B1: orphan payment prevention ─────────────────────────
+
+  describe('D-B1: rejects payments without receivable/payable allocation', () => {
+    const makeSupplierDto = (overrides: Record<string, unknown> = {}) => ({
+      type: PaymentType.SUPPLIER_PAYMENT,
+      supplierId: 'sup-1',
+      amount: 60,
+      payableId: 'pay-1',
+      ...overrides,
+    });
+
+    it('rejects a customer payment without receivableId', async () => {
+      await expect(
+        service.createPayment(ORG_ID, USER_ID, makeDto({ receivableId: undefined })),
+      ).rejects.toThrow('receivableId is required for customer payments');
+    });
+
+    it('rejects a supplier payment without payableId', async () => {
+      await expect(
+        service.createPayment(ORG_ID, USER_ID, makeSupplierDto({ payableId: undefined })),
+      ).rejects.toThrow('payableId is required for supplier payments');
+    });
+
+    it('accepts a valid customer payment with receivableId (unchanged behavior)', async () => {
+      tx.receivable.findFirst.mockResolvedValue(receivable({ paidAmount: 40, status: 'PENDING' }));
+
+      const result = await service.createPayment(ORG_ID, USER_ID, makeDto({ amount: 20 }));
+
+      expect(result).toBeDefined();
+      expect(tx.paymentAllocation.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ receivableId: 'rec-1', amount: 20 }),
+      });
+    });
+
+    it('accepts a valid supplier payment with payableId (unchanged behavior)', async () => {
+      tx.payable.findFirst.mockResolvedValue(payable({ paidAmount: 40, status: 'PENDING' }));
+
+      const result = await service.createPayment(ORG_ID, USER_ID, makeSupplierDto({ amount: 20 }));
+
+      expect(result).toBeDefined();
+      expect(tx.paymentAllocation.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ payableId: 'pay-1', amount: 20 }),
+      });
+    });
+
+    it('rejects a cross-organization receivable', async () => {
+      tx.receivable.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.createPayment(ORG_ID, USER_ID, makeDto({ receivableId: 'rec-other-org', amount: 20 })),
+      ).rejects.toThrow('Receivable not found');
+    });
+
+    it('rejects a cross-organization payable', async () => {
+      tx.payable.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.createPayment(ORG_ID, USER_ID, makeSupplierDto({ payableId: 'pay-other-org', amount: 20 })),
+      ).rejects.toThrow('Payable not found');
+    });
+
+    it('preserves existing allocation and remaining-balance validation', async () => {
+      tx.receivable.findFirst.mockResolvedValue(receivable({ paidAmount: 90, status: 'PARTIALLY_PAID' }));
+
+      await expect(
+        service.createPayment(ORG_ID, USER_ID, makeDto({ amount: 20 })),
+      ).rejects.toThrow('Payment amount exceeds the remaining balance');
+    });
+  });
 });
