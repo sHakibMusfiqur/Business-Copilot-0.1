@@ -1,8 +1,10 @@
 import { Global, Module } from '@nestjs/common';
 
 import { KernelBootstrap } from './kernel-bootstrap';
+import { KernelLifecycle } from './kernel-lifecycle';
 import { KernelService } from './kernel.service';
 import { ModuleRegistry } from './module-registry';
+import { ServiceBootstrapper } from './service-bootstrap';
 import { ServiceRegistry } from './service-registry';
 
 @Global()
@@ -12,6 +14,8 @@ import { ServiceRegistry } from './service-registry';
     ServiceRegistry,
     KernelService,
     KernelBootstrap,
+    KernelLifecycle,
+    ServiceBootstrapper,
   ],
   exports: [KernelService, ModuleRegistry, ServiceRegistry],
 })

@@ -40,7 +40,7 @@ describe('KernelBootstrap', () => {
     const { kernel, bootstrap } = makeKernel();
     bootstrap.registerBuiltinModules();
     bootstrap.registerBuiltinModules();
-    bootstrap.onApplicationBootstrap();
+    bootstrap.registerBuiltinModules();
     expect(kernel.listModules()).toHaveLength(BUILTIN_MODULE_MANIFESTS.length);
     expect(kernel.listModules().filter((m) => m.id === 'crm')).toHaveLength(1);
     expect(kernel.listModules().filter((m) => m.id === 'billing')).toHaveLength(1);
