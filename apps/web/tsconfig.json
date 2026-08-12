@@ -18,7 +18,8 @@
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./src/*"],
-      "@bc/types": ["../../packages/types/src"]
+      "@bc/types": ["../../packages/types/src"],
+      "@bc/core": ["../../packages/core/src"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

@@ -1,4 +1,4 @@
-import type { CapabilityKey } from '@/core/types';
+import type { CapabilityKey } from '@bc/core';
 import type { ModuleManifest } from '@/core/modules/types';
 
 import type { ResolvedCapabilities } from './types';

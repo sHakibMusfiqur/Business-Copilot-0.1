@@ -22,7 +22,8 @@
     "resolveJsonModule": true,
     "paths": {
       "@/*": ["src/*"],
-      "@bc/db": ["../../packages/db/src/index.ts"]
+      "@bc/db": ["../../packages/db/src/index.ts"],
+      "@bc/core": ["../../packages/core/src"]
     }
   },
   "include": ["src/**/*"]

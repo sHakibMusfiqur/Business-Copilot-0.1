@@ -1,4 +1,4 @@
-import type { CapabilityKey } from '@/core/types';
+import type { CapabilityKey } from '@bc/core';
 
 import { MODULE_CATEGORIES } from './categories';
 import { MODULE_MANIFESTS } from './definitions';

@@ -1,13 +1,27 @@
-import type { LucideIcon } from 'lucide-react';
-
-import type { CapabilityKey } from '@bc/core';
+export type CapabilityKey =
+  | 'dashboard'
+  | 'analytics'
+  | 'reports'
+  | 'crm'
+  | 'accounting'
+  | 'finance'
+  | 'inventory'
+  | 'procurement'
+  | 'manufacturing'
+  | 'hr'
+  | 'payroll'
+  | 'pos'
+  | 'ecommerce'
+  | 'ai'
+  | 'workflow'
+  | 'administration'
+  | 'platform';
 
 /** Catalog entry for a business capability. */
 export interface CapabilityDef {
   id: CapabilityKey;
   label: string;
   description: string;
-  icon?: LucideIcon;
 }
 
 /** The capabilities granted to the current workspace context. */

@@ -3,7 +3,9 @@
   "compilerOptions": {
     "baseUrl": "./",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["src/*"],
+      "@bc/db": ["../../packages/db/src/index.ts"],
+      "@bc/core": ["../../packages/core/src"]
     }
   },
   "exclude": ["node_modules", "dist", "test", "**/*spec.ts"]

@@ -1,4 +1,4 @@
-import type { CapabilityKey } from '@/core/types';
+import type { CapabilityKey } from '@bc/core';
 import type { ResolvedWorkspace } from '@/core/workspace/types';
 import { INDUSTRY_PROFILES } from '@/core/workspace/industries';
 

@@ -15,7 +15,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import type { CapabilityKey } from '@/core/types';
+import type { CapabilityKey } from '@bc/core';
 
 import type { CapabilityDef } from './types';
 
