@@ -521,11 +521,25 @@ export class PaymentProcessingService {
     const refundedAmount = Number(result.metadata?.refundedAmount ?? payment.amount);
 
     const updated = await this.prisma.$transaction(async (tx) => {
+      // F-2: Serialize concurrent refund requests for the same payment with a row
+      // lock, mirroring finalizeSuccessfulPayment. Only transactions able to lock
+      // the row proceed; the guarded updateMany below then selects the single winner.
+      //
+      // IMPORTANT: this lock does NOT span the external Stripe call (the gateway is
+      // invoked before markPaymentRefunded), so it cannot serialize the gateway
+      // request itself. Holding a DB transaction open across an HTTP call would be
+      // unsafe and is deliberately avoided. Duplicate/retried gateway attempts are
+      // instead made safe by the deterministic idempotency key (`refund:<paymentId>`),
+      // which the gateway deduplicates, while the local state/invoice/audit/lifecycle
+      // transitions are serialized by this lock + conditioned update.
+      await tx.$queryRaw`SELECT id FROM "SubscriptionPayment" WHERE id = ${payment.id} FOR UPDATE`;
+
       // Atomic, single-winner status transition: only a SUCCEEDED payment can be
       // refunded. Under concurrent refund requests exactly one transaction observes
-      // SUCCEEDED and flips it to REFUNDED (plus voids the invoice); any other request
-      // has its guarded update match no rows and becomes an idempotent no-op, so the
-      // money, the invoice and the status can never be reversed more than once.
+      // SUCCEEDED and flips it to REFUNDED (also voiding the invoice and canceling
+      // the subscription); any other request has its guarded update match no rows
+      // and becomes an idempotent no-op. The money, the invoice, the audit event and
+      // the subscription lifecycle transition therefore can never be performed twice.
       const flip = await tx.subscriptionPayment.updateMany({
         where: { id: payment.id, status: 'SUCCEEDED' },
         data: {
@@ -548,6 +562,23 @@ export class PaymentProcessingService {
       await tx.subscriptionInvoice.updateMany({
         where: { paymentId: payment.id, status: { not: 'VOID' } },
         data: { status: 'VOID' },
+      });
+
+      // F-3: A successful FULL refund cancels the subscription that the payment
+      // activated. This happens atomically with the refund state update, only on the
+      // single-winner path, so duplicate or out-of-order refund handling can never
+      // repeat the lifecycle transition. It reuses the existing CANCELLED state (no
+      // new state is invented) and is guarded to the active/past-due statuses so an
+      // already-terminated subscription is left untouched. Failed refunds never reach
+      // this point, so the subscription stays active in that case.
+      await tx.subscription.updateMany({
+        where: {
+          ...(payment.subscriptionId
+            ? { id: payment.subscriptionId }
+            : { organizationId: payment.organizationId }),
+          status: { in: ['ACTIVE', 'PAST_DUE'] },
+        },
+        data: { status: 'CANCELLED', canceledAt: new Date() },
       });
 
       return {

@@ -103,6 +103,7 @@ const mockPrisma = {
   subscription: {
     findUnique: jest.fn(),
     upsert: jest.fn(),
+    updateMany: jest.fn(),
   },
   subscriptionInvoice: {
     findFirst: jest.fn(),
@@ -573,6 +574,14 @@ describe('PaymentProcessingService', () => {
       expect(mockAuditService.record).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'PAYMENT.REFUNDED' }),
       );
+      // F-3: a successful full refund also cancels the subscription.
+      expect(mockPrisma.subscription.updateMany).toHaveBeenCalledWith({
+        where: {
+          organizationId: orgId,
+          status: { in: ['ACTIVE', 'PAST_DUE'] },
+        },
+        data: { status: 'CANCELLED', canceledAt: expect.any(Date) },
+      });
     });
 
     it('ignores a refund event when the payment is not yet succeeded', async () => {
@@ -662,9 +671,9 @@ describe('PaymentProcessingService', () => {
   });
 
   describe('refundPayment', () => {
-    it('refunds a succeeded payment and voids the invoice', async () => {
+    it('refunds a succeeded payment, voids the invoice and cancels the subscription', async () => {
       mockPrisma.subscriptionPayment.findFirst.mockResolvedValue(
-        makePayment({ status: 'SUCCEEDED', transactionRef: 'pi_1' }),
+        makePayment({ status: 'SUCCEEDED', transactionRef: 'pi_1', subscriptionId: 'sub-1' }),
       );
       mockProvider.refundPayment.mockResolvedValue({
         refunded: true,
@@ -674,6 +683,7 @@ describe('PaymentProcessingService', () => {
       mockPrisma.subscriptionPayment.findUnique.mockResolvedValue(makePayment({ status: 'REFUNDED' }));
       mockPrisma.subscriptionInvoice.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.subscriptionPayment.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.subscription.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await service.refundPayment(orgId, userId, 'pay-1');
 
@@ -684,6 +694,8 @@ describe('PaymentProcessingService', () => {
           idempotencyKey: 'refund:pay-1',
         }),
       );
+      // F-2: the payment row is locked (FOR UPDATE) before the guarded transition.
+      expect(mockPrisma.$queryRaw.mock.calls[0][0].join('')).toContain('FOR UPDATE');
       expect(mockPrisma.subscriptionInvoice.updateMany).toHaveBeenCalledWith({
         where: { paymentId: 'pay-1', status: { not: 'VOID' } },
         data: { status: 'VOID' },
@@ -694,10 +706,54 @@ describe('PaymentProcessingService', () => {
           data: expect.objectContaining({ status: 'REFUNDED' }),
         }),
       );
+      // F-3: a successful full refund cancels the activated subscription, atomically.
+      expect(mockPrisma.subscription.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'sub-1',
+          status: { in: ['ACTIVE', 'PAST_DUE'] },
+        },
+        data: { status: 'CANCELLED', canceledAt: expect.any(Date) },
+      });
       expect(mockAuditService.record).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'PAYMENT.REFUNDED' }),
       );
       expect(result.payment.status).toBe('REFUNDED');
+    });
+
+    it('serializes concurrent refunds with a db row lock before the guarded transition', async () => {
+      mockPrisma.subscriptionPayment.findFirst.mockResolvedValue(
+        makePayment({ status: 'SUCCEEDED', transactionRef: 'pi_1', subscriptionId: 'sub-1' }),
+      );
+      mockProvider.refundPayment.mockResolvedValue({ refunded: true, refundRef: 're_1' });
+      mockPrisma.subscriptionPayment.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.subscriptionPayment.findUnique.mockResolvedValue(makePayment({ status: 'REFUNDED' }));
+
+      await service.refundPayment(orgId, userId, 'pay-1');
+
+      // F-2: verify the payment row was locked (FOR UPDATE) for serialization.
+      const lockCalled = mockPrisma.$queryRaw.mock.calls.some(
+        (c) => String(c?.[0]?.join?.('') ?? '').includes('FOR UPDATE'),
+      );
+      expect(lockCalled).toBe(true);
+    });
+
+    it('cancels the subscription by organization when the payment has no subscription link', async () => {
+      mockPrisma.subscriptionPayment.findFirst.mockResolvedValue(
+        makePayment({ status: 'SUCCEEDED', transactionRef: 'pi_1' }),
+      );
+      mockProvider.refundPayment.mockResolvedValue({ refunded: true, refundRef: 're_1' });
+      mockPrisma.subscriptionPayment.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.subscriptionPayment.findUnique.mockResolvedValue(makePayment({ status: 'REFUNDED' }));
+
+      await service.refundPayment(orgId, userId, 'pay-1');
+
+      expect(mockPrisma.subscription.updateMany).toHaveBeenCalledWith({
+        where: {
+          organizationId: orgId,
+          status: { in: ['ACTIVE', 'PAST_DUE'] },
+        },
+        data: { status: 'CANCELLED', canceledAt: expect.any(Date) },
+      });
     });
 
     it('rejects a refund for a non-succeeded payment', async () => {
@@ -715,6 +771,63 @@ describe('PaymentProcessingService', () => {
 
       await expect(service.refundPayment(orgId, userId, 'pay-1')).rejects.toThrow(BadRequestException);
       expect(mockPrisma.subscriptionPayment.update).not.toHaveBeenCalled();
+      // F-3: a failed refund must not deactivate the subscription.
+      expect(mockPrisma.subscription.updateMany).not.toHaveBeenCalled();
+      expect(mockAuditService.record).not.toHaveBeenCalled();
+    });
+
+    it('does not deactivate the subscription when the first attempt fails, then succeeds on retry', async () => {
+      mockPrisma.subscriptionPayment.findFirst.mockResolvedValue(
+        makePayment({ status: 'SUCCEEDED', transactionRef: 'pi_1', subscriptionId: 'sub-1' }),
+      );
+      mockProvider.refundPayment
+        .mockResolvedValueOnce({ refunded: false, refundRef: null })
+        .mockResolvedValueOnce({ refunded: true, refundRef: 're_1', raw: { refundId: 're_1' } });
+      mockPrisma.subscriptionPayment.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.subscriptionPayment.findUnique.mockResolvedValue(makePayment({ status: 'REFUNDED' }));
+
+      await expect(service.refundPayment(orgId, userId, 'pay-1')).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.subscription.updateMany).not.toHaveBeenCalled();
+
+      await service.refundPayment(orgId, userId, 'pay-1');
+
+      expect(mockPrisma.subscription.updateMany).toHaveBeenCalledWith({
+        where: { id: 'sub-1', status: { in: ['ACTIVE', 'PAST_DUE'] } },
+        data: { status: 'CANCELLED', canceledAt: expect.any(Date) },
+      });
+      expect(mockProvider.refundPayment).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not repeat the lifecycle transition on a duplicate refund (already refunded)', async () => {
+      mockPrisma.subscriptionPayment.findFirst.mockResolvedValue(
+        makePayment({ status: 'REFUNDED', transactionRef: 'pi_1' }),
+      );
+
+      await expect(service.refundPayment(orgId, userId, 'pay-1')).rejects.toThrow(BadRequestException);
+      expect(mockProvider.refundPayment).not.toHaveBeenCalled();
+      expect(mockPrisma.subscription.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('does not touch an already-cancelled or expired subscription', async () => {
+      mockPrisma.subscriptionPayment.findFirst.mockResolvedValue(
+        makePayment({ status: 'SUCCEEDED', transactionRef: 'pi_1', subscriptionId: 'sub-1' }),
+      );
+      mockProvider.refundPayment.mockResolvedValue({ refunded: true, refundRef: 're_1' });
+      mockPrisma.subscriptionPayment.updateMany.mockResolvedValue({ count: 1 });
+      mockPrisma.subscriptionPayment.findUnique.mockResolvedValue(makePayment({ status: 'REFUNDED' }));
+      // Simulate an already-cancelled subscription.
+      mockPrisma.subscription.updateMany.mockResolvedValue({ count: 0 });
+
+      await service.refundPayment(orgId, userId, 'pay-1');
+
+      // The updateMany fires but matches 0 rows (status not in ACTIVE/PAST_DUE), so no state change.
+      expect(mockPrisma.subscription.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'sub-1',
+          status: { in: ['ACTIVE', 'PAST_DUE'] },
+        },
+        data: { status: 'CANCELLED', canceledAt: expect.any(Date) },
+      });
     });
 
     it('rejects a refund for an unknown payment', async () => {
@@ -774,6 +887,7 @@ describe('PaymentProcessingService', () => {
       await service.handleWebhook('stripe', '{}', {});
 
       expect(mockPrisma.subscriptionInvoice.updateMany).not.toHaveBeenCalled();
+      expect(mockPrisma.subscription.updateMany).not.toHaveBeenCalled();
       expect(mockAuditService.record).not.toHaveBeenCalledWith(
         expect.objectContaining({ action: 'PAYMENT.REFUNDED' }),
       );
