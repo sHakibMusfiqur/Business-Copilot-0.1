@@ -48,12 +48,19 @@ export class LeadController {
     return user.organizationId;
   }
 
+  private async requireCrmAccess(user: CurrentUserPayload): Promise<void> {
+    const workspace = await this.workspaceAccess.resolveForUser(user);
+    this.enforcer.requireModule(workspace, 'crm');
+  }
+
   @Get('summary')
   @UseGuards(PermissionGuard)
   @Permissions(['crm.read', 'crm.activities'])
   @ApiOperation({ summary: 'Get CRM summary' })
   async getSummary(@CurrentUser() user: CurrentUserPayload) {
-    return this.leadService.getSummary(this.requireOrg(user));
+    const orgId = this.requireOrg(user);
+    await this.requireCrmAccess(user);
+    return this.leadService.getSummary(orgId);
   }
 
   @Get('leads')
@@ -62,8 +69,7 @@ export class LeadController {
   @ApiOperation({ summary: 'List all leads' })
   async findAll(@CurrentUser() user: CurrentUserPayload, @Query() query: QueryLeadDto) {
     const orgId = this.requireOrg(user);
-    const workspace = await this.workspaceAccess.resolveForUser(user);
-    this.enforcer.requireModule(workspace, 'crm');
+    await this.requireCrmAccess(user);
     return this.leadService.findAll(orgId, query);
   }
 
@@ -75,7 +81,9 @@ export class LeadController {
     @CurrentUser() user: CurrentUserPayload,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.leadService.findById(this.requireOrg(user), id);
+    const orgId = this.requireOrg(user);
+    await this.requireCrmAccess(user);
+    return this.leadService.findById(orgId, id);
   }
 
   @Post('leads')
@@ -86,7 +94,9 @@ export class LeadController {
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: CreateLeadDto,
   ) {
-    return this.leadService.create(this.requireOrg(user), user.id, dto);
+    const orgId = this.requireOrg(user);
+    await this.requireCrmAccess(user);
+    return this.leadService.create(orgId, user.id, dto);
   }
 
   @Patch('leads/:id')
@@ -98,7 +108,9 @@ export class LeadController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateLeadDto,
   ) {
-    return this.leadService.update(this.requireOrg(user), user.id, id, dto);
+    const orgId = this.requireOrg(user);
+    await this.requireCrmAccess(user);
+    return this.leadService.update(orgId, user.id, id, dto);
   }
 
   @Patch('leads/:id/status')
@@ -110,7 +122,9 @@ export class LeadController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body('status') status: LeadStatus,
   ) {
-    return this.leadService.updateStatus(this.requireOrg(user), user.id, id, status);
+    const orgId = this.requireOrg(user);
+    await this.requireCrmAccess(user);
+    return this.leadService.updateStatus(orgId, user.id, id, status);
   }
 
   @Patch('leads/:id/assign')
@@ -122,7 +136,9 @@ export class LeadController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body('assignedToId') assignedToId: string | null,
   ) {
-    return this.leadService.assignUser(this.requireOrg(user), user.id, id, assignedToId ?? null);
+    const orgId = this.requireOrg(user);
+    await this.requireCrmAccess(user);
+    return this.leadService.assignUser(orgId, user.id, id, assignedToId ?? null);
   }
 
   @Delete('leads/:id')
@@ -133,7 +149,9 @@ export class LeadController {
     @CurrentUser() user: CurrentUserPayload,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.leadService.softDelete(this.requireOrg(user), user.id, id);
+    const orgId = this.requireOrg(user);
+    await this.requireCrmAccess(user);
+    return this.leadService.softDelete(orgId, user.id, id);
   }
 
   @Get('leads/:id/timeline')
@@ -144,7 +162,9 @@ export class LeadController {
     @CurrentUser() user: CurrentUserPayload,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.leadService.getTimeline(this.requireOrg(user), id);
+    const orgId = this.requireOrg(user);
+    await this.requireCrmAccess(user);
+    return this.leadService.getTimeline(orgId, id);
   }
 
   @Get('leads/:id/activities')
@@ -156,7 +176,9 @@ export class LeadController {
     @Param('id', ParseUUIDPipe) id: string,
     @Query() query: QueryActivityDto,
   ) {
-    return this.activityService.findByLead(this.requireOrg(user), id, query);
+    const orgId = this.requireOrg(user);
+    await this.requireCrmAccess(user);
+    return this.activityService.findByLead(orgId, id, query);
   }
 
   @Post('leads/:id/activities')
@@ -168,7 +190,9 @@ export class LeadController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateActivityDto,
   ) {
-    return this.activityService.create(this.requireOrg(user), user.id, id, dto);
+    const orgId = this.requireOrg(user);
+    await this.requireCrmAccess(user);
+    return this.activityService.create(orgId, user.id, id, dto);
   }
 
   @Patch('activities/:id/toggle')
@@ -179,7 +203,9 @@ export class LeadController {
     @CurrentUser() user: CurrentUserPayload,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.activityService.toggleComplete(this.requireOrg(user), user.id, id);
+    const orgId = this.requireOrg(user);
+    await this.requireCrmAccess(user);
+    return this.activityService.toggleComplete(orgId, user.id, id);
   }
 
   @Delete('activities/:id')
@@ -190,6 +216,8 @@ export class LeadController {
     @CurrentUser() user: CurrentUserPayload,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    return this.activityService.delete(this.requireOrg(user), user.id, id);
+    const orgId = this.requireOrg(user);
+    await this.requireCrmAccess(user);
+    return this.activityService.delete(orgId, user.id, id);
   }
 }
