@@ -102,8 +102,11 @@ describe('WorkspaceRuntimeService (Nest DI facade)', () => {
     // MANAGER -> canonical 'manager' via the adapter mapping.
     expect(service.resolve(makeUser(), {}).role).toBe('manager');
     expect(service.resolve(makeUser({ role: 'VIEWER' }), {}).role).toBe('guest');
-    // Unsupported roles fail explicitly in the adapter — the facade never invents one.
-    expect(() => service.resolve(makeUser({ role: 'USER' }), {})).toThrow(
+    // Every actual UserRole enum value maps; truly unknown roles fail in the
+    // adapter — the facade never invents one.
+    expect(service.resolve(makeUser({ role: 'ADMIN' }), {}).role).toBe('manager');
+    expect(service.resolve(makeUser({ role: 'USER' }), {}).role).toBe('employee');
+    expect(() => service.resolve(makeUser({ role: 'unknown_role' }), {})).toThrow(
       UnsupportedRoleError,
     );
   });

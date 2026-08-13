@@ -151,12 +151,39 @@ describe('WorkspaceContextAdapter', () => {
     expect(adapter.create(makeUser({ role: 'manager' }), makeOptions()).role).toBe('manager');
   });
 
-  it('fails explicitly for an unsupported role instead of inventing one', () => {
-    // 'ADMIN' (owner aliases) and 'USER' have no safe name-only canonical mapping.
-    expect(() => adapter.create(makeUser({ role: 'ADMIN' }), makeOptions())).toThrow(
-      UnsupportedRoleError,
-    );
-    expect(() => adapter.create(makeUser({ role: 'USER' }), makeOptions())).toThrow(
+  it('maps every actual UserRole enum value to a canonical RoleKey (identity only)', () => {
+    expect(adapter.create(makeUser({ role: 'SUPER_ADMIN' }), makeOptions()).role).toBe('super-admin');
+    expect(adapter.create(makeUser({ role: 'ADMIN' }), makeOptions()).role).toBe('manager');
+    expect(adapter.create(makeUser({ role: 'MANAGER' }), makeOptions()).role).toBe('manager');
+    expect(adapter.create(makeUser({ role: 'USER' }), makeOptions()).role).toBe('employee');
+    expect(adapter.create(makeUser({ role: 'VIEWER' }), makeOptions()).role).toBe('guest');
+  });
+
+  it('keeps existing lowercase aliases mapping unchanged', () => {
+    expect(adapter.create(makeUser({ role: 'superadmin' }), makeOptions()).role).toBe('super-admin');
+    expect(adapter.create(makeUser({ role: 'platform_super_admin' }), makeOptions()).role).toBe('super-admin');
+    expect(adapter.create(makeUser({ role: 'admin' }), makeOptions()).role).toBe('manager');
+    expect(adapter.create(makeUser({ role: 'user' }), makeOptions()).role).toBe('employee');
+    expect(adapter.create(makeUser({ role: 'sales_rep' }), makeOptions()).role).toBe('sales');
+    expect(adapter.create(makeUser({ role: 'viewer' }), makeOptions()).role).toBe('guest');
+    expect(adapter.create(makeUser({ role: 'read_only' }), makeOptions()).role).toBe('guest');
+  });
+
+  it('does not infer module or capability access from the role name', () => {
+    // ADMIN canonicalizes to the same RoleKey as MANAGER, and USER to a generic
+    // member RoleKey. None of them select a module on their own; module access
+    // remains driven by permissions/capabilities elsewhere.
+    expect(adapter.create(makeUser({ role: 'ADMIN' }), makeOptions()).role).toBe('manager');
+    expect(adapter.create(makeUser({ role: 'USER' }), makeOptions()).role).toBe('employee');
+    const context = adapter.create(makeUser({ role: 'ADMIN' }), makeOptions({ permissions: ['crm.read'] }));
+    expect(context.role).toBe('manager');
+    expect(context.permissions).toEqual(['crm.read']);
+    expect(context).not.toHaveProperty('modules');
+    expect(context).not.toHaveProperty('capabilities');
+  });
+
+  it('fails explicitly for a truly unknown role instead of inventing one', () => {
+    expect(() => adapter.create(makeUser({ role: 'unknown_role' }), makeOptions())).toThrow(
       UnsupportedRoleError,
     );
     expect(() => adapter.create(makeUser({ role: 'unknown_role' }), makeOptions())).toThrow(
