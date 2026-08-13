@@ -11,6 +11,7 @@ import { ServiceBootstrapper } from './service-bootstrap';
 import { ServiceRegistry } from './service-registry';
 import { WorkspaceContextAdapter } from './workspace-context.adapter';
 import { WorkspaceResolver } from './workspace-resolver';
+import { WorkspaceAccessEnforcer } from './workspace-access-enforcer';
 import { WorkspaceAccessPolicy } from './workspace-access-policy';
 import { WorkspacePermissionMapper } from './workspace-permission.mapper';
 import { WorkspaceRuntimeContext } from './workspace-runtime-context';
@@ -41,6 +42,7 @@ const MODULE_RESOLVER_PROVIDER: Provider = {
     WorkspaceRuntimeService,
     WorkspaceRuntimeContext,
     WorkspaceAccessPolicy,
+    WorkspaceAccessEnforcer,
     WorkspacePermissionMapper,
   ],
   exports: [
@@ -51,6 +53,7 @@ const MODULE_RESOLVER_PROVIDER: Provider = {
     WorkspaceRuntimeService,
     WorkspaceRuntimeContext,
     WorkspaceAccessPolicy,
+    WorkspaceAccessEnforcer,
     WorkspacePermissionMapper,
   ],
 })
