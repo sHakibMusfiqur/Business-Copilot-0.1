@@ -29,13 +29,10 @@ export class WorkspaceRuntimeAccessService {
       user.id,
     );
 
-    // Derive the authoritative module set from effective RBAC permissions via
-    // the existing manifest-driven mapper (never from role names).
+   
     const access = this.mapper.map(effectivePermissions, this.registry.list());
 
-    // Caller-supplied modules may only further restrict the authoritative set,
-    // never expand it. When the caller provides none, the authoritative set is
-    // used so RBAC-permitted modules actually resolve.
+    
     const callerModules = options.modules;
     const modules =
       callerModules === undefined
