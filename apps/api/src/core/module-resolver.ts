@@ -6,6 +6,24 @@ import type {
 } from '@bc/core';
 
 
+/**
+ * A lazily-evaluated source of module manifests. Used by Nest DI to bind a
+ * `ModuleResolver` to the live kernel `ModuleRegistry` so it always reflects
+ * the currently registered manifests (which are populated during bootstrap,
+ * after providers are constructed). Static callers pass an array directly.
+ */
+export interface ManifestSource {
+  list(): readonly ModuleManifest[];
+}
+
+
+function isManifestArray(
+  manifests: readonly ModuleManifest[] | ManifestSource,
+): manifests is readonly ModuleManifest[] {
+  return Array.isArray(manifests);
+}
+
+
 export interface ModuleResolverContext {
   role?: RoleKey | null;
   industry?: IndustryKey | null;
@@ -42,11 +60,21 @@ function visibilityAllows(
 
 
 export class ModuleResolver {
-  constructor(private readonly manifests: readonly ModuleManifest[]) {}
+  private readonly manifests: readonly ModuleManifest[] | ManifestSource;
 
-  
+  constructor(manifests: readonly ModuleManifest[] | ManifestSource) {
+    this.manifests = manifests;
+  }
+
+  /** Lazily resolves the current set of manifests from the configured source. */
+  private get manifestList(): readonly ModuleManifest[] {
+    return isManifestArray(this.manifests)
+      ? this.manifests
+      : this.manifests.list();
+  }
+
   resolve(context: ModuleResolverContext): ModuleManifest[] {
-    return this.manifests
+    return this.manifestList
       .filter((manifest) => this.isAvailable(manifest, context))
       .sort((a, b) => a.id.localeCompare(b.id));
   }
@@ -56,7 +84,7 @@ export class ModuleResolver {
     moduleId: string,
     context: ModuleResolverContext,
   ): boolean {
-    const manifest = this.manifests.find((m) => m.id === moduleId);
+    const manifest = this.manifestList.find((m) => m.id === moduleId);
     return manifest !== undefined && this.isAvailable(manifest, context);
   }
 

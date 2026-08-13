@@ -1,3 +1,5 @@
+import { Injectable } from '@nestjs/common';
+
 import type {
   CapabilityKey,
   ModuleManifest,
@@ -46,6 +48,7 @@ function isValidCapabilityKey(value: string): value is CapabilityKey {
  *    inputs, performs entitlement/plan lookups, or keeps mutable state between
  *    `resolve()` calls.
  */
+@Injectable()
 export class CapabilityResolver {
   resolve(
     modules: readonly ModuleManifest[],

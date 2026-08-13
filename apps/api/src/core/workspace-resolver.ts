@@ -1,3 +1,5 @@
+import { Injectable } from '@nestjs/common';
+
 import type {
   CapabilityKey,
   EntitlementContext,
@@ -52,9 +54,12 @@ export interface ResolvedWorkspace {
  * It never queries a DB, touches Prisma/HTTP/auth, mutates inputs, or holds
  * mutable state between calls.
  */
+@Injectable()
 export class WorkspaceResolver {
-  private readonly entitlements = new EntitlementResolver();
-  private readonly capabilities = new CapabilityResolver();
+  constructor(
+    readonly entitlements: EntitlementResolver = new EntitlementResolver(),
+    readonly capabilities: CapabilityResolver = new CapabilityResolver(),
+  ) {}
 
   resolve(
     input: WorkspaceContextInput,

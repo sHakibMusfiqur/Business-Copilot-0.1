@@ -1,15 +1,12 @@
+import { Injectable } from '@nestjs/common';
+
 import type {
   EntitlementContext,
   EntitlementInput,
   UsageLimits,
 } from '@bc/core';
 
-/**
- * Conservative default usage limits for the fallback entitlement profile. These
- * mirror the existing `free` plan configuration (see `apps/api/prisma/seed.ts`)
- * and the application's default 30-day trial, so no business limits are
- * invented here.
- */
+
 const DEFAULT_LIMITS: UsageLimits = {
   users: 5,
   customers: 50,
@@ -49,6 +46,7 @@ function dedupeModules(modules: readonly string[]): string[] {
  * It never queries a DB, touches Prisma/HTTP, calls billing services, performs
  * usage/limit enforcement, or holds mutable state between calls.
  */
+@Injectable()
 export class EntitlementResolver {
   resolve(input?: EntitlementInput | null): EntitlementContext {
     const hasInput = input !== undefined && input !== null;
