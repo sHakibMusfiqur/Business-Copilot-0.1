@@ -1,8 +1,10 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
+import { ModuleRegistry } from '../core/module-registry';
 import { RbacWorkspacePermissions } from '../core/rbac-workspace-permissions';
 import type { WorkspaceRuntimeOptions } from '../core/workspace-context.adapter';
+import { WorkspacePermissionMapper } from '../core/workspace-permission.mapper';
 import type { ResolvedWorkspace } from '../core/workspace-resolver';
 import { WorkspaceRuntimeService } from '../core/workspace-runtime.service';
 
@@ -13,6 +15,8 @@ export class WorkspaceRuntimeAccessService {
   constructor(
     private readonly rbacPermissions: RbacWorkspacePermissions,
     private readonly runtime: WorkspaceRuntimeService,
+    private readonly mapper: WorkspacePermissionMapper,
+    private readonly registry: ModuleRegistry,
   ) {}
 
   async resolveForUser(
@@ -25,9 +29,23 @@ export class WorkspaceRuntimeAccessService {
       user.id,
     );
 
+    // Derive the authoritative module set from effective RBAC permissions via
+    // the existing manifest-driven mapper (never from role names).
+    const access = this.mapper.map(effectivePermissions, this.registry.list());
+
+    // Caller-supplied modules may only further restrict the authoritative set,
+    // never expand it. When the caller provides none, the authoritative set is
+    // used so RBAC-permitted modules actually resolve.
+    const callerModules = options.modules;
+    const modules =
+      callerModules === undefined
+        ? access.moduleIds
+        : access.moduleIds.filter((id) => callerModules.includes(id));
+
     const mergedOptions: WorkspaceRuntimeOptions = {
       ...options,
       permissions: effectivePermissions,
+      modules,
     };
 
     return this.runtime.resolve(user, mergedOptions);

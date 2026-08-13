@@ -5,6 +5,7 @@ import { BUILTIN_MODULE_MANIFESTS } from '../core/module-manifests';
 import { ModuleRegistry } from '../core/module-registry';
 import { RbacWorkspacePermissions } from '../core/rbac-workspace-permissions';
 import { WorkspaceContextAdapter } from '../core/workspace-context.adapter';
+import { WorkspacePermissionMapper } from '../core/workspace-permission.mapper';
 import { WorkspaceResolver } from '../core/workspace-resolver';
 import { WorkspaceRuntimeService } from '../core/workspace-runtime.service';
 
@@ -36,12 +37,21 @@ function buildRuntime(): WorkspaceRuntimeService {
 
 function buildService(getter: PermissionGetter) {
   const runtime = buildRuntime();
+  const registry = new ModuleRegistry();
+  for (const manifest of BUILTIN_MODULE_MANIFESTS) {
+    registry.register(manifest);
+  }
   const rbacPermissions = {
     resolveForUser: jest.fn((orgId: string, userId: string) => getter(orgId, userId)),
   } as unknown as RbacWorkspacePermissions;
   const spyRuntimeResolve = jest.spyOn(runtime, 'resolve');
 
-  const service = new WorkspaceRuntimeAccessService(rbacPermissions, runtime);
+  const service = new WorkspaceRuntimeAccessService(
+    rbacPermissions,
+    runtime,
+    new WorkspacePermissionMapper(),
+    registry,
+  );
 
   return {
     service,
@@ -177,14 +187,14 @@ describe('WorkspaceRuntimeAccessService (async RBAC-aware runtime facade)', () =
     expect(resolved.capabilities.granted).toEqual(['dashboard']);
   });
 
-  it('works with no options argument (permissions forwarded, entitlement gate holds)', async () => {
+  it('works with no options argument — RBAC-permitted modules now resolve', async () => {
     const { service } = buildService(async () => ['billing.read']);
     const resolved = await service.resolveForUser(makeUser());
 
     expect(resolved.permissions).toEqual(['billing.read']);
-    // no entitlement allow-list was supplied, so no module resolves — the
-    // pipeline requires modules to be listed in options (unchanged behavior)
-    expect(resolved.enabledModuleIds).toEqual([]);
+    // The authoritative module set is derived from RBAC permissions, so billing
+    // resolves without the caller having to enumerate it.
+    expect(resolved.enabledModuleIds).toEqual(['billing']);
   });
 
   it('caller-provided modules cannot expand access beyond RBAC', async () => {
@@ -195,6 +205,105 @@ describe('WorkspaceRuntimeAccessService (async RBAC-aware runtime facade)', () =
 
     // billing is listed but the user lacks billing.read -> still disabled
     expect(resolved.enabledModuleIds).toEqual(['crm']);
+  });
+
+  it('maps crm.read to a resolvable crm module without caller modules', async () => {
+    const { service } = buildService(async () => ['crm.read']);
+    const resolved = await service.resolveForUser(makeUser());
+
+    expect(resolved.enabledModuleIds).toEqual(['crm']);
+    expect(resolved.capabilities.can('crm')).toBe(true);
+    expect(resolved.capabilities.can('administration')).toBe(false);
+  });
+
+  it('maps billing.read to a resolvable billing module without caller modules', async () => {
+    const { service } = buildService(async () => ['billing.read']);
+    const resolved = await service.resolveForUser(makeUser());
+
+    expect(resolved.enabledModuleIds).toEqual(['billing']);
+    expect(resolved.capabilities.can('administration')).toBe(true);
+    expect(resolved.capabilities.can('platform')).toBe(true);
+    expect(resolved.capabilities.can('crm')).toBe(false);
+  });
+
+  it('maps both permissions to both resolvable modules without caller modules', async () => {
+    const { service } = buildService(async () => ['crm.read', 'inventory.read']);
+    const resolved = await service.resolveForUser(makeUser());
+
+    // inventory has no built-in manifest, so only crm is a registered module.
+    expect(resolved.enabledModuleIds).toEqual(['crm']);
+  });
+
+  it('maps both built-in permissions to both resolvable modules', async () => {
+    const { service } = buildService(async () => ['crm.read', 'billing.read']);
+    const resolved = await service.resolveForUser(makeUser());
+
+    expect(resolved.enabledModuleIds).toEqual(['billing', 'crm']);
+    expect(resolved.capabilities.can('crm')).toBe(true);
+    expect(resolved.capabilities.can('administration')).toBe(true);
+  });
+
+  it('empty RBAC permissions resolves no business modules', async () => {
+    const { service } = buildService(async () => []);
+    const resolved = await service.resolveForUser(makeUser());
+
+    expect(resolved.permissions).toEqual([]);
+    expect(resolved.enabledModuleIds).toEqual([]);
+    expect(resolved.capabilities.granted).toEqual(['dashboard']);
+  });
+
+  it('caller-supplied modules can only restrict, never expand, authoritative modules', async () => {
+    const { service } = buildService(async () => ['crm.read', 'billing.read']);
+    // Caller restricts to crm even though authoritative RBAC also permits billing.
+    const resolved = await service.resolveForUser(makeUser(), {
+      modules: ['crm'],
+    });
+
+    expect(resolved.enabledModuleIds).toEqual(['crm']);
+    expect(resolved.capabilities.can('crm')).toBe(true);
+    expect(resolved.capabilities.can('administration')).toBe(false);
+  });
+
+  it('caller-supplied modules cannot grant a module absent from authoritative RBAC', async () => {
+    const { service } = buildService(async () => ['crm.read']);
+    // billing.read is not among effective RBAC permissions; caller enumerating it
+    // in options.modules must still not make billing resolve.
+    const resolved = await service.resolveForUser(makeUser(), {
+      modules: ['crm', 'billing'],
+    });
+
+    expect(resolved.enabledModuleIds).toEqual(['crm']);
+  });
+
+  it('continues to support ADMIN/USER canonical role mapping', async () => {
+    const { service } = buildService(async () => ['crm.read']);
+    const admin = await service.resolveForUser(makeUser({ role: 'ADMIN' }));
+    const user = await service.resolveForUser(makeUser({ role: 'USER' }));
+
+    expect(admin.role).toBe('manager');
+    expect(admin.enabledModuleIds).toEqual(['crm']);
+    expect(user.role).toBe('employee');
+    expect(user.enabledModuleIds).toEqual(['crm']);
+  });
+
+  it('keeps tenant ID sourced only from the authenticated user.organizationId', async () => {
+    const { service } = buildService(async () => ['crm.read']);
+    const resolved = await service.resolveForUser(makeUser());
+
+    expect(resolved.tenant.tenantId).toBe('org-1');
+  });
+
+  it('does not mutate caller options or the authenticated user', async () => {
+    const { service } = buildService(async () => ['crm.read']);
+    const user = makeUser();
+    const userSnapshot = JSON.stringify(user);
+    const options = { modules: ['crm', 'billing'] };
+    const optionsSnapshot = JSON.stringify(options);
+
+    await service.resolveForUser(user, options);
+
+    expect(JSON.stringify(user)).toBe(userSnapshot);
+    expect(JSON.stringify(options)).toBe(optionsSnapshot);
   });
 
   it('propagates an RBAC bridge rejection without invoking the runtime', async () => {
