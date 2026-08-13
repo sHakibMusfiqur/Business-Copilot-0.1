@@ -18,6 +18,8 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PermissionGuard } from '../common/guards/permission.guard';
 import { Permissions } from '../common/decorators/permissions.decorator';
 import { CurrentUser, type CurrentUserPayload } from '../common/decorators/current-user.decorator';
+import { WorkspaceAccessEnforcer } from '../core/workspace-access-enforcer';
+import { WorkspaceRuntimeAccessService } from '../rbac/workspace-runtime-access.service';
 
 import { LeadService } from './lead.service';
 import { ActivityService } from './activity.service';
@@ -35,6 +37,8 @@ export class LeadController {
   constructor(
     private readonly leadService: LeadService,
     private readonly activityService: ActivityService,
+    private readonly workspaceAccess: WorkspaceRuntimeAccessService,
+    private readonly enforcer: WorkspaceAccessEnforcer,
   ) {}
 
   private requireOrg(user: CurrentUserPayload): string {
@@ -57,7 +61,10 @@ export class LeadController {
   @Permissions(['crm.read'])
   @ApiOperation({ summary: 'List all leads' })
   async findAll(@CurrentUser() user: CurrentUserPayload, @Query() query: QueryLeadDto) {
-    return this.leadService.findAll(this.requireOrg(user), query);
+    const orgId = this.requireOrg(user);
+    const workspace = await this.workspaceAccess.resolveForUser(user);
+    this.enforcer.requireModule(workspace, 'crm');
+    return this.leadService.findAll(orgId, query);
   }
 
   @Get('leads/:id')
