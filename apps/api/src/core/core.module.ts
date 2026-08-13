@@ -11,6 +11,7 @@ import { ServiceBootstrapper } from './service-bootstrap';
 import { ServiceRegistry } from './service-registry';
 import { WorkspaceContextAdapter } from './workspace-context.adapter';
 import { WorkspaceResolver } from './workspace-resolver';
+import { WorkspaceAccessPolicy } from './workspace-access-policy';
 import { WorkspaceRuntimeContext } from './workspace-runtime-context';
 import { WorkspaceRuntimeService } from './workspace-runtime.service';
 
@@ -38,6 +39,7 @@ const MODULE_RESOLVER_PROVIDER: Provider = {
     WorkspaceContextAdapter,
     WorkspaceRuntimeService,
     WorkspaceRuntimeContext,
+    WorkspaceAccessPolicy,
   ],
   exports: [
     KernelService,
@@ -46,6 +48,7 @@ const MODULE_RESOLVER_PROVIDER: Provider = {
     WorkspaceResolver,
     WorkspaceRuntimeService,
     WorkspaceRuntimeContext,
+    WorkspaceAccessPolicy,
   ],
 })
 export class CoreModule {}
