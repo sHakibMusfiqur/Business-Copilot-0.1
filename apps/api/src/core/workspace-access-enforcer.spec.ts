@@ -181,6 +181,39 @@ describe('WorkspaceAccessEnforcer (pure enforcement layer)', () => {
     );
   });
 
+  it('Phase 1F.5 matrix: resolved + entitled allows requireUsableModule', () => {
+    const workspace = makeWorkspace({
+      modules: [CRM],
+      entitlement: makeEntitlement({ modules: { crm: true } }),
+    });
+    expect(() => enforcer.requireModule(workspace, 'crm')).not.toThrow();
+    expect(() => enforcer.requireUsableModule(workspace, 'crm')).not.toThrow();
+  });
+
+  it('Phase 1F.5 matrix: resolved + not entitled allows requireModule but denies requireUsableModule', () => {
+    const workspace = makeWorkspace({
+      modules: [CRM],
+      entitlement: makeEntitlement({ modules: {} }),
+    });
+    // Module is resolved (RBAC/capability) → requireModule passes.
+    expect(() => enforcer.requireModule(workspace, 'crm')).not.toThrow();
+    // Plan entitlement is absent → requireUsableModule must deny.
+    expectDenied(
+      () => enforcer.requireUsableModule(workspace, 'crm'),
+      'Module "crm" is not usable',
+    );
+  });
+
+  it('Phase 1F.5 matrix: not resolved + entitled denies both requireModule and requireUsableModule', () => {
+    const workspace = makeWorkspace({
+      modules: [BILLING],
+      entitlement: makeEntitlement({ modules: { crm: true } }),
+    });
+    // Entitled by plan but not resolved (no RBAC/capability) → both deny.
+    expectDenied(() => enforcer.requireModule(workspace, 'crm'), 'crm');
+    expectDenied(() => enforcer.requireUsableModule(workspace, 'crm'), 'crm');
+  });
+
   it('safely denies all non-dashboard checks on an empty workspace', () => {
     const workspace = emptyWorkspace();
     expectDenied(() => enforcer.requireCapability(workspace, 'crm'), 'crm');

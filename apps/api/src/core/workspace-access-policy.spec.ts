@@ -155,6 +155,24 @@ describe('WorkspaceAccessPolicy (pure evaluator)', () => {
     expect(policy.canUseModule(noEntitlement, 'crm')).toBe(false);
   });
 
+  it('Phase 1F.5 matrix: resolved + not entitled keeps canModule true but canUseModule false', () => {
+    const workspace = makeWorkspace({
+      modules: [CRM],
+      entitlement: makeEntitlement({ modules: {} }),
+    });
+    expect(policy.canModule(workspace, 'crm')).toBe(true);
+    expect(policy.canUseModule(workspace, 'crm')).toBe(false);
+  });
+
+  it('Phase 1F.5 matrix: not resolved + entitled keeps both canModule and canUseModule false', () => {
+    const workspace = makeWorkspace({
+      modules: [BILLING],
+      entitlement: makeEntitlement({ modules: { crm: true } }),
+    });
+    expect(policy.canModule(workspace, 'crm')).toBe(false);
+    expect(policy.canUseModule(workspace, 'crm')).toBe(false);
+  });
+
   it('safely returns false for non-dashboard checks on an empty workspace', () => {
     const workspace = emptyWorkspace();
     expect(policy.canCapability(workspace, 'crm')).toBe(false);

@@ -51,16 +51,21 @@ export class WorkspaceResolver {
     const ctx = input as WorkspaceResolutionInput;
 
 
-    const entitlement = this.entitlements.resolve({
+    const entitlementInput = ctx.entitlement ?? {
       plan: ctx.plan,
       modules: ctx.modules,
-    });
+    };
+    const entitlement = this.entitlements.resolve(entitlementInput);
 
     const capabilityPool =
       ctx.capabilities ?? this.allDeclaredCapabilities(manifests);
 
 
-    const allowedModuleIds = Object.keys(entitlement.modules);
+    // Module resolution is enabled by the RBAC-derived allow-list (ctx.modules),
+    // so plan entitlement remains a separate, independent dimension. When no
+    // explicit plan entitlement is supplied this degrades to the previous
+    // behaviour (entitlement modules drive the allow-list).
+    const allowedModuleIds = ctx.modules ?? Object.keys(entitlement.modules);
     const moduleResolver = new ModuleResolver(manifests);
     const modules = moduleResolver.resolve({
       role: ctx.role ?? null,

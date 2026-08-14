@@ -1,3 +1,4 @@
+import type { EntitlementInput } from './entitlements';
 import type { IndustryKey, RoleKey } from './identity';
 import type { QuickActionDef, WidgetDefinition } from './permissions';
 
@@ -22,6 +23,8 @@ export interface WorkspaceContextInput {
   aiEnabled: boolean;
   orgSize?: number;
   plan?: string;
+  /** Authoritative plan-derived entitlement, when a plan source is available. */
+  entitlement?: EntitlementInput;
   tenantId?: string;
   organizationName?: string;
 }

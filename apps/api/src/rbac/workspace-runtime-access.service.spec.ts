@@ -5,13 +5,17 @@ import { BUILTIN_MODULE_MANIFESTS } from '../core/module-manifests';
 import { ModuleRegistry } from '../core/module-registry';
 import { RbacWorkspacePermissions } from '../core/rbac-workspace-permissions';
 import { WorkspaceContextAdapter } from '../core/workspace-context.adapter';
+import { WorkspaceAccessEnforcer } from '../core/workspace-access-enforcer';
+import { WorkspaceAccessPolicy } from '../core/workspace-access-policy';
 import { WorkspacePermissionMapper } from '../core/workspace-permission.mapper';
 import { WorkspaceResolver } from '../core/workspace-resolver';
 import { WorkspaceRuntimeService } from '../core/workspace-runtime.service';
 
+import { WorkspacePlanEntitlements } from './workspace-plan-entitlements';
 import { WorkspaceRuntimeAccessService } from './workspace-runtime-access.service';
 
 type PermissionGetter = (orgId: string, userId: string) => Promise<string[]>;
+type PlanGetter = (orgId: string) => Promise<unknown | undefined>;
 
 function makeUser(overrides: Partial<CurrentUserPayload> = {}): CurrentUserPayload {
   return {
@@ -57,6 +61,50 @@ function buildService(getter: PermissionGetter) {
     service,
     rbacResolve: rbacPermissions.resolveForUser as jest.Mock,
     spyRuntimeResolve,
+  };
+}
+
+function buildServiceWithPlan(
+  getter: PermissionGetter,
+  planGetter: PlanGetter,
+) {
+  const runtime = buildRuntime();
+  const registry = new ModuleRegistry();
+  for (const manifest of BUILTIN_MODULE_MANIFESTS) {
+    registry.register(manifest);
+  }
+  const rbacPermissions = {
+    resolveForUser: jest.fn((orgId: string, userId: string) => getter(orgId, userId)),
+  } as unknown as RbacWorkspacePermissions;
+
+  const planEntitlements = {
+    resolveForOrganization: jest.fn((orgId: string) => planGetter(orgId)),
+  } as unknown as WorkspacePlanEntitlements;
+
+  const service = new WorkspaceRuntimeAccessService(
+    rbacPermissions,
+    runtime,
+    new WorkspacePermissionMapper(),
+    registry,
+    planEntitlements,
+  );
+  const enforcer = new WorkspaceAccessEnforcer(new WorkspaceAccessPolicy());
+
+  return {
+    service,
+    enforcer,
+    rbacResolve: rbacPermissions.resolveForUser as jest.Mock,
+    planResolve: planEntitlements.resolveForOrganization as jest.Mock,
+  };
+}
+
+/** Plan allow-list helper matching the provider's normalized EntitlementInput. */
+function plan(planSlug: string, modules: string[]): unknown {
+  return {
+    plan: planSlug,
+    modules,
+    features: {},
+    limits: {},
   };
 }
 
@@ -315,5 +363,191 @@ describe('WorkspaceRuntimeAccessService (async RBAC-aware runtime facade)', () =
       NotFoundException,
     );
     expect(spyRuntimeResolve).not.toHaveBeenCalled();
+  });
+});
+
+describe('WorkspaceRuntimeAccessService (Phase 1F.5 plan → entitlement bridge)', () => {
+  it('marks crm entitled when the organization plan contains crm', async () => {
+    const { service } = buildServiceWithPlan(
+      async () => ['crm.read'],
+      async () => plan('starter', ['crm', 'invoicing']),
+    );
+
+    const resolved = await service.resolveForUser(makeUser());
+
+    expect(resolved.entitlement.key).toBe('starter');
+    expect(resolved.entitlement.modules.crm).toBe(true);
+  });
+
+  it('marks crm not entitled when the organization plan excludes crm', async () => {
+    const { service } = buildServiceWithPlan(
+      async () => ['crm.read'],
+      async () => plan('free', ['invoicing', 'expenses']),
+    );
+
+    const resolved = await service.resolveForUser(makeUser());
+
+    // Excluded modules are absent (not `false`) in the canonical EntitlementContext.
+    expect(resolved.entitlement.modules.crm).toBeUndefined();
+    expect(resolved.entitlement.modules.invoicing).toBe(true);
+  });
+
+  it('RBAC allows crm but plan denies it: module resolves, requireModule passes, requireUsableModule denies', async () => {
+    const { service, enforcer } = buildServiceWithPlan(
+      async () => ['crm.read'],
+      async () => plan('free', ['invoicing', 'expenses']),
+    );
+
+    const resolved = await service.resolveForUser(makeUser());
+
+    // RBAC dimension: crm resolves.
+    expect(resolved.enabledModuleIds).toContain('crm');
+    // Plan dimension: crm is not entitled (absent from the plan allow-list).
+    expect(resolved.entitlement.modules.crm).toBeUndefined();
+
+    expect(() => enforcer.requireModule(resolved, 'crm')).not.toThrow();
+    expect(() => enforcer.requireUsableModule(resolved, 'crm')).toThrow(
+      ForbiddenException,
+    );
+  });
+
+  it('plan grants crm but RBAC lacks crm.read: crm never becomes usable', async () => {
+    const { service, enforcer } = buildServiceWithPlan(
+      async () => ['billing.read'],
+      async () => plan('growth', ['crm', 'billing']),
+    );
+
+    const resolved = await service.resolveForUser(makeUser());
+
+    // Plan grants crm, but RBAC does not authorize crm.read → crm not resolved.
+    expect(resolved.enabledModuleIds).not.toContain('crm');
+    expect(() => enforcer.requireModule(resolved, 'crm')).toThrow(
+      ForbiddenException,
+    );
+    expect(() => enforcer.requireUsableModule(resolved, 'crm')).toThrow(
+      ForbiddenException,
+    );
+  });
+
+  it('resolves the plan strictly for the authenticated user organization', async () => {
+    const { service, planResolve } = buildServiceWithPlan(
+      async () => ['crm.read'],
+      async () => plan('starter', ['crm']),
+    );
+
+    await service.resolveForUser(makeUser({ organizationId: 'org-42' }));
+
+    expect(planResolve).toHaveBeenCalledTimes(1);
+    expect(planResolve).toHaveBeenCalledWith('org-42');
+  });
+
+  it('throws the existing ForbiddenException when organizationId is missing and never queries the plan', async () => {
+    const { service, planResolve } = buildServiceWithPlan(
+      async () => ['crm.read'],
+      async () => plan('starter', ['crm']),
+    );
+
+    await expect(
+      service.resolveForUser(makeUser({ organizationId: undefined })),
+    ).rejects.toThrow(ForbiddenException);
+    await expect(
+      service.resolveForUser(makeUser({ organizationId: undefined })),
+    ).rejects.toThrow('User does not belong to an organization');
+    expect(planResolve).not.toHaveBeenCalled();
+  });
+
+  it('never lets a caller-supplied plan override the database-backed plan', async () => {
+    const { service } = buildServiceWithPlan(
+      async () => ['crm.read'],
+      async () => plan('free', ['invoicing']),
+    );
+
+    const resolved = await service.resolveForUser(makeUser(), {
+      plan: 'growth',
+    });
+
+    expect(resolved.entitlement.key).toBe('free');
+    expect(resolved.entitlement.source).toBe('plan');
+    expect(resolved.entitlement.modules.crm).toBeUndefined();
+  });
+
+  it('ignores a caller-supplied entitlement/modules and cannot expand access', async () => {
+    const { service, enforcer } = buildServiceWithPlan(
+      async () => ['crm.read'],
+      async () => plan('free', ['invoicing', 'expenses']),
+    );
+
+    const resolved = await service.resolveForUser(makeUser(), {
+      entitlement: { plan: 'enterprise', modules: ['crm', 'billing'], features: {}, limits: {} },
+      modules: ['crm', 'billing'],
+    });
+
+    // RBAC only authorizes crm; billing is not resolved.
+    expect(resolved.enabledModuleIds).toEqual(['crm']);
+    expect(resolved.entitlement.modules.crm).toBeUndefined();
+    expect(resolved.entitlement.modules.invoicing).toBe(true);
+    expect(() => enforcer.requireModule(resolved, 'billing')).toThrow(
+      ForbiddenException,
+    );
+  });
+
+  it('preserves caller options.modules intersection-only restriction', async () => {
+    const { service } = buildServiceWithPlan(
+      async () => ['crm.read', 'billing.read'],
+      async () => plan('growth', ['crm', 'billing']),
+    );
+
+    const resolved = await service.resolveForUser(makeUser(), {
+      modules: ['crm'],
+    });
+
+    expect(resolved.enabledModuleIds).toEqual(['crm']);
+    expect(resolved.entitlement.modules.crm).toBe(true);
+  });
+
+  it('keeps ADMIN → manager and USER → employee canonical role mapping with a plan present', async () => {
+    const { service } = buildServiceWithPlan(
+      async () => ['crm.read'],
+      async () => plan('starter', ['crm']),
+    );
+
+    const admin = await service.resolveForUser(makeUser({ role: 'ADMIN' }));
+    const user = await service.resolveForUser(makeUser({ role: 'USER' }));
+
+    expect(admin.role).toBe('manager');
+    expect(user.role).toBe('employee');
+  });
+
+  it('does not mutate the user or caller options when applying the plan', async () => {
+    const { service } = buildServiceWithPlan(
+      async () => ['crm.read'],
+      async () => plan('free', ['invoicing']),
+    );
+    const user = makeUser();
+    const options = { plan: 'growth', modules: ['crm'] };
+    const userSnapshot = JSON.stringify(user);
+    const optionsSnapshot = JSON.stringify(options);
+
+    await service.resolveForUser(user, options);
+
+    expect(JSON.stringify(user)).toBe(userSnapshot);
+    expect(JSON.stringify(options)).toBe(optionsSnapshot);
+  });
+
+  it('falls back to the default entitlement (RBAC-driven modules) when no active plan exists', async () => {
+    const { service } = buildServiceWithPlan(
+      async () => ['crm.read'],
+      async () => undefined,
+    );
+
+    const resolved = await service.resolveForUser(makeUser(), {
+      plan: 'growth',
+    });
+
+    // No plan source → default entitlement; caller plan is discarded and the
+    // previous RBAC-driven module semantics apply unchanged.
+    expect(resolved.entitlement.source).toBe('default');
+    expect(resolved.entitlement.key).toBe('default');
+    expect(resolved.entitlement.modules.crm).toBe(true);
   });
 });

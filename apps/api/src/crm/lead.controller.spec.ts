@@ -299,7 +299,11 @@ describe('LeadController (Nest DI wiring)', () => {
       imports: [ConfigModule, RedisModule, CoreModule, CrmModule],
     }).compile();
 
-    const controller = moduleRef.get(LeadController);
-    expect(controller).toBeInstanceOf(LeadController);
+    try {
+      const controller = moduleRef.get(LeadController);
+      expect(controller).toBeInstanceOf(LeadController);
+    } finally {
+      await moduleRef.close();
+    }
   });
 });

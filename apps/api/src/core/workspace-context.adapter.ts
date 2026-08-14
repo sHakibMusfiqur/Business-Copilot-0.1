@@ -1,6 +1,6 @@
 import { ForbiddenException } from '@nestjs/common';
 
-import type { RoleKey, WorkspaceContextInput } from '@bc/core';
+import type { EntitlementInput, RoleKey, WorkspaceContextInput } from '@bc/core';
 
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
 
@@ -10,6 +10,8 @@ export interface WorkspaceRuntimeOptions {
   permissions?: string[];
   modules?: string[];
   plan?: string;
+  /** Authoritative plan-derived entitlement (never caller-supplied). */
+  entitlement?: EntitlementInput;
   aiEnabled?: boolean;
 }
 
@@ -88,6 +90,9 @@ export class WorkspaceContextAdapter {
     }
     if (options.plan !== undefined) {
       context.plan = options.plan;
+    }
+    if (options.entitlement !== undefined) {
+      context.entitlement = options.entitlement;
     }
     if (options.aiEnabled !== undefined) {
       context.aiEnabled = options.aiEnabled;
