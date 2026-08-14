@@ -1025,6 +1025,7 @@ model Activity {
   description String?
   dueDate     DateTime?
   completed   Boolean      @default(false)
+  deletedAt   DateTime?
   createdById String
   createdBy   User         @relation("CreatedByActivities", fields: [createdById], references: [id])
   createdAt   DateTime     @default(now())
@@ -1032,6 +1033,7 @@ model Activity {
 
   @@index([leadId])
   @@index([createdById])
+  @@index([deletedAt])
 }
 
 model Notification {

@@ -28,6 +28,7 @@ import type { CreateLeadDto } from './dto/create-lead.dto';
 import type { UpdateLeadDto } from './dto/update-lead.dto';
 import type { QueryLeadDto } from './dto/query-lead.dto';
 import type { CreateActivityDto } from './dto/create-activity.dto';
+import type { UpdateActivityDto } from './dto/update-activity.dto';
 import type { QueryActivityDto } from './dto/query-activity.dto';
 
 @ApiTags('CRM')
@@ -167,9 +168,35 @@ export class LeadController {
     return this.leadService.getTimeline(orgId, id);
   }
 
+  @Get('activities')
+  @UseGuards(PermissionGuard)
+  @Permissions(['crm.read'])
+  @ApiOperation({ summary: 'List all activities in the organization' })
+  async findAllActivities(
+    @CurrentUser() user: CurrentUserPayload,
+    @Query() query: QueryActivityDto,
+  ) {
+    const orgId = this.requireOrg(user);
+    await this.requireCrmAccess(user);
+    return this.activityService.findAll(orgId, query);
+  }
+
+  @Get('activities/:id')
+  @UseGuards(PermissionGuard)
+  @Permissions(['crm.read'])
+  @ApiOperation({ summary: 'Get activity by ID' })
+  async findActivityById(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    const orgId = this.requireOrg(user);
+    await this.requireCrmAccess(user);
+    return this.activityService.findById(orgId, id);
+  }
+
   @Get('leads/:id/activities')
   @UseGuards(PermissionGuard)
-  @Permissions(['crm.read', 'crm.activities'])
+  @Permissions(['crm.read'])
   @ApiOperation({ summary: 'Get lead activities' })
   async getActivities(
     @CurrentUser() user: CurrentUserPayload,
@@ -183,7 +210,7 @@ export class LeadController {
 
   @Post('leads/:id/activities')
   @UseGuards(PermissionGuard)
-  @Permissions(['crm.activities'])
+  @Permissions(['crm.create'])
   @ApiOperation({ summary: 'Create activity for lead' })
   async createActivity(
     @CurrentUser() user: CurrentUserPayload,
@@ -195,9 +222,23 @@ export class LeadController {
     return this.activityService.create(orgId, user.id, id, dto);
   }
 
+  @Patch('activities/:id')
+  @UseGuards(PermissionGuard)
+  @Permissions(['crm.update'])
+  @ApiOperation({ summary: 'Update an activity' })
+  async updateActivity(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateActivityDto,
+  ) {
+    const orgId = this.requireOrg(user);
+    await this.requireCrmAccess(user);
+    return this.activityService.update(orgId, user.id, id, dto);
+  }
+
   @Patch('activities/:id/toggle')
   @UseGuards(PermissionGuard)
-  @Permissions(['crm.activities'])
+  @Permissions(['crm.update'])
   @ApiOperation({ summary: 'Toggle activity completion' })
   async toggleActivity(
     @CurrentUser() user: CurrentUserPayload,
@@ -210,7 +251,7 @@ export class LeadController {
 
   @Delete('activities/:id')
   @UseGuards(PermissionGuard)
-  @Permissions(['crm.activities'])
+  @Permissions(['crm.delete'])
   @ApiOperation({ summary: 'Delete an activity' })
   async deleteActivity(
     @CurrentUser() user: CurrentUserPayload,

@@ -74,8 +74,11 @@ function buildController(getter: (orgId: string, userId: string) => Promise<stri
   } as unknown as LeadService;
 
   const activity = {
+    findAll: jest.fn(async (orgId: string, query: unknown) => ({ orgId, data: [], query })),
+    findById: jest.fn(async (orgId: string, id: string) => ({ orgId, id })),
     findByLead: jest.fn(async (orgId: string, id: string, query: unknown) => ({ orgId, id, query })),
     create: jest.fn(async (orgId: string, userId: string, id: string, dto: unknown) => ({ orgId, userId, id, dto })),
+    update: jest.fn(async (orgId: string, userId: string, id: string, dto: unknown) => ({ orgId, userId, id, dto })),
     toggleComplete: jest.fn(async (orgId: string, userId: string, id: string) => ({ orgId, userId, id })),
     delete: jest.fn(async (orgId: string, userId: string, id: string) => ({ orgId, userId, id })),
   } as unknown as ActivityService;
@@ -171,28 +174,49 @@ const ENDPOINTS: EndpointSpec[] = [
   {
     name: 'leads activities list',
     method: 'getActivities',
-    permissions: ['crm.read', 'crm.activities'],
+    permissions: ['crm.read'],
     serviceCall: ({ controller }) => controller.getActivities(makeUser(), 'lead-1', {} as never),
     serviceMock: ({ activity }) => activity.findByLead as jest.Mock,
   },
   {
     name: 'leads activities create',
     method: 'createActivity',
-    permissions: ['crm.activities'],
+    permissions: ['crm.create'],
     serviceCall: ({ controller }) => controller.createActivity(makeUser(), 'lead-1', {} as never),
     serviceMock: ({ activity }) => activity.create as jest.Mock,
   },
   {
+    name: 'activities findAll',
+    method: 'findAllActivities',
+    permissions: ['crm.read'],
+    serviceCall: ({ controller }) => controller.findAllActivities(makeUser(), {} as never),
+    serviceMock: ({ activity }) => activity.findAll as jest.Mock,
+  },
+  {
+    name: 'activities findById',
+    method: 'findActivityById',
+    permissions: ['crm.read'],
+    serviceCall: ({ controller }) => controller.findActivityById(makeUser(), 'act-1'),
+    serviceMock: ({ activity }) => activity.findById as jest.Mock,
+  },
+  {
+    name: 'activities update',
+    method: 'updateActivity',
+    permissions: ['crm.update'],
+    serviceCall: ({ controller }) => controller.updateActivity(makeUser(), 'act-1', {} as never),
+    serviceMock: ({ activity }) => activity.update as jest.Mock,
+  },
+  {
     name: 'activities toggle',
     method: 'toggleActivity',
-    permissions: ['crm.activities'],
+    permissions: ['crm.update'],
     serviceCall: ({ controller }) => controller.toggleActivity(makeUser(), 'act-1'),
     serviceMock: ({ activity }) => activity.toggleComplete as jest.Mock,
   },
   {
     name: 'activities delete',
     method: 'deleteActivity',
-    permissions: ['crm.activities'],
+    permissions: ['crm.delete'],
     serviceCall: ({ controller }) => controller.deleteActivity(makeUser(), 'act-1'),
     serviceMock: ({ activity }) => activity.delete as jest.Mock,
   },
