@@ -12,6 +12,7 @@ const ORG_ID = 'org-1';
 
 const mockService = () => {
   const leadFindFirst = jest.fn();
+  const leadFindMany = jest.fn();
   const leadUpdate = jest.fn();
   const leadCreate = jest.fn();
   const userFindFirst = jest.fn();
@@ -25,6 +26,7 @@ const mockService = () => {
   const service = new LeadService({
     lead: {
       findFirst: leadFindFirst,
+      findMany: leadFindMany,
       update: leadUpdate,
       create: leadCreate,
       count: leadCount,
@@ -43,10 +45,12 @@ const mockService = () => {
   leadGroupBy.mockResolvedValue([]);
   leadAggregate.mockResolvedValue({ _sum: { estimatedValue: null } });
   activityFindMany.mockResolvedValue([]);
+  leadFindMany.mockResolvedValue([]);
 
   return {
     service,
     leadFindFirst,
+    leadFindMany,
     leadUpdate,
     leadCreate,
     userFindFirst,
@@ -702,5 +706,82 @@ describe('LeadService.getSummary (Activity soft-delete isolation)', () => {
       }),
     );
     expect(result.upcomingActivities).toEqual([]);
+  });
+});
+
+describe('LeadService.findById (tenant isolation + soft-delete exclusion / FS7)', () => {
+  it('scopes the read to the organization and excludes soft-deleted leads', async () => {
+    const { service, leadFindFirst } = mockService();
+    leadFindFirst.mockResolvedValue({
+      id: 'lead-1',
+      leadNumber: 'LD-2026-000001',
+      name: 'Acme',
+      organizationId: ORG_ID,
+    });
+
+    const result = await service.findById(ORG_ID, 'lead-1');
+
+    expect(leadFindFirst).toHaveBeenCalledWith({
+      where: { id: 'lead-1', organizationId: ORG_ID, deletedAt: null },
+      select: expect.any(Object),
+    });
+    expect(result.id).toBe('lead-1');
+  });
+
+  it('rejects a lead from another organization with NotFound', async () => {
+    const { service, leadFindFirst } = mockService();
+    leadFindFirst.mockResolvedValue(null);
+
+    await expect(service.findById(ORG_ID, 'lead-other')).rejects.toThrow(NotFoundException);
+  });
+
+  it('rejects a soft-deleted lead with NotFound', async () => {
+    const { service, leadFindFirst } = mockService();
+    leadFindFirst.mockResolvedValue(null);
+
+    await expect(service.findById(ORG_ID, 'lead-deleted')).rejects.toThrow(NotFoundException);
+  });
+});
+
+describe('LeadService.findAll (tenant isolation + soft-delete exclusion / FS7)', () => {
+  it('scopes both count and findMany to the organization and excludes soft-deleted leads', async () => {
+    const { service, leadCount, leadFindMany } = mockService();
+    leadCount.mockResolvedValue(1);
+    leadFindMany.mockResolvedValue([
+      { id: 'lead-1', leadNumber: 'LD-2026-000001', name: 'Acme', activities: [] },
+    ]);
+
+    const result = await service.findAll(ORG_ID, {});
+
+    expect(leadCount).toHaveBeenCalledWith({
+      where: { organizationId: ORG_ID, deletedAt: null },
+    });
+    expect(leadFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { organizationId: ORG_ID, deletedAt: null },
+      }),
+    );
+    expect(result.data).toHaveLength(1);
+  });
+
+  it('never returns leads from another organization even if they exist', async () => {
+    const { service, leadFindMany } = mockService();
+    leadFindMany.mockResolvedValue([
+      { id: 'lead-other', leadNumber: 'LD-2026-000001', name: 'Other Org', activities: [] },
+    ]);
+
+    const result = await service.findAll(ORG_ID, {});
+
+    expect(leadFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ organizationId: ORG_ID }),
+      }),
+    );
+    expect(leadFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ deletedAt: null }),
+      }),
+    );
+    expect(result.data[0].id).toBe('lead-other');
   });
 });
