@@ -105,6 +105,19 @@ describe('ActivityService query tenant scoping', () => {
     await expect(service.findById(ORG_ID, 'a1')).rejects.toThrow(NotFoundException);
   });
 
+  it('findByLead authorizes the lead with id, organizationId and deletedAt', async () => {
+    const { service, leadFindFirst, activityFindMany, activityCount } = mockService();
+    leadFindFirst.mockResolvedValue({ id: 'lead-1' });
+    activityCount.mockResolvedValue(0);
+    activityFindMany.mockResolvedValue([]);
+
+    await service.findByLead(ORG_ID, 'lead-1', { page: 1, limit: 20 });
+
+    expect(leadFindFirst).toHaveBeenCalledWith({
+      where: { id: 'lead-1', organizationId: ORG_ID, deletedAt: null },
+    });
+  });
+
   it('findByLead requires the lead to belong to the organization and be live', async () => {
     const { service, leadFindFirst, activityFindMany } = mockService();
     leadFindFirst.mockResolvedValue(null);
@@ -127,6 +140,25 @@ describe('ActivityService query tenant scoping', () => {
       }),
     );
     expect(result.data).toEqual([]);
+  });
+
+  it('findByLead scopes both the count and the list query to live activities', async () => {
+    const { service, leadFindFirst, activityFindMany, activityCount } = mockService();
+    leadFindFirst.mockResolvedValue({ id: 'lead-1' });
+    activityCount.mockResolvedValue(3);
+    activityFindMany.mockResolvedValue([{ id: 'a1' }, { id: 'a2' }]);
+
+    const result = await service.findByLead(ORG_ID, 'lead-1', { page: 1, limit: 20 });
+
+    expect(activityCount).toHaveBeenCalledWith({
+      where: { leadId: 'lead-1', deletedAt: null },
+    });
+    expect(activityFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { leadId: 'lead-1', deletedAt: null },
+      }),
+    );
+    expect(result.meta.total).toBe(3);
   });
 });
 
