@@ -218,6 +218,94 @@ describe('DealService.create (pipeline/stage)', () => {
   });
 });
 
+describe('DealService.create (default pipeline resolution)', () => {
+  it('assigns the org default pipeline and its first active stage when none provided', async () => {
+    const { service, pipelineFindFirst, pipelineStageFindFirst, dealCreate } = mockService();
+    pipelineFindFirst.mockResolvedValueOnce({ id: 'pipeline-org-default' });
+    pipelineStageFindFirst.mockResolvedValueOnce({ id: 'stage-first', pipelineId: 'pipeline-org-default' });
+    dealCreate.mockResolvedValue({ id: DEAL_ID, title: 'Acme', value: 500 });
+
+    await service.create(ORG_ID, 'actor', { title: 'Acme' } as never);
+
+    expect(pipelineFindFirst).toHaveBeenCalledWith({
+      where: {
+        organizationId: ORG_ID,
+        deletedAt: null,
+        isActive: true,
+        isDefault: true,
+      },
+      select: { id: true },
+    });
+    expect(pipelineStageFindFirst).toHaveBeenCalledWith({
+      where: { pipelineId: 'pipeline-org-default', deletedAt: null, isActive: true },
+      orderBy: { position: 'asc' },
+      select: { id: true },
+    });
+    expect(dealCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          pipelineId: 'pipeline-org-default',
+          stageId: 'stage-first',
+        }),
+      }),
+    );
+  });
+
+  it('falls back to the platform default pipeline when the org has none', async () => {
+    const { service, pipelineFindFirst, pipelineStageFindFirst, dealCreate } = mockService();
+    pipelineFindFirst.mockResolvedValueOnce(null);
+    pipelineFindFirst.mockResolvedValueOnce({ id: PIPELINE_ID });
+    pipelineStageFindFirst.mockResolvedValueOnce({ id: STAGE_ID, pipelineId: PIPELINE_ID });
+    dealCreate.mockResolvedValue({ id: DEAL_ID, title: 'Acme', value: 500 });
+
+    await service.create(ORG_ID, 'actor', { title: 'Acme' } as never);
+
+    expect(pipelineFindFirst).toHaveBeenNthCalledWith(1, {
+      where: { organizationId: ORG_ID, deletedAt: null, isActive: true, isDefault: true },
+      select: { id: true },
+    });
+    expect(pipelineFindFirst).toHaveBeenNthCalledWith(2, {
+      where: { organizationId: null, deletedAt: null, isActive: true, isDefault: true },
+      select: { id: true },
+    });
+    expect(dealCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ pipelineId: PIPELINE_ID, stageId: STAGE_ID }),
+      }),
+    );
+  });
+
+  it('leaves pipeline and stage null when no default pipeline is configured', async () => {
+    const { service, pipelineFindFirst, dealCreate } = mockService();
+    pipelineFindFirst.mockResolvedValueOnce(null);
+    pipelineFindFirst.mockResolvedValueOnce(null);
+    dealCreate.mockResolvedValue({ id: DEAL_ID, title: 'Acme', value: 500 });
+
+    await service.create(ORG_ID, 'actor', { title: 'Acme' } as never);
+
+    expect(dealCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ pipelineId: null, stageId: null }),
+      }),
+    );
+  });
+
+  it('does not touch existing pipeline/stage on update when neither field is sent', async () => {
+    const { service, pipelineFindFirst, pipelineStageFindFirst, dealUpdate } = mockService();
+    dealUpdate.mockResolvedValue({ id: DEAL_ID, title: 'Acme', value: 500 });
+
+    await service.update(ORG_ID, 'actor', DEAL_ID, { title: 'Renamed' } as never);
+
+    expect(pipelineFindFirst).not.toHaveBeenCalled();
+    expect(pipelineStageFindFirst).not.toHaveBeenCalled();
+    expect(dealUpdate).toHaveBeenCalledWith({
+      where: { id: DEAL_ID, organizationId: ORG_ID, deletedAt: null },
+      data: { title: 'Renamed' },
+      select: expect.anything(),
+    });
+  });
+});
+
 describe('DealService.findAll', () => {
   it('scopes to org, excludes soft deleted, pages, and returns meta', async () => {
     const { service, dealCount, dealFindMany } = mockService();

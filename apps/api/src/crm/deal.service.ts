@@ -139,8 +139,15 @@ export class DealService {
   }
 
   async create(orgId: string, userId: string, dto: CreateDealDto) {
+    let pipelineId = dto.pipelineId ?? null;
+    let stageId = dto.stageId ?? null;
+
     if (dto.pipelineId || dto.stageId) {
       await this.assertPipelineAndStageAccessible(orgId, dto.pipelineId, dto.stageId);
+    } else {
+      const resolved = await this.resolveDefaultPipelineAndStage(orgId);
+      pipelineId = resolved.pipelineId;
+      stageId = resolved.stageId;
     }
     if (dto.contactId) await this.assertContactAccessible(orgId, dto.contactId);
     if (dto.leadId) await this.assertLeadAccessible(orgId, dto.leadId);
@@ -151,8 +158,8 @@ export class DealService {
         organizationId: orgId,
         title: dto.title.trim(),
         value: new Prisma.Decimal(dto.value ?? 0),
-        pipelineId: dto.pipelineId ?? null,
-        stageId: dto.stageId ?? null,
+        pipelineId,
+        stageId,
         contactId: dto.contactId ?? null,
         leadId: dto.leadId ?? null,
         ownerId: dto.ownerId ?? null,
@@ -293,6 +300,34 @@ export class DealService {
 
       await this.assertPipelineAccessible(orgId, stage.pipelineId);
     }
+  }
+
+  /**
+   * Resolves the default pipeline/stage for a new deal. Prefers the active
+   * org-scoped default pipeline, falling back to the active platform default
+   * (organizationId null). When a default pipeline exists, assigns its first
+   * active stage. Returns null pipeline/stage when no default is configured.
+   */
+  private async resolveDefaultPipelineAndStage(
+    orgId: string,
+  ): Promise<{ pipelineId: string | null; stageId: string | null }> {
+    const findDefault = (organizationId: string | null) =>
+      this.prisma.pipeline.findFirst({
+        where: { organizationId, deletedAt: null, isActive: true, isDefault: true },
+        select: { id: true },
+      });
+
+    const pipeline = (await findDefault(orgId)) ?? (await findDefault(null));
+
+    if (!pipeline) return { pipelineId: null, stageId: null };
+
+    const stage = await this.prisma.pipelineStage.findFirst({
+      where: { pipelineId: pipeline.id, deletedAt: null, isActive: true },
+      orderBy: { position: 'asc' },
+      select: { id: true },
+    });
+
+    return { pipelineId: pipeline.id, stageId: stage?.id ?? null };
   }
 
   private async assertPipelineAccessible(orgId: string, pipelineId: string): Promise<void> {
