@@ -134,6 +134,9 @@ export class PipelineService {
     if (dto.isDefault === true && dto.isActive === undefined && existing.isActive === false) {
       throw new BadRequestException('A default pipeline must be active');
     }
+    if (dto.isActive === false && existing.isDefault && dto.isDefault !== false) {
+      throw new BadRequestException('The default pipeline cannot be deactivated');
+    }
 
     if (dto.isDefault === true) {
       await this.prisma.pipeline.updateMany({

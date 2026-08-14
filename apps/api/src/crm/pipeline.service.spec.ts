@@ -246,6 +246,46 @@ describe('PipelineService.update', () => {
     expect(pipelineUpdate).not.toHaveBeenCalled();
   });
 
+  it('rejects deactivating the current default pipeline', async () => {
+    const { service, pipelineFindFirst, pipelineUpdate } = mockService();
+    pipelineFindFirst.mockResolvedValue({ id: PIPELINE_ID, isActive: true, isDefault: true });
+
+    await expect(
+      service.update(ORG_ID, 'actor', PIPELINE_ID, { isActive: false } as never),
+    ).rejects.toThrow(BadRequestException);
+    expect(pipelineUpdate).not.toHaveBeenCalled();
+  });
+
+  it('allows deactivating a non-default pipeline', async () => {
+    const { service, pipelineFindFirst, pipelineUpdate } = mockService();
+    pipelineFindFirst.mockResolvedValue({ id: PIPELINE_ID, isActive: true, isDefault: false });
+    pipelineUpdate.mockResolvedValue({ id: PIPELINE_ID, isActive: false, isDefault: false });
+
+    await service.update(ORG_ID, 'actor', PIPELINE_ID, { isActive: false } as never);
+
+    expect(pipelineUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: PIPELINE_ID, organizationId: ORG_ID, deletedAt: null },
+        data: expect.objectContaining({ isActive: false }),
+      }),
+    );
+  });
+
+  it('allows deactivating the default when isDefault is also cleared', async () => {
+    const { service, pipelineFindFirst, pipelineUpdate } = mockService();
+    pipelineFindFirst.mockResolvedValue({ id: PIPELINE_ID, isActive: true, isDefault: true });
+    pipelineUpdate.mockResolvedValue({ id: PIPELINE_ID, isActive: false, isDefault: false });
+
+    await service.update(ORG_ID, 'actor', PIPELINE_ID, { isActive: false, isDefault: false } as never);
+
+    expect(pipelineUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: PIPELINE_ID, organizationId: ORG_ID, deletedAt: null },
+        data: expect.objectContaining({ isActive: false, isDefault: false }),
+      }),
+    );
+  });
+
   it('maps P2025 to NotFound', async () => {
     const { service, pipelineFindFirst, pipelineUpdate } = mockService();
     pipelineFindFirst.mockResolvedValue({ id: PIPELINE_ID, isActive: true, isDefault: false });
