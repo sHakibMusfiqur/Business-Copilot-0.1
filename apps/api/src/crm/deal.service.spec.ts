@@ -290,6 +290,48 @@ describe('DealService.create (default pipeline resolution)', () => {
     );
   });
 
+  it('keeps stageId null when the default pipeline has no active stage', async () => {
+    const { service, pipelineFindFirst, pipelineStageFindFirst, dealCreate } = mockService();
+    pipelineFindFirst.mockResolvedValueOnce({ id: PIPELINE_ID });
+    pipelineStageFindFirst.mockResolvedValueOnce(null);
+    dealCreate.mockResolvedValue({ id: DEAL_ID, title: 'Acme', value: 500 });
+
+    await service.create(ORG_ID, 'actor', { title: 'Acme' } as never);
+
+    expect(pipelineStageFindFirst).toHaveBeenCalledWith({
+      where: { pipelineId: PIPELINE_ID, deletedAt: null, isActive: true },
+      orderBy: { position: 'asc' },
+      select: { id: true },
+    });
+    expect(dealCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ pipelineId: PIPELINE_ID, stageId: null }),
+      }),
+    );
+  });
+
+  it('preserves explicitly provided pipelineId/stageId without resolving defaults', async () => {
+    const { service, pipelineFindFirst, pipelineStageFindFirst, dealCreate } = mockService();
+    pipelineStageFindFirst.mockResolvedValue({ id: STAGE_ID, pipelineId: PIPELINE_ID });
+    pipelineFindFirst.mockResolvedValue({ id: PIPELINE_ID });
+    dealCreate.mockResolvedValue({ id: DEAL_ID, title: 'Acme', value: 500 });
+
+    await service.create(ORG_ID, 'actor', {
+      title: 'Acme',
+      pipelineId: PIPELINE_ID,
+      stageId: STAGE_ID,
+    } as never);
+
+    expect(pipelineFindFirst).not.toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ isDefault: true }) }),
+    );
+    expect(dealCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ pipelineId: PIPELINE_ID, stageId: STAGE_ID }),
+      }),
+    );
+  });
+
   it('does not touch existing pipeline/stage on update when neither field is sent', async () => {
     const { service, pipelineFindFirst, pipelineStageFindFirst, dealUpdate } = mockService();
     dealUpdate.mockResolvedValue({ id: DEAL_ID, title: 'Acme', value: 500 });
