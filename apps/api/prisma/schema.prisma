@@ -122,45 +122,45 @@ enum TaxType {
 }
 
 model Organization {
-  id             String    @id @default(cuid())
-  name           String    @unique
-  slug           String    @unique
-  logo           String?
-  email          String?
-  phone          String?
-  address        String?
-  city           String?
-  state          String?
-  zipCode        String?
-  country        String?
-  timezone       String    @default("UTC")
-  locale         String    @default("en-US")
-  isActive       Boolean   @default(true)
-  suspendedAt    DateTime?
-  deletedAt      DateTime?
-  deletedBy      String?
-  deletedReason  String?
-  archivedAt     DateTime?
-  archivedBy     String?
-  archiveReason  String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  id            String    @id @default(cuid())
+  name          String    @unique
+  slug          String    @unique
+  logo          String?
+  email         String?
+  phone         String?
+  address       String?
+  city          String?
+  state         String?
+  zipCode       String?
+  country       String?
+  timezone      String    @default("UTC")
+  locale        String    @default("en-US")
+  isActive      Boolean   @default(true)
+  suspendedAt   DateTime?
+  deletedAt     DateTime?
+  deletedBy     String?
+  deletedReason String?
+  archivedAt    DateTime?
+  archivedBy    String?
+  archiveReason String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  users      User[]
-  members    OrganizationMember[]
-  auditLogs  AuditLog[]
-  customers  Customer[]
-  suppliers  Supplier[]
-  products   Product[]
-  categories Category[]
-  warehouses Warehouse[]
-  inventories Inventory[]
-  files      File[]
-  invoices   Invoice[]
-  purchaseOrders PurchaseOrder[]
-  employees  Employee[]
-  leads      Lead[]
-  roles      Role[]
+  users                 User[]
+  members               OrganizationMember[]
+  auditLogs             AuditLog[]
+  customers             Customer[]
+  suppliers             Supplier[]
+  products              Product[]
+  categories            Category[]
+  warehouses            Warehouse[]
+  inventories           Inventory[]
+  files                 File[]
+  invoices              Invoice[]
+  purchaseOrders        PurchaseOrder[]
+  employees             Employee[]
+  leads                 Lead[]
+  roles                 Role[]
   inventoryTransactions InventoryTransaction[]
   salesOrders           SalesOrder[]
   accounts              Account[]
@@ -175,17 +175,19 @@ model Organization {
   invitations           Invitation[]
   departments           Department[]
   contacts              Contact[]
+  pipelines             Pipeline[]
+  deals                 Deal[]
 }
 
 model OrganizationMember {
-  id             String   @id @default(cuid())
+  id             String                 @id @default(cuid())
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   userId         String
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   role           OrganizationMemberRole @default(MEMBER)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
 
   @@unique([organizationId, userId])
   @@index([organizationId])
@@ -193,45 +195,46 @@ model OrganizationMember {
 }
 
 model User {
-  id             String     @id @default(cuid())
-  email          String     @unique
+  id             String        @id @default(cuid())
+  email          String        @unique
   password       String
   name           String
   avatar         String?
   phone          String?
-  role           UserRole   @default(USER)
-  isActive       Boolean    @default(true)
+  role           UserRole      @default(USER)
+  isActive       Boolean       @default(true)
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id])
   departmentId   String?
-  department     Department? @relation(fields: [departmentId], references: [id])
+  department     Department?   @relation(fields: [departmentId], references: [id])
   designation    String?
   managerId      String?
-  manager        User?        @relation("DirectReports", fields: [managerId], references: [id])
+  manager        User?         @relation("DirectReports", fields: [managerId], references: [id])
   lastLoginAt    DateTime?
   deletedAt      DateTime?
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
-  refreshTokens  RefreshToken[]
-  notifications  Notification[]
-  auditLogs      AuditLog[]
-  assignedLeads  Lead[]       @relation("AssignedUser")
-  activities     Activity[]   @relation("CreatedByActivities")
-  timelineEvents TimelineEvent[] @relation("CreatedByTimelineEvents")
-  createdInvoices Invoice[]   @relation("CreatedByUser")
+  refreshTokens         RefreshToken[]
+  notifications         Notification[]
+  auditLogs             AuditLog[]
+  assignedLeads         Lead[]                 @relation("AssignedUser")
+  activities            Activity[]             @relation("CreatedByActivities")
+  timelineEvents        TimelineEvent[]        @relation("CreatedByTimelineEvents")
+  createdInvoices       Invoice[]              @relation("CreatedByUser")
   inventoryTransactions InventoryTransaction[] @relation("CreatedByUserTransactions")
-  purchaseOrders         PurchaseOrder[] @relation("CreatedByPurchaseOrders")
-  salesOrders            SalesOrder[] @relation("CreatedBySalesOrders")
-  journalEntries       JournalEntry[]       @relation("CreatedByJournalEntries")
-  payments             Payment[]            @relation("CreatedByPayments")
-  files                File[]
-  memberOf             OrganizationMember[]
-  roleAssignments      UserRoleAssignment[]
-  systemSettingChanges SystemSettingVersion[]
-  reports               User[]      @relation("DirectReports")
-  inviteeInvitations    Invitation[] @relation("InvitedReportingManager")
-  acceptedInvitation    Invitation? @relation("AcceptedInvitation")
+  purchaseOrders        PurchaseOrder[]        @relation("CreatedByPurchaseOrders")
+  salesOrders           SalesOrder[]           @relation("CreatedBySalesOrders")
+  journalEntries        JournalEntry[]         @relation("CreatedByJournalEntries")
+  payments              Payment[]              @relation("CreatedByPayments")
+  files                 File[]
+  memberOf              OrganizationMember[]
+  roleAssignments       UserRoleAssignment[]
+  systemSettingChanges  SystemSettingVersion[]
+  reports               User[]                 @relation("DirectReports")
+  inviteeInvitations    Invitation[]           @relation("InvitedReportingManager")
+  ownedDeals            Deal[]                 @relation("DealOwner")
+  acceptedInvitation    Invitation?            @relation("AcceptedInvitation")
 }
 
 model Permission {
@@ -246,14 +249,14 @@ model Permission {
 }
 
 model Role {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   name           String
   description    String?
-  isSystem       Boolean  @default(false)
+  isSystem       Boolean      @default(false)
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   rolePermissions RolePermission[]
   userAssignments UserRoleAssignment[]
@@ -298,7 +301,7 @@ model RefreshToken {
 }
 
 model Customer {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   name           String
@@ -313,14 +316,14 @@ model Customer {
   zipCode        String?
   country        String?
   notes          String?
-  creditLimit    Decimal  @default(0)
-  isActive       Boolean  @default(true)
+  creditLimit    Decimal      @default(0)
+  isActive       Boolean      @default(true)
   deletedAt      DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   invoices    Invoice[]
-  leads       Lead[] @relation("ConvertedLeads")
+  leads       Lead[]       @relation("ConvertedLeads")
   salesOrders SalesOrder[]
   receivables Receivable[]
   payments    Payment[]
@@ -330,7 +333,7 @@ model Customer {
 }
 
 model Supplier {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   name           String
@@ -346,10 +349,10 @@ model Supplier {
   country        String?
   paymentTerms   String?
   notes          String?
-  isActive       Boolean  @default(true)
+  isActive       Boolean      @default(true)
   deletedAt      DateTime?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   purchaseOrders PurchaseOrder[]
   products       Product[]
@@ -361,17 +364,17 @@ model Supplier {
 }
 
 model Category {
-  id             String       @id @default(cuid())
+  id             String        @id @default(cuid())
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id])
   name           String
   description    String?
   parentId       String?
-  parent         Category?    @relation("CategoryHierarchy", fields: [parentId], references: [id])
-  children       Category[]   @relation("CategoryHierarchy")
-  isActive       Boolean      @default(true)
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  parent         Category?     @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children       Category[]    @relation("CategoryHierarchy")
+  isActive       Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   products Product[]
 
@@ -379,34 +382,34 @@ model Category {
 }
 
 model Product {
-  id              String     @id @default(cuid())
-  organizationId  String
-  organization    Organization @relation(fields: [organizationId], references: [id])
-  name            String
-  sku             String
-  barcode         String?
-  brand           String?
-  description     String?
-  categoryId      String?
-  category        Category? @relation(fields: [categoryId], references: [id])
-  supplierId      String?
-  supplier        Supplier? @relation(fields: [supplierId], references: [id])
-  unitPrice       Decimal    @default(0)
-  costPrice       Decimal    @default(0)
-  unit            String     @default("pcs")
-  taxRate         Decimal    @default(0)
-  minimumStock    Int        @default(0)
-  maximumStock    Int        @default(0)
-  imageUrl        String?
-  isActive        Boolean    @default(true)
-  deletedAt       DateTime?
-  createdAt       DateTime   @default(now())
-  updatedAt       DateTime   @updatedAt
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  sku            String
+  barcode        String?
+  brand          String?
+  description    String?
+  categoryId     String?
+  category       Category?    @relation(fields: [categoryId], references: [id])
+  supplierId     String?
+  supplier       Supplier?    @relation(fields: [supplierId], references: [id])
+  unitPrice      Decimal      @default(0)
+  costPrice      Decimal      @default(0)
+  unit           String       @default("pcs")
+  taxRate        Decimal      @default(0)
+  minimumStock   Int          @default(0)
+  maximumStock   Int          @default(0)
+  imageUrl       String?
+  isActive       Boolean      @default(true)
+  deletedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
-  inventory       Inventory[]
-  invoiceItems    InvoiceItem[]
-  purchaseItems   PurchaseOrderItem[]
-  salesOrderItems SalesOrderItem[]
+  inventory             Inventory[]
+  invoiceItems          InvoiceItem[]
+  purchaseItems         PurchaseOrderItem[]
+  salesOrderItems       SalesOrderItem[]
   inventoryTransactions InventoryTransaction[]
 
   @@unique([organizationId, sku])
@@ -469,26 +472,26 @@ model InventoryTransaction {
 }
 
 model Invoice {
-  id              String        @id @default(cuid())
-  invoiceNumber   String        @unique
-  organizationId  String
-  organization    Organization  @relation(fields: [organizationId], references: [id])
-  type            InvoiceType   @default(SALES)
-  customerId      String?
-  customer        Customer?     @relation(fields: [customerId], references: [id])
-  issueDate       DateTime      @default(now())
-  dueDate         DateTime?
-  status          OrderStatus   @default(DRAFT)
-  paymentStatus   PaymentStatus @default(PENDING)
-  subtotal        Decimal       @default(0)
-  taxTotal        Decimal       @default(0)
-  discountTotal   Decimal       @default(0)
-  total           Decimal       @default(0)
-  notes           String?
-  createdById     String
-  createdBy       User          @relation("CreatedByUser", fields: [createdById], references: [id])
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  id             String        @id @default(cuid())
+  invoiceNumber  String        @unique
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  type           InvoiceType   @default(SALES)
+  customerId     String?
+  customer       Customer?     @relation(fields: [customerId], references: [id])
+  issueDate      DateTime      @default(now())
+  dueDate        DateTime?
+  status         OrderStatus   @default(DRAFT)
+  paymentStatus  PaymentStatus @default(PENDING)
+  subtotal       Decimal       @default(0)
+  taxTotal       Decimal       @default(0)
+  discountTotal  Decimal       @default(0)
+  total          Decimal       @default(0)
+  notes          String?
+  createdById    String
+  createdBy      User          @relation("CreatedByUser", fields: [createdById], references: [id])
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   items InvoiceItem[]
 
@@ -497,42 +500,42 @@ model Invoice {
 }
 
 model InvoiceItem {
-  id        String  @id @default(cuid())
-  invoiceId String
-  invoice   Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  productId String?
-  product   Product? @relation(fields: [productId], references: [id])
+  id          String   @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId   String?
+  product     Product? @relation(fields: [productId], references: [id])
   description String
-  quantity  Decimal @default(1)
-  unitPrice Decimal @default(0)
-  taxRate   Decimal @default(0)
-  taxAmount Decimal @default(0)
-  discount  Decimal @default(0)
-  total     Decimal @default(0)
+  quantity    Decimal  @default(1)
+  unitPrice   Decimal  @default(0)
+  taxRate     Decimal  @default(0)
+  taxAmount   Decimal  @default(0)
+  discount    Decimal  @default(0)
+  total       Decimal  @default(0)
 
   @@index([invoiceId])
 }
 
 model PurchaseOrder {
-  id              String         @id @default(cuid())
-  orderNumber     String         @unique
-  organizationId  String
-  organization    Organization   @relation(fields: [organizationId], references: [id])
-  supplierId      String?
-  supplier        Supplier?      @relation(fields: [supplierId], references: [id])
-  orderDate       DateTime       @default(now())
-  status          PurchaseStatus @default(DRAFT)
-  subtotal        Decimal        @default(0)
-  discount        Decimal        @default(0)
-  tax             Decimal        @default(0)
-  shippingCost    Decimal        @default(0)
-  total           Decimal        @default(0)
-  notes           String?
-  createdById     String
-  createdBy       User           @relation("CreatedByPurchaseOrders", fields: [createdById], references: [id])
-  deletedAt       DateTime?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id             String         @id @default(cuid())
+  orderNumber    String         @unique
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id])
+  supplierId     String?
+  supplier       Supplier?      @relation(fields: [supplierId], references: [id])
+  orderDate      DateTime       @default(now())
+  status         PurchaseStatus @default(DRAFT)
+  subtotal       Decimal        @default(0)
+  discount       Decimal        @default(0)
+  tax            Decimal        @default(0)
+  shippingCost   Decimal        @default(0)
+  total          Decimal        @default(0)
+  notes          String?
+  createdById    String
+  createdBy      User           @relation("CreatedByPurchaseOrders", fields: [createdById], references: [id])
+  deletedAt      DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   items    PurchaseOrderItem[]
   payables Payable[]
@@ -558,25 +561,25 @@ model PurchaseOrderItem {
 }
 
 model SalesOrder {
-  id              String       @id @default(cuid())
-  orderNumber     String       @unique
-  organizationId  String
-  organization    Organization @relation(fields: [organizationId], references: [id])
-  customerId      String?
-  customer        Customer?    @relation(fields: [customerId], references: [id])
-  orderDate       DateTime     @default(now())
-  status          SalesStatus  @default(DRAFT)
-  subtotal        Decimal      @default(0)
-  discount        Decimal      @default(0)
-  tax             Decimal      @default(0)
-  shippingCost    Decimal      @default(0)
-  total           Decimal      @default(0)
-  notes           String?
-  createdById     String
-  createdBy       User         @relation("CreatedBySalesOrders", fields: [createdById], references: [id])
-  deletedAt       DateTime?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  id             String       @id @default(cuid())
+  orderNumber    String       @unique
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  customerId     String?
+  customer       Customer?    @relation(fields: [customerId], references: [id])
+  orderDate      DateTime     @default(now())
+  status         SalesStatus  @default(DRAFT)
+  subtotal       Decimal      @default(0)
+  discount       Decimal      @default(0)
+  tax            Decimal      @default(0)
+  shippingCost   Decimal      @default(0)
+  total          Decimal      @default(0)
+  notes          String?
+  createdById    String
+  createdBy      User         @relation("CreatedBySalesOrders", fields: [createdById], references: [id])
+  deletedAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   items       SalesOrderItem[]
   receivables Receivable[]
@@ -658,20 +661,20 @@ model Account {
 }
 
 model JournalEntry {
-  id              String              @id @default(cuid())
-  entryNumber     String              @unique
-  organizationId  String
-  organization    Organization        @relation(fields: [organizationId], references: [id])
-  date            DateTime            @default(now())
-  description     String
-  status          JournalEntryStatus  @default(DRAFT)
-  referenceId     String?
-  referenceType   String?
-  createdById     String
-  createdBy       User                @relation("CreatedByJournalEntries", fields: [createdById], references: [id])
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt
-  deletedAt       DateTime?
+  id             String             @id @default(cuid())
+  entryNumber    String             @unique
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id])
+  date           DateTime           @default(now())
+  description    String
+  status         JournalEntryStatus @default(DRAFT)
+  referenceId    String?
+  referenceType  String?
+  createdById    String
+  createdBy      User               @relation("CreatedByJournalEntries", fields: [createdById], references: [id])
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  deletedAt      DateTime?
 
   lines JournalEntryLine[]
 
@@ -680,35 +683,35 @@ model JournalEntry {
 }
 
 model JournalEntryLine {
-  id              String       @id @default(cuid())
-  journalEntryId  String
-  journalEntry    JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
-  accountId       String
-  account         Account      @relation(fields: [accountId], references: [id])
-  description     String?
-  debit           Decimal      @default(0)
-  credit          Decimal      @default(0)
+  id             String       @id @default(cuid())
+  journalEntryId String
+  journalEntry   JournalEntry @relation(fields: [journalEntryId], references: [id], onDelete: Cascade)
+  accountId      String
+  account        Account      @relation(fields: [accountId], references: [id])
+  description    String?
+  debit          Decimal      @default(0)
+  credit         Decimal      @default(0)
 
   @@index([journalEntryId])
   @@index([accountId])
 }
 
 model Receivable {
-  id              String           @id @default(cuid())
-  organizationId  String
-  organization    Organization     @relation(fields: [organizationId], references: [id])
-  customerId      String?
-  customer        Customer?        @relation(fields: [customerId], references: [id])
-  salesOrderId    String?
-  salesOrder      SalesOrder?      @relation(fields: [salesOrderId], references: [id])
-  invoiceNumber   String
-  dueDate         DateTime
-  totalAmount     Decimal          @default(0)
-  paidAmount      Decimal          @default(0)
-  status          ReceivableStatus @default(PENDING)
-  notes           String?
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  customerId     String?
+  customer       Customer?        @relation(fields: [customerId], references: [id])
+  salesOrderId   String?
+  salesOrder     SalesOrder?      @relation(fields: [salesOrderId], references: [id])
+  invoiceNumber  String
+  dueDate        DateTime
+  totalAmount    Decimal          @default(0)
+  paidAmount     Decimal          @default(0)
+  status         ReceivableStatus @default(PENDING)
+  notes          String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
   payments PaymentAllocation[]
 
@@ -717,21 +720,21 @@ model Receivable {
 }
 
 model Payable {
-  id               String        @id @default(cuid())
-  organizationId   String
-  organization     Organization  @relation(fields: [organizationId], references: [id])
-  supplierId       String?
-  supplier         Supplier?     @relation(fields: [supplierId], references: [id])
-  purchaseOrderId  String?
-  purchaseOrder    PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
-  billNumber       String
-  dueDate          DateTime
-  totalAmount      Decimal       @default(0)
-  paidAmount       Decimal       @default(0)
-  status           PayableStatus @default(PENDING)
-  notes            String?
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  id              String         @id @default(cuid())
+  organizationId  String
+  organization    Organization   @relation(fields: [organizationId], references: [id])
+  supplierId      String?
+  supplier        Supplier?      @relation(fields: [supplierId], references: [id])
+  purchaseOrderId String?
+  purchaseOrder   PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  billNumber      String
+  dueDate         DateTime
+  totalAmount     Decimal        @default(0)
+  paidAmount      Decimal        @default(0)
+  status          PayableStatus  @default(PENDING)
+  notes           String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
 
   payments PaymentAllocation[]
 
@@ -740,22 +743,22 @@ model Payable {
 }
 
 model Payment {
-  id             String      @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   type           PaymentType
   customerId     String?
-  customer       Customer?   @relation(fields: [customerId], references: [id])
+  customer       Customer?    @relation(fields: [customerId], references: [id])
   supplierId     String?
-  supplier       Supplier?   @relation(fields: [supplierId], references: [id])
-  amount         Decimal     @default(0)
-  paymentDate    DateTime    @default(now())
+  supplier       Supplier?    @relation(fields: [supplierId], references: [id])
+  amount         Decimal      @default(0)
+  paymentDate    DateTime     @default(now())
   reference      String?
   notes          String?
   createdById    String
-  createdBy      User        @relation("CreatedByPayments", fields: [createdById], references: [id])
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  createdBy      User         @relation("CreatedByPayments", fields: [createdById], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   allocations PaymentAllocation[]
 
@@ -765,14 +768,14 @@ model Payment {
 }
 
 model PaymentAllocation {
-  id            String     @id @default(cuid())
-  paymentId     String
-  payment       Payment    @relation(fields: [paymentId], references: [id], onDelete: Cascade)
-  receivableId  String?
-  receivable    Receivable? @relation(fields: [receivableId], references: [id])
-  payableId     String?
-  payable       Payable?   @relation(fields: [payableId], references: [id])
-  amount        Decimal    @default(0)
+  id           String      @id @default(cuid())
+  paymentId    String
+  payment      Payment     @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  receivableId String?
+  receivable   Receivable? @relation(fields: [receivableId], references: [id])
+  payableId    String?
+  payable      Payable?    @relation(fields: [payableId], references: [id])
+  amount       Decimal     @default(0)
 
   @@index([paymentId])
   @@index([receivableId])
@@ -780,19 +783,19 @@ model PaymentAllocation {
 }
 
 model Department {
-  id             String     @id @default(cuid())
+  id             String        @id @default(cuid())
   name           String
-  code           String     @unique
+  code           String        @unique
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id])
   managerId      String?
-  isActive       Boolean    @default(true)
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  isActive       Boolean       @default(true)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
-  employees    Employee[]
-  users        User[]
-  invitations  Invitation[]
+  employees   Employee[]
+  users       User[]
+  invitations Invitation[]
 }
 
 model Invitation {
@@ -811,8 +814,8 @@ model Invitation {
   tokenExpiresAt DateTime
   status         InvitationStatus @default(PENDING)
   acceptedAt     DateTime?
-  acceptedUserId String?       @unique
-  acceptedUser   User?         @relation("AcceptedInvitation", fields: [acceptedUserId], references: [id])
+  acceptedUserId String?          @unique
+  acceptedUser   User?            @relation("AcceptedInvitation", fields: [acceptedUserId], references: [id])
   resendCount    Int              @default(0)
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
@@ -823,70 +826,70 @@ model Invitation {
 }
 
 model Employee {
-  id             String     @id @default(cuid())
-  employeeCode   String     @unique
+  id             String       @id @default(cuid())
+  employeeCode   String       @unique
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
   userId         String?
   firstName      String
   lastName       String
-  email          String     @unique
+  email          String       @unique
   phone          String?
   gender         Gender?
   dateOfBirth    DateTime?
-  hireDate       DateTime   @default(now())
+  hireDate       DateTime     @default(now())
   departmentId   String?
-  department     Department? @relation(fields: [departmentId], references: [id])
+  department     Department?  @relation(fields: [departmentId], references: [id])
   position       String?
-  salary         Decimal    @default(0)
-  isActive       Boolean    @default(true)
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  salary         Decimal      @default(0)
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
-  leaves         Leave[]
-  payrolls       Payroll[]
+  leaves   Leave[]
+  payrolls Payroll[]
 
   @@index([organizationId])
   @@index([departmentId])
 }
 
 model Leave {
-  id          String       @id @default(cuid())
-  employeeId  String
-  employee    Employee     @relation(fields: [employeeId], references: [id])
-  startDate   DateTime
-  endDate     DateTime
-  type        String       @default("ANNUAL")
-  reason      String?
-  status      LeaveStatus  @default(PENDING)
-  approvedBy  String?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id         String      @id @default(cuid())
+  employeeId String
+  employee   Employee    @relation(fields: [employeeId], references: [id])
+  startDate  DateTime
+  endDate    DateTime
+  type       String      @default("ANNUAL")
+  reason     String?
+  status     LeaveStatus @default(PENDING)
+  approvedBy String?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
 
   @@index([employeeId])
 }
 
 model Payroll {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   employeeId  String
-  employee    Employee @relation(fields: [employeeId], references: [id])
+  employee    Employee  @relation(fields: [employeeId], references: [id])
   periodStart DateTime
   periodEnd   DateTime
-  basicSalary Decimal  @default(0)
-  allowances  Decimal  @default(0)
-  deductions  Decimal  @default(0)
-  tax         Decimal  @default(0)
-  netSalary   Decimal  @default(0)
+  basicSalary Decimal   @default(0)
+  allowances  Decimal   @default(0)
+  deductions  Decimal   @default(0)
+  tax         Decimal   @default(0)
+  netSalary   Decimal   @default(0)
   paymentDate DateTime?
   notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@index([employeeId])
 }
 
 model Lead {
-  id                    String     @id @default(cuid())
+  id                    String       @id @default(cuid())
   organizationId        String
   organization          Organization @relation(fields: [organizationId], references: [id])
   leadNumber            String
@@ -895,26 +898,27 @@ model Lead {
   email                 String?
   phone                 String?
   source                String?
-  status                LeadStatus @default(NEW)
-  estimatedValue        Decimal    @default(0)
+  status                LeadStatus   @default(NEW)
+  estimatedValue        Decimal      @default(0)
   assignedToId          String?
-  assignedTo            User?      @relation("AssignedUser", fields: [assignedToId], references: [id])
+  assignedTo            User?        @relation("AssignedUser", fields: [assignedToId], references: [id])
   notes                 String?
   convertedToCustomerId String?
-  convertedToCustomer   Customer?  @relation("ConvertedLeads", fields: [convertedToCustomerId], references: [id])
-  createdAt             DateTime   @default(now())
-  updatedAt             DateTime   @updatedAt
+  convertedToCustomer   Customer?    @relation("ConvertedLeads", fields: [convertedToCustomerId], references: [id])
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
   deletedAt             DateTime?
 
-  activities      Activity[]
-  timelineEvents  TimelineEvent[]
-  contacts        Contact[]
+  activities     Activity[]
+  timelineEvents TimelineEvent[]
+  contacts       Contact[]
+  deals          Deal[]
 
+  @@unique([organizationId, leadNumber])
   @@index([organizationId])
   @@index([status])
   @@index([assignedToId])
   @@index([deletedAt])
-  @@unique([organizationId, leadNumber])
 }
 
 model Contact {
@@ -934,10 +938,82 @@ model Contact {
   updatedAt      DateTime     @updatedAt
   deletedAt      DateTime?
 
+  deals Deal[]
+
+  @@unique([organizationId, email])
   @@index([organizationId])
   @@index([leadId])
   @@index([deletedAt])
-  @@unique([organizationId, email])
+}
+
+model Pipeline {
+  id             String        @id @default(cuid())
+  name           String
+  description    String?
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  isDefault      Boolean       @default(false)
+  isActive       Boolean       @default(true)
+  deletedAt      DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  stages PipelineStage[]
+  deals  Deal[]
+
+  @@index([organizationId])
+  @@index([deletedAt])
+}
+
+model PipelineStage {
+  id         String    @id @default(cuid())
+  pipelineId String
+  pipeline   Pipeline  @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  name       String
+  position   Int       @default(0)
+  isWon      Boolean   @default(false)
+  isLost     Boolean   @default(false)
+  isActive   Boolean   @default(true)
+  deletedAt  DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  deals Deal[]
+
+  @@unique([pipelineId, name])
+  @@index([pipelineId])
+  @@index([deletedAt])
+}
+
+model Deal {
+  id                String         @id @default(cuid())
+  organizationId    String
+  organization      Organization   @relation(fields: [organizationId], references: [id])
+  title             String
+  value             Decimal        @default(0)
+  pipelineId        String?
+  pipeline          Pipeline?      @relation(fields: [pipelineId], references: [id], onDelete: SetNull)
+  stageId           String?
+  stage             PipelineStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
+  contactId         String?
+  contact           Contact?       @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  leadId            String?
+  lead              Lead?          @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  ownerId           String?
+  owner             User?          @relation("DealOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  expectedCloseDate DateTime?
+  notes             String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  deletedAt         DateTime?
+
+  @@index([organizationId])
+  @@index([pipelineId])
+  @@index([stageId])
+  @@index([contactId])
+  @@index([leadId])
+  @@index([ownerId])
+  @@index([deletedAt])
 }
 
 model Activity {
@@ -959,35 +1035,35 @@ model Activity {
 }
 
 model Notification {
-  id      String           @id @default(cuid())
-  userId  String
-  user    User             @relation(fields: [userId], references: [id])
-  title   String
-  message String
-  type    NotificationType @default(INFO)
-  read    Boolean          @default(false)
-  link    String?
-  createdAt DateTime       @default(now())
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id])
+  title     String
+  message   String
+  type      NotificationType @default(INFO)
+  read      Boolean          @default(false)
+  link      String?
+  createdAt DateTime         @default(now())
 
   @@index([userId])
   @@index([read])
 }
 
 model File {
-  id            String        @id @default(cuid())
+  id             String        @id @default(cuid())
   organizationId String?
-  organization  Organization? @relation(fields: [organizationId], references: [id])
-  originalName  String
-  fileName      String
-  mimeType      String
-  size          Int
-  path          String
-  url           String?
-  uploadedById  String?
-  uploadedBy    User?         @relation(fields: [uploadedById], references: [id])
-  entityType    String?
-  entityId      String?
-  createdAt     DateTime      @default(now())
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  originalName   String
+  fileName       String
+  mimeType       String
+  size           Int
+  path           String
+  url            String?
+  uploadedById   String?
+  uploadedBy     User?         @relation(fields: [uploadedById], references: [id])
+  entityType     String?
+  entityId       String?
+  createdAt      DateTime      @default(now())
 
   @@index([entityType, entityId])
   @@index([organizationId])
@@ -1044,52 +1120,52 @@ enum SubscriptionInterval {
 }
 
 model SubscriptionPlan {
-  id              String                @id @default(cuid())
-  name            String
-  slug            String                @unique
-  description     String?
-  price           Decimal               @default(0)
-  yearlyPrice     Decimal?
-  currency        String                @default("USD")
-  interval        SubscriptionInterval  @default(MONTHLY)
-  freeTrialDays   Int                   @default(30)
-  aiCredits       Int                   @default(0)
-  reportsEnabled  Boolean               @default(false)
-  apiAccess       Boolean               @default(false)
-  integrations    Json?
-  prioritySupport Boolean               @default(false)
-  customBranding  Boolean               @default(false)
+  id               String               @id @default(cuid())
+  name             String
+  slug             String               @unique
+  description      String?
+  price            Decimal              @default(0)
+  yearlyPrice      Decimal?
+  currency         String               @default("USD")
+  interval         SubscriptionInterval @default(MONTHLY)
+  freeTrialDays    Int                  @default(30)
+  aiCredits        Int                  @default(0)
+  reportsEnabled   Boolean              @default(false)
+  apiAccess        Boolean              @default(false)
+  integrations     Json?
+  prioritySupport  Boolean              @default(false)
+  customBranding   Boolean              @default(false)
   securityFeatures Json?
-  recommended     Boolean               @default(false)
-  sortOrder       Int                   @default(0)
-  features        Json?
-  modules         Json?
-  maxUsers        Int                   @default(5)
-  maxStorage      Int                   @default(1024)
-  maxCustomers    Int                   @default(100)
-  maxProducts     Int                   @default(100)
-  isActive        Boolean               @default(true)
-  createdAt       DateTime              @default(now())
-  updatedAt       DateTime              @updatedAt
+  recommended      Boolean              @default(false)
+  sortOrder        Int                  @default(0)
+  features         Json?
+  modules          Json?
+  maxUsers         Int                  @default(5)
+  maxStorage       Int                  @default(1024)
+  maxCustomers     Int                  @default(100)
+  maxProducts      Int                  @default(100)
+  isActive         Boolean              @default(true)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
 
   subscriptions Subscription[]
-  payments       SubscriptionPayment[]
+  payments      SubscriptionPayment[]
 }
 
 model Subscription {
-  id                  String             @id @default(cuid())
-  organizationId      String             @unique
-  organization        Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  planId              String
-  plan                SubscriptionPlan   @relation(fields: [planId], references: [id])
-  status              SubscriptionStatus @default(TRIALING)
-  billingInterval     SubscriptionInterval @default(MONTHLY)
-  currentPeriodStart  DateTime           @default(now())
-  currentPeriodEnd    DateTime
-  trialEndsAt         DateTime?
-  canceledAt          DateTime?
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
+  id                 String               @id @default(cuid())
+  organizationId     String               @unique
+  organization       Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  planId             String
+  plan               SubscriptionPlan     @relation(fields: [planId], references: [id])
+  status             SubscriptionStatus   @default(TRIALING)
+  billingInterval    SubscriptionInterval @default(MONTHLY)
+  currentPeriodStart DateTime             @default(now())
+  currentPeriodEnd   DateTime
+  trialEndsAt        DateTime?
+  canceledAt         DateTime?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
 
   payments SubscriptionPayment[]
   invoices SubscriptionInvoice[]
@@ -1116,23 +1192,23 @@ enum SubscriptionInvoiceStatus {
 }
 
 model SubscriptionPayment {
-  id               String                    @id @default(cuid())
-  organizationId   String
-  organization     Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  subscriptionId   String?
-  subscription     Subscription?             @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-  planId           String?
-  plan             SubscriptionPlan?         @relation(fields: [planId], references: [id], onDelete: SetNull)
-  amount           Decimal
-  currency         String                    @default("USD")
-  billingInterval  SubscriptionInterval      @default(MONTHLY)
-  status           SubscriptionPaymentStatus @default(PENDING)
-  gateway          String?
-  transactionRef   String?
-  gatewayData      Json?
-  paidAt           DateTime?
-  createdAt        DateTime                  @default(now())
-  updatedAt        DateTime                  @updatedAt
+  id              String                    @id @default(cuid())
+  organizationId  String
+  organization    Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscriptionId  String?
+  subscription    Subscription?             @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  planId          String?
+  plan            SubscriptionPlan?         @relation(fields: [planId], references: [id], onDelete: SetNull)
+  amount          Decimal
+  currency        String                    @default("USD")
+  billingInterval SubscriptionInterval      @default(MONTHLY)
+  status          SubscriptionPaymentStatus @default(PENDING)
+  gateway         String?
+  transactionRef  String?
+  gatewayData     Json?
+  paidAt          DateTime?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
 
   invoices SubscriptionInvoice[]
 
@@ -1142,30 +1218,30 @@ model SubscriptionPayment {
 }
 
 model SubscriptionInvoice {
-  id               String                      @id @default(cuid())
-  organizationId   String
-  organization     Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  subscriptionId   String?
-  subscription     Subscription?               @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
-  paymentId        String?
-  payment          SubscriptionPayment?        @relation(fields: [paymentId], references: [id], onDelete: SetNull)
-  invoiceNumber    String
-  amount           Decimal
-  currency         String                      @default("USD")
-  billingInterval  SubscriptionInterval        @default(MONTHLY)
-  status           SubscriptionInvoiceStatus   @default(DRAFT)
-  issuedAt         DateTime                    @default(now())
-  dueAt            DateTime?
-  paidAt           DateTime?
-  pdfUrl           String?
-  metadata         Json?
-  createdAt        DateTime                    @default(now())
-  updatedAt        DateTime                    @updatedAt
+  id              String                    @id @default(cuid())
+  organizationId  String
+  organization    Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscriptionId  String?
+  subscription    Subscription?             @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+  paymentId       String?
+  payment         SubscriptionPayment?      @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  invoiceNumber   String
+  amount          Decimal
+  currency        String                    @default("USD")
+  billingInterval SubscriptionInterval      @default(MONTHLY)
+  status          SubscriptionInvoiceStatus @default(DRAFT)
+  issuedAt        DateTime                  @default(now())
+  dueAt           DateTime?
+  paidAt          DateTime?
+  pdfUrl          String?
+  metadata        Json?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
 
+  @@unique([organizationId, invoiceNumber])
   @@index([organizationId])
   @@index([subscriptionId])
   @@index([status])
-  @@unique([organizationId, invoiceNumber])
 }
 
 model PaymentGateway {
@@ -1182,12 +1258,12 @@ model PaymentGateway {
 }
 
 model OrganizationSettings {
-  id              String   @id @default(cuid())
-  organizationId  String   @unique
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  settings        Json?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String       @id @default(cuid())
+  organizationId String       @unique
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  settings       Json?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@index([organizationId])
 }
@@ -1244,40 +1320,40 @@ model ChecklistItem {
 }
 
 model OnboardingSession {
-  id               String    @id @default(cuid())
-  userId           String?
-  email            String
-  name             String
-  version          Int       @default(1)
-  currentStep      Int       @default(0)
-  completedSteps   Json?     @default("[]")
-  selectedIndustry String?
-  selectedCategory String?
+  id                 String   @id @default(cuid())
+  userId             String?
+  email              String
+  name               String
+  version            Int      @default(1)
+  currentStep        Int      @default(0)
+  completedSteps     Json?    @default("[]")
+  selectedIndustry   String?
+  selectedCategory   String?
   selectedCategories Json?    @default("[]")
-  orgName          String?
-  orgEmail         String?
-  orgPhone         String?
-  orgWebsite       String?
-  orgCountry       String?
-  orgState         String?
-  orgCity          String?
-  orgAddress       String?
-  orgTimezone      String?
-  orgCurrency      String?
-  orgLanguage      String?
-  businessProfile  Json?
-  selectedModules  Json?     @default("[]")
-  aiEnabled        Boolean   @default(false)
-  aiLanguage       String?
-  aiPersonality    String?
-  selectedPlanId   String?
-  planInterval     String?   @default("MONTHLY")
-  subscriptionId   String?
-  provisionStatus  String    @default("PENDING")
-  provisionData    Json?
-  organizationId   String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  orgName            String?
+  orgEmail           String?
+  orgPhone           String?
+  orgWebsite         String?
+  orgCountry         String?
+  orgState           String?
+  orgCity            String?
+  orgAddress         String?
+  orgTimezone        String?
+  orgCurrency        String?
+  orgLanguage        String?
+  businessProfile    Json?
+  selectedModules    Json?    @default("[]")
+  aiEnabled          Boolean  @default(false)
+  aiLanguage         String?
+  aiPersonality      String?
+  selectedPlanId     String?
+  planInterval       String?  @default("MONTHLY")
+  subscriptionId     String?
+  provisionStatus    String   @default("PENDING")
+  provisionData      Json?
+  organizationId     String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   @@index([email])
   @@index([userId])
