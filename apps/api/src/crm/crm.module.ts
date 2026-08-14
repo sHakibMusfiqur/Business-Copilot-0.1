@@ -6,11 +6,13 @@ import { RbacModule } from '../rbac/rbac.module';
 import { LeadController } from './lead.controller';
 import { LeadService } from './lead.service';
 import { ActivityService } from './activity.service';
+import { ContactController } from './contact.controller';
+import { ContactService } from './contact.service';
 
 @Module({
   imports: [PrismaModule, RbacModule],
-  controllers: [LeadController],
-  providers: [LeadService, ActivityService],
-  exports: [LeadService, ActivityService],
+  controllers: [LeadController, ContactController],
+  providers: [LeadService, ActivityService, ContactService],
+  exports: [LeadService, ActivityService, ContactService],
 })
 export class CrmModule {}
