@@ -336,7 +336,12 @@ export class LeadService {
         _sum: { estimatedValue: true },
       }),
       this.prisma.activity.findMany({
-        where: { lead: { organizationId: orgId }, completed: false, dueDate: { not: null } },
+        where: {
+          deletedAt: null,
+          lead: { organizationId: orgId, deletedAt: null },
+          completed: false,
+          dueDate: { not: null },
+        },
         orderBy: { dueDate: 'asc' },
         take: 10,
         select: {

@@ -3,7 +3,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, ActivityType } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { LeadService } from './lead.service';
@@ -49,7 +49,7 @@ export class ActivityService {
 
     const where: Prisma.ActivityWhereInput = {
       deletedAt: null,
-      lead: { organizationId: orgId },
+      lead: { organizationId: orgId, deletedAt: null },
     };
     if (completed !== undefined) where.completed = completed;
 
@@ -72,7 +72,7 @@ export class ActivityService {
 
   async findById(orgId: string, activityId: string) {
     const activity = await this.prisma.activity.findFirst({
-      where: { id: activityId, deletedAt: null, lead: { organizationId: orgId } },
+      where: { id: activityId, deletedAt: null, lead: { organizationId: orgId, deletedAt: null } },
       select: ACTIVITY_DETAIL_SELECT,
     });
 
@@ -139,34 +139,43 @@ export class ActivityService {
   }
 
   async update(orgId: string, userId: string, activityId: string, dto: UpdateActivityDto) {
-    const existing = await this.prisma.activity.findFirst({
-      where: { id: activityId, deletedAt: null, lead: { organizationId: orgId } },
-      select: { id: true, leadId: true },
-    });
-    if (!existing) throw new NotFoundException('Activity not found');
+    const scopedWhere: Prisma.ActivityWhereInput = {
+      id: activityId,
+      deletedAt: null,
+      lead: { organizationId: orgId, deletedAt: null },
+    };
 
     const updateData: Prisma.ActivityUpdateInput = {};
-    if (dto.type !== undefined) updateData.type = dto.type as ActivityType;
+    if (dto.type !== undefined) updateData.type = dto.type;
     if (dto.title !== undefined) updateData.title = dto.title.trim();
     if (dto.description !== undefined) updateData.description = dto.description.trim();
     if (dto.dueDate !== undefined) updateData.dueDate = dto.dueDate;
     if (dto.completed !== undefined) updateData.completed = dto.completed;
 
-    const updated = await this.prisma.activity
-      .update({
-        where: { id: activityId },
-        data: updateData,
-        select: ACTIVITY_DETAIL_SELECT,
-      })
-      .catch((err: unknown) => {
-        if ((err as Prisma.PrismaClientKnownRequestError)?.code === 'P2025') {
-          throw new NotFoundException('Activity not found');
-        }
-        throw err;
+    if (Object.keys(updateData).length === 0) {
+      const current = await this.prisma.activity.findFirst({
+        where: scopedWhere,
+        select: { ...ACTIVITY_DETAIL_SELECT, leadId: true },
       });
+      if (!current) throw new NotFoundException('Activity not found');
+      return current;
+    }
+
+    const result = await this.prisma.activity.updateMany({
+      where: scopedWhere,
+      data: updateData,
+    });
+
+    if (result.count === 0) throw new NotFoundException('Activity not found');
+
+    const updated = await this.prisma.activity.findFirst({
+      where: scopedWhere,
+      select: { ...ACTIVITY_DETAIL_SELECT, leadId: true },
+    });
+    if (!updated) throw new NotFoundException('Activity not found');
 
     await this.leadService.createTimelineEvent(
-      orgId, existing.leadId, userId, 'ACTIVITY_UPDATED',
+      orgId, updated.leadId, userId, 'ACTIVITY_UPDATED',
       `Activity updated: ${updated.title}`,
     );
 
@@ -176,14 +185,14 @@ export class ActivityService {
 
   async toggleComplete(orgId: string, userId: string, activityId: string) {
     const activity = await this.prisma.activity.findFirst({
-      where: { id: activityId, deletedAt: null, lead: { organizationId: orgId } },
+      where: { id: activityId, deletedAt: null, lead: { organizationId: orgId, deletedAt: null } },
       select: { id: true, completed: true, leadId: true, title: true },
     });
 
     if (!activity) throw new NotFoundException('Activity not found');
 
     const result = await this.prisma.activity.updateMany({
-      where: { id: activityId, deletedAt: null, lead: { organizationId: orgId } },
+      where: { id: activityId, deletedAt: null, lead: { organizationId: orgId, deletedAt: null } },
       data: { completed: !activity.completed },
     });
 
@@ -201,14 +210,14 @@ export class ActivityService {
 
   async delete(orgId: string, userId: string, activityId: string) {
     const activity = await this.prisma.activity.findFirst({
-      where: { id: activityId, deletedAt: null, lead: { organizationId: orgId } },
+      where: { id: activityId, deletedAt: null, lead: { organizationId: orgId, deletedAt: null } },
       select: { id: true, leadId: true, title: true },
     });
 
     if (!activity) throw new NotFoundException('Activity not found');
 
     const result = await this.prisma.activity.updateMany({
-      where: { id: activityId, deletedAt: null, lead: { organizationId: orgId } },
+      where: { id: activityId, deletedAt: null, lead: { organizationId: orgId, deletedAt: null } },
       data: { deletedAt: new Date() },
     });
 

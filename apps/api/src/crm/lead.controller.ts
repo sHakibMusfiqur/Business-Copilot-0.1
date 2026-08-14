@@ -222,6 +222,19 @@ export class LeadController {
     return this.activityService.create(orgId, user.id, id, dto);
   }
 
+  @Patch('activities/:id/toggle')
+  @UseGuards(PermissionGuard)
+  @Permissions(['crm.update'])
+  @ApiOperation({ summary: 'Toggle activity completion' })
+  async toggleActivity(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    const orgId = this.requireOrg(user);
+    await this.requireCrmAccess(user);
+    return this.activityService.toggleComplete(orgId, user.id, id);
+  }
+
   @Patch('activities/:id')
   @UseGuards(PermissionGuard)
   @Permissions(['crm.update'])
@@ -234,19 +247,6 @@ export class LeadController {
     const orgId = this.requireOrg(user);
     await this.requireCrmAccess(user);
     return this.activityService.update(orgId, user.id, id, dto);
-  }
-
-  @Patch('activities/:id/toggle')
-  @UseGuards(PermissionGuard)
-  @Permissions(['crm.update'])
-  @ApiOperation({ summary: 'Toggle activity completion' })
-  async toggleActivity(
-    @CurrentUser() user: CurrentUserPayload,
-    @Param('id', ParseUUIDPipe) id: string,
-  ) {
-    const orgId = this.requireOrg(user);
-    await this.requireCrmAccess(user);
-    return this.activityService.toggleComplete(orgId, user.id, id);
   }
 
   @Delete('activities/:id')
