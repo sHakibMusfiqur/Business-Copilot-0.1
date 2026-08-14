@@ -17,18 +17,46 @@ const mockService = () => {
   const userFindFirst = jest.fn();
   const userFindUnique = jest.fn();
   const timelineEventCreate = jest.fn();
+  const leadCount = jest.fn();
+  const leadGroupBy = jest.fn();
+  const leadAggregate = jest.fn();
+  const activityFindMany = jest.fn();
 
   const service = new LeadService({
-    lead: { findFirst: leadFindFirst, update: leadUpdate, create: leadCreate },
+    lead: {
+      findFirst: leadFindFirst,
+      update: leadUpdate,
+      create: leadCreate,
+      count: leadCount,
+      groupBy: leadGroupBy,
+      aggregate: leadAggregate,
+    },
     user: { findFirst: userFindFirst, findUnique: userFindUnique },
     timelineEvent: { create: timelineEventCreate },
+    activity: { findMany: activityFindMany },
   } as unknown as PrismaService);
 
   leadFindFirst.mockResolvedValue({ id: 'lead-1', leadNumber: 'LD-2026-000001', organizationId: ORG_ID });
   leadUpdate.mockResolvedValue({ id: 'lead-1', leadNumber: 'LD-2026-000001', assignedToId: 'u-same' });
   leadCreate.mockResolvedValue({ id: 'lead-1', leadNumber: 'LD-2026-000001' });
+  leadCount.mockResolvedValue(0);
+  leadGroupBy.mockResolvedValue([]);
+  leadAggregate.mockResolvedValue({ _sum: { estimatedValue: null } });
+  activityFindMany.mockResolvedValue([]);
 
-  return { service, leadFindFirst, leadUpdate, leadCreate, userFindFirst, userFindUnique, timelineEventCreate };
+  return {
+    service,
+    leadFindFirst,
+    leadUpdate,
+    leadCreate,
+    userFindFirst,
+    userFindUnique,
+    timelineEventCreate,
+    leadCount,
+    leadGroupBy,
+    leadAggregate,
+    activityFindMany,
+  };
 };
 
 describe('LeadService.assignUser (tenant isolation)', () => {
@@ -631,5 +659,48 @@ describe('LeadService mutation tenant scoping (FS6-2)', () => {
 
     await expect(service.softDelete(ORG_ID, 'actor', 'lead-other')).rejects.toThrow(NotFoundException);
     expect(leadUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('LeadService.getSummary (Activity soft-delete isolation)', () => {
+  it('excludes soft-deleted activities and activities of soft-deleted leads', async () => {
+    const { service, activityFindMany, leadCount, leadGroupBy, leadAggregate } = mockService();
+    leadCount.mockResolvedValue(2);
+    leadGroupBy.mockResolvedValue([
+      { status: 'WON', _count: { id: 1 } },
+      { status: 'LOST', _count: { id: 1 } },
+    ]);
+    leadAggregate.mockResolvedValue({ _sum: { estimatedValue: 1000 } });
+    activityFindMany.mockResolvedValue([{ id: 'a1', title: 'Follow up' }]);
+
+    const result = await service.getSummary(ORG_ID);
+
+    expect(activityFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          deletedAt: null,
+          lead: { organizationId: ORG_ID, deletedAt: null },
+          completed: false,
+          dueDate: { not: null },
+        },
+        take: 10,
+      }),
+    );
+    expect(result.upcomingActivities).toEqual([{ id: 'a1', title: 'Follow up' }]);
+    expect(result.totalLeads).toBe(2);
+  });
+
+  it('returns an empty upcoming activities list when none match', async () => {
+    const { service, activityFindMany } = mockService();
+    activityFindMany.mockResolvedValue([]);
+
+    const result = await service.getSummary(ORG_ID);
+
+    expect(activityFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ deletedAt: null }),
+      }),
+    );
+    expect(result.upcomingActivities).toEqual([]);
   });
 });
