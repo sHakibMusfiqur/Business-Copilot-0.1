@@ -23,14 +23,18 @@ export class IdempotencyGuard implements CanActivate {
 
     if (!key) return true;
 
-    const cached = await this.idempotencyService.findByKey(key);
+    
+    const sessionId = (request.params as Record<string, string>).id;
+    const scopedKey = sessionId ? `${sessionId}:${key}` : key;
+
+    const cached = await this.idempotencyService.findByKey(scopedKey);
     if (cached) {
       const response = context.switchToHttp().getResponse();
       response.status(200).json(cached);
       return false;
     }
 
-    request.idempotencyKey = key;
+    request.idempotencyKey = scopedKey;
     return true;
   }
 }

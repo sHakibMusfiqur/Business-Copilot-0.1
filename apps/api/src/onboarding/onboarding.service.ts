@@ -115,13 +115,16 @@ export class OnboardingService {
     if (!session) throw new NotFoundException('Onboarding session not found');
     if (session.provisionStatus === 'EXPIRED') throw new ConflictException('Session expired');
 
-    // The session owner is bound during registration, at which point the caller
-    // is authenticated. Never allow an arbitrary/forged userId to be written via
-    // the anonymous onboarding-token path — provisioning would otherwise
-    // reassign the target account and tenant.
+    
     if (dto.userId !== undefined) {
       if (!authenticatedUserId || authenticatedUserId !== dto.userId) {
         throw new ForbiddenException('You can only bind this onboarding session to your own account');
+      }
+     
+      if (session.userId && session.userId !== dto.userId) {
+        throw new ForbiddenException(
+          'This onboarding session is already linked to another account',
+        );
       }
     }
 

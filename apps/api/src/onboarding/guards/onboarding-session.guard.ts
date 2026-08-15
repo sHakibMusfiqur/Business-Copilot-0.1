@@ -57,10 +57,31 @@ export class OnboardingSessionGuard implements CanActivate {
       (request.query.token as string | undefined);
 
     if (onboardingToken) {
-      if (this.isValidOnboardingToken(onboardingToken, sessionId)) {
+      if (!this.isValidOnboardingToken(onboardingToken, sessionId)) {
+        throw new UnauthorizedException('Invalid or expired onboarding session');
+      }
+
+      const session = await this.prisma.onboardingSession.findUnique({
+        where: { id: sessionId },
+        select: { userId: true },
+      });
+      if (!session) {
+        throw new UnauthorizedException('Invalid or expired onboarding session');
+      }
+
+      // Anonymous phase (no bound user yet): the token alone is sufficient.
+      if (!session.userId) {
         return true;
       }
-      throw new UnauthorizedException('Invalid or expired onboarding session');
+
+     
+      if (request.headers.accept === 'text/event-stream') {
+        return true;
+      }
+      if (payload && payload.id === session.userId) {
+        return true;
+      }
+      throw new ForbiddenException('You do not have access to this onboarding session');
     }
 
     if (payload) {

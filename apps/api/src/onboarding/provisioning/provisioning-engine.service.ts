@@ -64,6 +64,12 @@ export class ProvisioningEngineService {
       throw new BadRequestException('Missing required fields: industry and org name');
     }
 
+    if (!session.userId) {
+      throw new BadRequestException(
+        'The onboarding session must be linked to a user account before it can be provisioned',
+      );
+    }
+
     const config = this.industryFactory.getProvisioningConfig(selectedIndustry as string);
     if (!config) throw new BadRequestException('Invalid industry selected');
 
