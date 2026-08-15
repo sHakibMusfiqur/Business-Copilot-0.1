@@ -272,4 +272,16 @@ describe('ContactService.softDelete', () => {
     await expect(service.softDelete(ORG_ID, 'actor', 'contact-other')).rejects.toThrow(NotFoundException);
     expect(contactUpdate).not.toHaveBeenCalled();
   });
+
+  it('throws NotFound when the contact is already soft-deleted', async () => {
+    const { service, contactFindFirst, contactUpdate } = mockService();
+    contactFindFirst.mockResolvedValue(null);
+
+    await expect(service.softDelete(ORG_ID, 'actor', CONTACT_ID)).rejects.toThrow(NotFoundException);
+    expect(contactFindFirst).toHaveBeenCalledWith({
+      where: { id: CONTACT_ID, organizationId: ORG_ID, deletedAt: null },
+      select: { id: true },
+    });
+    expect(contactUpdate).not.toHaveBeenCalled();
+  });
 });
