@@ -764,6 +764,22 @@ describe('LeadService.findById (tenant isolation + soft-delete exclusion / FS7)'
 
     await expect(service.findById(ORG_ID, 'lead-deleted')).rejects.toThrow(NotFoundException);
   });
+
+  it('returns estimatedValue as a number (not a raw Prisma Decimal string)', async () => {
+    const { service, leadFindFirst } = mockService();
+    leadFindFirst.mockResolvedValue({
+      id: 'lead-1',
+      leadNumber: 'LD-2026-000001',
+      name: 'Acme',
+      organizationId: ORG_ID,
+      estimatedValue: new Prisma.Decimal('1234.00'),
+    });
+
+    const result = await service.findById(ORG_ID, 'lead-1');
+
+    expect(typeof result.estimatedValue).toBe('number');
+    expect(result.estimatedValue).toBe(1234);
+  });
 });
 
 describe('LeadService.findAll (tenant isolation + soft-delete exclusion / FS7)', () => {
@@ -806,5 +822,29 @@ describe('LeadService.findAll (tenant isolation + soft-delete exclusion / FS7)',
       }),
     );
     expect(result.data[0].id).toBe('lead-other');
+  });
+
+  it('filters soft-deleted activities out of the nested activityCount', async () => {
+    const { service, leadFindMany } = mockService();
+    leadFindMany.mockResolvedValue([
+      {
+        id: 'lead-1',
+        leadNumber: 'LD-2026-000001',
+        name: 'Acme',
+        estimatedValue: new Prisma.Decimal('100'),
+        activities: [{ id: 'a1' }, { id: 'a2' }],
+      },
+    ]);
+
+    const result = await service.findAll(ORG_ID, {});
+
+    expect(leadFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({
+          activities: { where: { deletedAt: null }, select: { id: true } },
+        }),
+      }),
+    );
+    expect(result.data[0].activityCount).toBe(2);
   });
 });

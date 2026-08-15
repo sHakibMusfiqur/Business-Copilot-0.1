@@ -63,7 +63,7 @@ export class LeadService {
           createdAt: true,
           updatedAt: true,
           assignedTo: { select: { id: true, name: true } },
-          activities: { select: { id: true } },
+          activities: { where: { deletedAt: null }, select: { id: true } },
         },
         orderBy: { [field]: order },
         skip: (page - 1) * limit,
@@ -106,7 +106,7 @@ export class LeadService {
     });
 
     if (!lead) throw new NotFoundException('Lead not found');
-    return lead;
+    return { ...lead, estimatedValue: Number(lead.estimatedValue) };
   }
 
   async create(orgId: string, userId: string, dto: CreateLeadDto) {
