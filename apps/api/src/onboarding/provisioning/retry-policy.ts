@@ -1,3 +1,5 @@
+import { HttpException } from '@nestjs/common';
+
 const TRANSIENT_PATTERNS = [
   'timeout',
   'timed out',
@@ -55,6 +57,12 @@ const NON_TRANSIENT_PATTERNS = [
 export function isTransientError(error: Error): boolean {
   const message = error.message;
   const name = error.name;
+
+  // Domain-level 4xx rejections (ConflictException, BadRequestException, ...)
+  // are deterministic and must not be auto-retried with backoff.
+  if (error instanceof HttpException && error.getStatus() < 500) {
+    return false;
+  }
 
   for (const pattern of NON_TRANSIENT_PATTERNS) {
     if (message.includes(pattern) || name.includes(pattern)) {

@@ -132,6 +132,14 @@ export class OnboardingController {
   }
 
   @UseGuards(OnboardingSessionGuard)
+  @Get('sessions/:id/sse-token')
+  @ApiOperation({ summary: 'Issue a short-lived SSE credential for the provisioning progress stream' })
+  async getSseToken(@Param('id') id: string, @Req() req: Request) {
+    const caller = (req as Request & { user?: { id?: string } }).user;
+    return this.onboardingService.issueSseToken(id, caller?.id ?? null);
+  }
+
+  @UseGuards(OnboardingSessionGuard)
   @Get('sessions/:id/progress/stream')
   @Sse()
   @ApiOperation({ summary: 'SSE stream for provisioning progress' })

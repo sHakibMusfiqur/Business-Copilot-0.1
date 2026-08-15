@@ -1,5 +1,6 @@
 import { Test, type TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
+import { ConflictException } from '@nestjs/common';
 import { OnboardingService } from './onboarding.service';
 import { IdempotencyService } from './services/idempotency.service';
 import { OnboardingChecklistService } from './services/onboarding-checklist.service';
@@ -321,6 +322,11 @@ describe('Onboarding Module Integration', () => {
 
     it('should default to transient for unknown errors', () => {
       expect(isTransientError(new Error('something unexpected'))).toBe(true);
+    });
+
+    it('should classify 4xx HTTP exceptions as non-transient', () => {
+      expect(isTransientError(new ConflictException('already belongs to an organization'))).toBe(false);
+      expect(isTransientError(new ConflictException('already exists'))).toBe(false);
     });
   });
 

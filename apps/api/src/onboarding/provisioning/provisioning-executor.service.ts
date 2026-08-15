@@ -153,10 +153,27 @@ export class ProvisioningExecutorService {
     if (!session.userId) return;
     const org = await this.resolveOrg(tx, session);
     if (!org) return;
-    await tx.user.update({
-      where: { id: session.userId as string },
+
+    // Atomically claim the user for this organization at the DB boundary.
+    // `updateMany` only matches rows whose current organizationId is null or
+    // already equals this org, so two concurrent onboarding sessions for the
+    // same user cannot both pass: the loser updates 0 rows and aborts the
+    // whole transaction (org creation included) instead of silently
+    // re-pointing user.organizationId. Resuming this session's own org
+    // (organizationId === org.id, e.g. a partial commit) still succeeds.
+    const claimed = await tx.user.updateMany({
+      where: {
+        id: session.userId as string,
+        OR: [{ organizationId: null }, { organizationId: org.id }],
+      },
       data: { organizationId: org.id },
     });
+    if (claimed.count === 0) {
+      throw new ConflictException(
+        'This account already belongs to an organization and cannot provision another one',
+      );
+    }
+
     const existing = await tx.organizationMember.findFirst({
       where: { organizationId: org.id, userId: session.userId as string },
     });

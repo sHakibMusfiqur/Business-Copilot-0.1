@@ -16,8 +16,14 @@ import { PrismaService } from '../../prisma/prisma.service';
  *
  * A request is allowed when it presents EITHER:
  *  1. a valid one-time onboarding token (header `X-Onboarding-Token` or query
- *     param `token` for SSE) whose payload binds it to the requested session, OR
+ *     param `token`) whose payload binds it to the requested session. During
+ *     the anonymous phase (no bound user) the token alone suffices; once a
+ *     user is bound it must be accompanied by the owner's access JWT.
  *  2. a valid access JWT whose subject is the user the session belongs to.
+ *  3. (SSE progress stream only) a short-lived SSE credential (query param
+ *     `sseToken`) issued by the owner, bound to the session AND the current
+ *     user identity (`uid` claim). The onboarding token is NOT valid for a
+ *     bound session's stream.
  *
  * Anything else gets a 401 (no/invalid credentials) or 403 (valid credentials
  * that do not own this session). This prevents session hijacking and makes it
@@ -52,6 +58,35 @@ export class OnboardingSessionGuard implements CanActivate {
       };
     }
 
+    const isSseRequest = request.headers.accept === 'text/event-stream';
+
+    // EventSource cannot set headers, so SSE progress streaming authorizes
+    // with a short-lived credential issued by the owner via `GET
+    // sessions/:id/sse-token` (see OnboardingService.issueSseToken). The
+    // credential is bound to the session AND to the current user identity:
+    // an anonymous session only accepts `uid=null`, a bound session only
+    // accepts `uid === session.userId`. A credential issued before binding
+    // (uid=null) therefore stops working once a user is bound, and a
+    // credential issued for one owner never works for another.
+    const sseToken = isSseRequest
+      ? (request.query.sseToken as string | undefined)
+      : undefined;
+
+    if (sseToken) {
+      const session = await this.prisma.onboardingSession.findUnique({
+        where: { id: sessionId },
+        select: { userId: true },
+      });
+      if (!session) {
+        throw new UnauthorizedException('Invalid or expired session stream');
+      }
+      const boundUserId = (session.userId as string | null) ?? null;
+      if (!this.isValidSseToken(sseToken, sessionId, boundUserId)) {
+        throw new UnauthorizedException('Invalid or expired session stream');
+      }
+      return true;
+    }
+
     const onboardingToken =
       (request.headers['x-onboarding-token'] as string | undefined) ??
       (request.query.token as string | undefined);
@@ -74,9 +109,8 @@ export class OnboardingSessionGuard implements CanActivate {
         return true;
       }
 
-     
-      if (request.headers.accept === 'text/event-stream') {
-        return true;
+      if (isSseRequest) {
+        throw new ForbiddenException('You do not have access to this onboarding session');
       }
       if (payload && payload.id === session.userId) {
         return true;
@@ -106,6 +140,23 @@ export class OnboardingSessionGuard implements CanActivate {
         audience: 'bc-onboarding-session',
       }) as { purpose?: string; sub?: string };
       return payload?.purpose === 'onboarding' && payload.sub === sessionId;
+    } catch {
+      return false;
+    }
+  }
+
+  private isValidSseToken(token: string, sessionId: string, expectedUserId: string | null): boolean {
+    try {
+      const payload = this.jwtService.verify(token, {
+        secret: this.configService.jwtSecret,
+        issuer: 'bc-onboarding-sse',
+        audience: 'bc-onboarding-sse-stream',
+      }) as { purpose?: string; sub?: string; uid?: string | null };
+      return (
+        payload?.purpose === 'sse' &&
+        payload.sub === sessionId &&
+        (payload.uid ?? null) === expectedUserId
+      );
     } catch {
       return false;
     }

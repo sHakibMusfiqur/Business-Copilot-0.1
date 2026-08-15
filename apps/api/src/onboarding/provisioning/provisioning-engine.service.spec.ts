@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { ProvisioningEngineService } from './provisioning-engine.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
@@ -41,11 +41,14 @@ describe('ProvisioningEngineService (bound-user requirement)', () => {
     getProvider: jest.fn().mockReturnValue(null),
   };
 
-  function buildEngine(session: Record<string, unknown>) {
+  function buildEngine(session: Record<string, unknown>, owner: Record<string, unknown> = { organizationId: null }) {
     const prisma = {
       onboardingSession: {
         findUnique: jest.fn().mockResolvedValue(session),
         update: jest.fn().mockResolvedValue({}),
+      },
+      user: {
+        findUnique: jest.fn().mockResolvedValue(owner),
       },
     };
     const engine = new ProvisioningEngineService(
@@ -84,5 +87,40 @@ describe('ProvisioningEngineService (bound-user requirement)', () => {
       expect.objectContaining({ data: expect.objectContaining({ provisionStatus: 'PROVISIONING' }) }),
     );
     expect(result).toBeDefined();
+  });
+
+  it('rejects a second organization for a user that already belongs to one', async () => {
+    const { engine, prisma } = buildEngine(
+      buildSession(),
+      { organizationId: 'org-existing' },
+    );
+
+    await expect(engine.provision('session-1')).rejects.toThrow(ConflictException);
+    expect(dispatcher.dispatch).not.toHaveBeenCalled();
+    expect(prisma.onboardingSession.update).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ provisionStatus: 'PROVISIONING' }) }),
+    );
+  });
+
+  it('allows resuming when the session is bound to the user\u2019s own org', async () => {
+    (progress.getProgress as jest.Mock).mockResolvedValueOnce({ failedTask: 'DoConfigureDepartments' });
+    const { engine } = buildEngine(
+      buildSession({ provisionStatus: 'PROVISIONING', organizationId: 'org-1' }),
+      { organizationId: 'org-1' },
+    );
+
+    await expect(engine.provision('session-1')).resolves.toBeDefined();
+    expect(dispatcher.dispatch).toHaveBeenCalledWith('session-1');
+  });
+
+  it('rethrows a domain ConflictException from the dispatcher and marks the session failed', async () => {
+    (dispatcher.dispatch as jest.Mock).mockRejectedValueOnce(
+      new ConflictException('This account already belongs to an organization and cannot provision another one'),
+    );
+    const { engine } = buildEngine(buildSession());
+
+    await expect(engine.provision('session-1')).rejects.toThrow(ConflictException);
+    expect(progress.markFailed).toHaveBeenCalled();
+    expect(compensation.rollback).toHaveBeenCalledWith('session-1');
   });
 });

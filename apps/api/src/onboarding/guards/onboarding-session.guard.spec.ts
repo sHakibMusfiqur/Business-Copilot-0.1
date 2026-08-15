@@ -52,6 +52,18 @@ describe('OnboardingSessionGuard', () => {
     return { id: 'user-a', role: 'USER' };
   });
 
+  function sseVerify(uid: string | null) {
+    return jest.fn((_token: string, options: Record<string, unknown>) => {
+      if (options?.issuer === 'bc-onboarding-sse') {
+        return { purpose: 'sse', sub: SESSION_ID, uid };
+      }
+      if (options?.issuer === 'bc-onboarding') {
+        return { purpose: 'onboarding', sub: SESSION_ID };
+      }
+      return { id: 'user-a', role: 'USER' };
+    });
+  }
+
   afterEach(() => {
     jest.clearAllMocks();
   });
@@ -92,14 +104,87 @@ describe('OnboardingSessionGuard', () => {
     await expect(guard.canActivate(mockContext(request))).resolves.toBe(true);
   });
 
-  it('keeps the SSE progress stream accessible via the token after binding', async () => {
+  it('rejects a stale onboarding token on the bound session SSE stream', async () => {
     const { guard } = buildGuard('user-b', validTokenVerify);
     const request = buildRequest({
       query: { token: 'tok' },
       headers: { accept: 'text/event-stream' },
     });
 
+    await expect(guard.canActivate(mockContext(request))).rejects.toThrow(ForbiddenException);
+  });
+
+  it('allows the bound session SSE stream with a valid owner SSE credential', async () => {
+    const { guard } = buildGuard('user-b', sseVerify('user-b'));
+    const request = buildRequest({
+      query: { sseToken: 'sse-tok' },
+      headers: { accept: 'text/event-stream' },
+    });
+
     await expect(guard.canActivate(mockContext(request))).resolves.toBe(true);
+  });
+
+  it('rejects an anonymous SSE credential once the session becomes bound', async () => {
+    const { guard } = buildGuard('user-b', sseVerify(null));
+    const request = buildRequest({
+      query: { sseToken: 'sse-tok' },
+      headers: { accept: 'text/event-stream' },
+    });
+
+    await expect(guard.canActivate(mockContext(request))).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('rejects a different user\u2019s SSE credential on the bound session stream', async () => {
+    const { guard } = buildGuard('user-b', sseVerify('user-a'));
+    const request = buildRequest({
+      query: { sseToken: 'sse-tok' },
+      headers: { accept: 'text/event-stream' },
+    });
+
+    await expect(guard.canActivate(mockContext(request))).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('allows the anonymous session SSE stream with an anonymous SSE credential', async () => {
+    const { guard } = buildGuard(null, sseVerify(null));
+    const request = buildRequest({
+      query: { sseToken: 'sse-tok' },
+      headers: { accept: 'text/event-stream' },
+    });
+
+    await expect(guard.canActivate(mockContext(request))).resolves.toBe(true);
+  });
+
+  it('allows the anonymous session SSE stream via the onboarding token', async () => {
+    const { guard } = buildGuard(null, validTokenVerify);
+    const request = buildRequest({
+      query: { token: 'tok' },
+      headers: { accept: 'text/event-stream' },
+    });
+
+    await expect(guard.canActivate(mockContext(request))).resolves.toBe(true);
+  });
+
+  it('rejects an invalid SSE credential on the session stream', async () => {
+    const invalidVerify = jest.fn(() => {
+      throw new Error('invalid');
+    });
+    const { guard } = buildGuard('user-b', invalidVerify);
+    const request = buildRequest({
+      query: { sseToken: 'bogus' },
+      headers: { accept: 'text/event-stream' },
+    });
+
+    await expect(guard.canActivate(mockContext(request))).rejects.toThrow(UnauthorizedException);
+  });
+
+  it('ignores the SSE credential on non-SSE requests', async () => {
+    const { guard } = buildGuard('user-b', validTokenVerify);
+    const request = buildRequest({
+      query: { sseToken: 'sse-tok' },
+      headers: {},
+    });
+
+    await expect(guard.canActivate(mockContext(request))).rejects.toThrow(UnauthorizedException);
   });
 
   it('rejects a token for a session that no longer exists', async () => {

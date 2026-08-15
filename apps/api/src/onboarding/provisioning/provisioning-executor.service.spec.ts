@@ -35,9 +35,11 @@ function buildMockTx(overrides: Record<string, unknown> = {}) {
     },
     userRoleAssignment: {
       create: jest.fn(),
+      findFirst: jest.fn().mockResolvedValue(null),
     },
     user: {
       update: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
     organizationMember: {
       findFirst: jest.fn(),
@@ -141,5 +143,47 @@ describe('ProvisioningExecutorService', () => {
     expect(result.result).toBeUndefined();
     expect(mockTx.organization.findFirst).not.toHaveBeenCalled();
     expect(mockTx.organization.create).not.toHaveBeenCalled();
+  });
+
+  it('atomically claims the user for its own organization (resume is preserved)', async () => {
+    const mockTx = buildMockTx();
+    mockTx.organization.findUnique.mockResolvedValue({ id: 'org-1', name: 'Acme Inc' });
+
+    const session = {
+      id: 'session-1',
+      userId: 'user-1',
+      orgName: 'Acme Inc',
+      organizationId: 'org-1',
+      selectedModules: [],
+    };
+
+    const result = await service.executeCheckpoint(session, emptyConfig as never, 2, mockTx);
+
+    expect(result.success).toBe(true);
+    expect(mockTx.user.updateMany).toHaveBeenCalledWith({
+      where: { id: 'user-1', OR: [{ organizationId: null }, { organizationId: 'org-1' }] },
+      data: { organizationId: 'org-1' },
+    });
+    expect(mockTx.organizationMember.create).toHaveBeenCalled();
+  });
+
+  it('aborts with a conflict when another session already claimed the user', async () => {
+    const mockTx = buildMockTx();
+    mockTx.organization.findUnique.mockResolvedValue({ id: 'org-1', name: 'Acme Inc' });
+    mockTx.user.updateMany.mockResolvedValue({ count: 0 });
+
+    const session = {
+      id: 'session-1',
+      userId: 'user-1',
+      orgName: 'Acme Inc',
+      organizationId: 'org-1',
+      selectedModules: [],
+    };
+
+    await expect(
+      service.executeCheckpoint(session, emptyConfig as never, 2, mockTx),
+    ).rejects.toThrow(ConflictException);
+    expect(mockTx.user.updateMany).toHaveBeenCalledTimes(1);
+    expect(mockTx.organizationMember.create).not.toHaveBeenCalled();
   });
 });

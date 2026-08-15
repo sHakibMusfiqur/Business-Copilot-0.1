@@ -68,6 +68,16 @@ export class ProvisioningEngineService {
       throw new BadRequestException(
         'The onboarding session must be linked to a user account before it can be provisioned',
       );
+}
+
+    const owner = await this.prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { organizationId: true },
+    });
+    if (owner?.organizationId && owner.organizationId !== session.organizationId) {
+      throw new ConflictException(
+        'This account already belongs to an organization and cannot provision another one',
+      );
     }
 
     const config = this.industryFactory.getProvisioningConfig(selectedIndustry as string);

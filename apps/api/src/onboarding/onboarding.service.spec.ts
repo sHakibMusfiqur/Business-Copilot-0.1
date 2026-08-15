@@ -93,3 +93,74 @@ describe('OnboardingService (session ownership binding)', () => {
     expect(updateMany).not.toHaveBeenCalled();
   });
 });
+
+describe('OnboardingService (issueSseToken)', () => {
+  const SESSION_ID = 'session-1';
+
+  function buildService(
+    session: Record<string, unknown> | null,
+    sign = jest.fn(() => 'signed-sse-token'),
+  ) {
+    const prisma = {
+      onboardingSession: {
+        findUnique: jest.fn().mockResolvedValue(session),
+      },
+    };
+    const jwtService = { sign } as unknown as JwtService;
+    const service = new OnboardingService(
+      prisma as unknown as PrismaService,
+      { record: jest.fn() } as unknown as AuditService,
+      {} as unknown as IndustryTemplateFactory,
+      jwtService,
+      { jwtSecret: 'secret' } as unknown as ConfigService,
+    );
+    return { service, sign, prisma };
+  }
+
+  it('binds the SSE credential to the bound owner', async () => {
+    const { service, sign } = buildService({ id: SESSION_ID, userId: 'user-b' });
+
+    const result = await service.issueSseToken(SESSION_ID, 'user-b');
+
+    expect(sign).toHaveBeenCalledWith(
+      { sub: SESSION_ID, purpose: 'sse', uid: 'user-b' },
+      expect.objectContaining({
+        issuer: 'bc-onboarding-sse',
+        audience: 'bc-onboarding-sse-stream',
+      }),
+    );
+    expect(result).toEqual({ token: 'signed-sse-token', expiresInSeconds: 120 });
+  });
+
+  it('binds the SSE credential to no user for an anonymous session', async () => {
+    const { service, sign } = buildService({ id: SESSION_ID, userId: null });
+
+    await service.issueSseToken(SESSION_ID, null);
+
+    expect(sign).toHaveBeenCalledWith(
+      { sub: SESSION_ID, purpose: 'sse', uid: null },
+      expect.objectContaining({ issuer: 'bc-onboarding-sse' }),
+    );
+  });
+
+  it('rejects a caller that is not the bound owner', async () => {
+    const { service, sign } = buildService({ id: SESSION_ID, userId: 'user-b' });
+
+    await expect(service.issueSseToken(SESSION_ID, 'user-a')).rejects.toThrow(ForbiddenException);
+    expect(sign).not.toHaveBeenCalled();
+  });
+
+  it('rejects a registered caller on an anonymous session', async () => {
+    const { service, sign } = buildService({ id: SESSION_ID, userId: null });
+
+    await expect(service.issueSseToken(SESSION_ID, 'user-a')).rejects.toThrow(ForbiddenException);
+    expect(sign).not.toHaveBeenCalled();
+  });
+
+  it('throws NotFound for a session that no longer exists', async () => {
+    const { service, sign } = buildService(null);
+
+    await expect(service.issueSseToken(SESSION_ID, null)).rejects.toThrow('Onboarding session not found');
+    expect(sign).not.toHaveBeenCalled();
+  });
+});

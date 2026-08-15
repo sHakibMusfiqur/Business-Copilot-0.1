@@ -12,6 +12,7 @@ import type { UpdateSessionDto } from './dto/update-session.dto';
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const SESSION_TTL_SECONDS = SESSION_TTL_MS / 1000;
+const SSE_TOKEN_TTL_SECONDS = 120;
 
 @Injectable()
 export class OnboardingService {
@@ -271,6 +272,49 @@ export class OnboardingService {
       createdAt: (session.createdAt as Date).toISOString(),
       updatedAt: (session.updatedAt as Date).toISOString(),
     };
+  }
+
+  /**
+   * Issues a short-lived, single-purpose SSE credential bound to this session
+   * AND to the current user identity.
+   *
+   * EventSource cannot attach headers, so the owner fetches this token (via a
+   * route protected by OnboardingSessionGuard, i.e. only with the bound user's
+   * JWT once a user is bound) and passes it as the `sseToken` query param.
+   *
+   * The `uid` claim is `null` for an anonymous session and the bound owner's
+   * userId for a bound session. The guard rejects a token whose `uid` does not
+   * match the session's current owner, so a credential issued before binding
+   * stops working once the session is bound, and one user's credential never
+   * works for another.
+   *
+   * `callerUserId` is the authenticated caller resolved from the guard's
+   * request (undefined/anonymous when only the onboarding token was used). It
+   * must match the session's bound owner when the session is bound.
+   */
+  async issueSseToken(sessionId: string, callerUserId: string | null) {
+    const session = await this.prisma.onboardingSession.findUnique({
+      where: { id: sessionId },
+      select: { id: true, userId: true },
+    });
+    if (!session) {
+      throw new NotFoundException('Onboarding session not found');
+    }
+    const boundUserId = (session.userId as string | null) ?? null;
+    const caller = callerUserId ?? null;
+    if (boundUserId !== caller) {
+      throw new ForbiddenException('You do not have access to this onboarding session');
+    }
+    const token = this.jwtService.sign(
+      { sub: session.id, purpose: 'sse', uid: boundUserId },
+      {
+        secret: this.configService.jwtSecret,
+        expiresIn: SSE_TOKEN_TTL_SECONDS as JwtSignOptions['expiresIn'],
+        issuer: 'bc-onboarding-sse',
+        audience: 'bc-onboarding-sse-stream',
+      },
+    );
+    return { token, expiresInSeconds: SSE_TOKEN_TTL_SECONDS };
   }
 
   /**
