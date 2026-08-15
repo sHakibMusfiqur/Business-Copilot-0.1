@@ -7,7 +7,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useOnboarding } from '../_hooks/onboarding-context';
 import { refreshAccessToken } from '@/lib/api';
 import {
-  getSession, getProvisioningProgress, provisionOrganization, createProvisioningEventSource,
+  getSession, getProvisioningProgress, provisionOrganization, createProvisioningEventSource, getProvisioningSseToken,
   type ProvisioningProgress,
 } from '@/lib/onboarding-api';
 
@@ -276,29 +276,45 @@ export default function ProvisioningPage() {
       pollTimerRef.current = setInterval(() => { void pollProgress(); }, POLL_INTERVAL_MS);
     };
 
-    const es = createProvisioningEventSource(sid);
-    esRef.current = es;
+    const wireEventSource = (es: EventSource) => {
+      esRef.current = es;
 
-    es.addEventListener('provisioning', (event) => {
-      if (!active || completionTriggeredRef.current || failureTriggeredRef.current) return;
-      try {
-        const data = JSON.parse(event.data) as ProgressInput;
-        handleProgress(data);
-      } catch {
-        // ignore malformed events
-      }
-    });
+      es.addEventListener('provisioning', (event) => {
+        if (!active || completionTriggeredRef.current || failureTriggeredRef.current) return;
+        try {
+          const data = JSON.parse(event.data) as ProgressInput;
+          handleProgress(data);
+        } catch {
+          // ignore malformed events
+        }
+      });
 
-    es.onopen = () => {
-      if (!active) return;
-      void triggerProvision();
+      es.onopen = () => {
+        if (!active) return;
+        void triggerProvision();
+      };
+
+      es.onerror = () => {
+        // SSE failed or disconnected: fall back to polling until completed.
+        if (!active || completionTriggeredRef.current || failureTriggeredRef.current) return;
+        startPolling();
+      };
     };
 
-    es.onerror = () => {
-      // SSE failed or disconnected: fall back to polling until completed.
-      if (!active || completionTriggeredRef.current || failureTriggeredRef.current) return;
-      startPolling();
-    };
+    // EventSource cannot set a Bearer header, so a bound session's live stream
+    // must be authorized with a short-lived sse-token fetched via the API (the
+    // axios instance attaches the access JWT, alongside the onboarding token, so
+    // the guard issues a uid-bound credential). The onboarding token alone is
+    // rejected on a bound session's stream. If the token is unavailable (e.g.
+    // no JWT yet) we skip the stream and rely on the polling fallback below.
+    getProvisioningSseToken(sid)
+      .then((res) => {
+        if (!active || completionTriggeredRef.current || failureTriggeredRef.current) return;
+        wireEventSource(createProvisioningEventSource(sid, res.token));
+      })
+      .catch(() => {
+        if (active) startPolling();
+      });
 
     fallbackTimerRef.current = setTimeout(() => {
       if (!active || completionTriggeredRef.current || failureTriggeredRef.current) return;

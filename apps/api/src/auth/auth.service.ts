@@ -14,7 +14,6 @@ import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import { ConfigService } from '../config/config.service';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
-import { syncSystemRolesForOrg } from '../rbac/permission-catalog';
 import { MailService } from '../mail/mail.service';
 
 import { AuditService } from '../audit/audit.service';
@@ -107,59 +106,16 @@ export class AuthService {
             email: true,
             name: true,
             role: true,
-            createdAt: true,
-          },
-        });
-
-        const baseSlug = dto.name
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .replace(/^-|-$/g, '') || `org-${createdUser.id.slice(0, 8)}`;
-
-        let slug = baseSlug;
-        let suffix = 2;
-        while (await tx.organization.findUnique({ where: { slug } })) {
-          slug = `${baseSlug}-${suffix}`;
-          suffix++;
-        }
-
-        const orgName = `${dto.name}'s Organization`;
-
-        const org = await tx.organization.create({
-          data: { name: orgName, slug },
-        });
-
-        await tx.organizationMember.create({
-          data: {
-            organizationId: org.id,
-            userId: createdUser.id,
-            role: 'OWNER',
-          },
-        });
-
-        const { ownerRole } = await syncSystemRolesForOrg(tx, org.id);
-
-        await tx.userRoleAssignment.create({
-          data: {
-            userId: createdUser.id,
-            roleId: ownerRole.id,
-          },
-        });
-
-        const updatedUser = await tx.user.update({
-          where: { id: createdUser.id },
-          data: { organizationId: org.id },
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            role: true,
             organizationId: true,
             createdAt: true,
           },
         });
 
-        return { user: updatedUser, organization: org };
+        // No organization is created here: a registered user gets a real
+        // workspace only when provisioning assigns one. Assigning a placeholder
+        // org would trip the provisioning guard (the owner's organizationId must
+        // be null or the session's org) and orphan an unused org on every signup.
+        return { user: createdUser };
       });
       this.logger.log(`=== AUTH SERVICE Prisma $transaction completed successfully ===`);
 
@@ -751,9 +707,8 @@ export class AuthService {
     });
     if (session) return session.provisionStatus === 'COMPLETED';
     // No onboarding session on record means the user was not created through
-    // the registration flow (seeded/admin-created). A placeholder org is
-    // always paired with an onboarding session, so an org here is a real,
-    // pre-existing workspace.
+    // the registration flow (seeded/admin-created). Registration assigns no
+    // organization, so an organization here is a real, pre-existing workspace.
     return !!user.organizationId;
   }
 

@@ -27,6 +27,8 @@ type MutablePrisma = {
     create: jest.Mock;
   };
   onboardingSession: { findFirst: jest.Mock };
+  invitation: { findFirst: jest.Mock };
+  $transaction: jest.Mock;
 };
 
 function userOfRefresh(payloadId: string) {
@@ -68,6 +70,8 @@ describe('AuthService (refresh / logout / reset security)', () => {
         create: jest.fn(),
       },
       onboardingSession: { findFirst: jest.fn() },
+      invitation: { findFirst: jest.fn() },
+      $transaction: jest.fn(),
     };
     jwtService = {
       verify: jest.fn(),
@@ -410,6 +414,51 @@ describe('AuthService (refresh / logout / reset security)', () => {
 
       expect(result).toEqual(expect.objectContaining({ accessToken: 'access' }));
       expect(prisma.refreshToken.create).toHaveBeenCalled();
+    });
+  });
+
+  describe('register', () => {
+    it('registers a user without creating an organization (organizationId stays null)', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.invitation.findFirst.mockResolvedValue(null);
+      (argon2.hash as jest.Mock).mockResolvedValue('hashed-password');
+
+      const createdUser = {
+        id: 'user-new',
+        email: 'new@a.com',
+        name: 'New',
+        role: 'USER',
+        organizationId: null,
+        createdAt: new Date('2024-01-01'),
+      };
+      const txUserCreate = jest.fn().mockResolvedValue(createdUser);
+      const tx = {
+        user: { create: txUserCreate, update: jest.fn() },
+        organization: { create: jest.fn(), findUnique: jest.fn() },
+        organizationMember: { create: jest.fn() },
+        userRoleAssignment: { create: jest.fn() },
+      };
+      prisma.$transaction.mockImplementation(async (cb: (t: typeof tx) => unknown) => cb(tx));
+      jwtService.signAsync.mockResolvedValueOnce('access-token').mockResolvedValueOnce('refresh-token');
+      prisma.refreshToken.create.mockResolvedValue({});
+
+      const result = await service.register(
+        { email: 'new@a.com', name: 'New', password: 'pw' } as never,
+        '1.1.1.1',
+      );
+
+      // The provisioning guard requires the owner's organizationId to be null
+      // (or the session's org) before assigning a real one; a placeholder org
+      // assigned here would break register -> provision with a ConflictException.
+      expect(result.user.organizationId).toBeNull();
+      expect(txUserCreate).toHaveBeenCalledTimes(1);
+      expect(tx.organization.create).not.toHaveBeenCalled();
+      expect(tx.organization.findUnique).not.toHaveBeenCalled();
+      expect(tx.organizationMember.create).not.toHaveBeenCalled();
+      expect(tx.userRoleAssignment.create).not.toHaveBeenCalled();
+      expect(tx.user.update).not.toHaveBeenCalled();
+      expect(result.accessToken).toBe('access-token');
+      expect(result.refreshToken).toBe('refresh-token');
     });
   });
 

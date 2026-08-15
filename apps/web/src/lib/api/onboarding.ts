@@ -173,9 +173,19 @@ export async function provisionOrganization(
   return response.data;
 }
 
-export function createProvisioningEventSource(id: string): EventSource {
-  const token = getOnboardingToken(id);
-  const query = token ? `?token=${encodeURIComponent(token)}` : '';
+export async function getProvisioningSseToken(id: string): Promise<{ token: string; expiresInSeconds: number }> {
+  const response = await api.get(`${API_ROUTES.ONBOARDING.SESSIONS}/${id}/sse-token`, {
+    headers: sessionHeaders(id),
+  });
+  return response.data;
+}
+
+export function createProvisioningEventSource(id: string, sseToken: string): EventSource {
+  // EventSource cannot set headers, so a bound session's live stream must be
+  // authorized with the short-lived credential issued by `getProvisioningSseToken`
+  // (query param `sseToken`). The onboarding token is not accepted for a bound
+  // session's stream.
+  const query = sseToken ? `?sseToken=${encodeURIComponent(sseToken)}` : '';
   return new EventSource(`${SSE_BASE_URL}/api/onboarding/sessions/${id}/progress/stream${query}`);
 }
 

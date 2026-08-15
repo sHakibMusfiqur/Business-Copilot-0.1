@@ -3,14 +3,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import {
-  ArrowLeft, ArrowRight, CalendarClock, Check, CreditCard, Loader2, ShieldCheck, Sparkles,
+  ArrowLeft, ArrowRight, Check, CreditCard, Loader2, ShieldCheck, Sparkles,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useOnboarding } from '../_hooks/onboarding-context';
 import {
-  createCheckoutSession, getBillingPlans, getPaymentGateways, startFreeTrial, verifyPayment,
-  type BillingSubscription, type SubscriptionPlanResponse,
+  createCheckoutSession, getBillingPlans, getPaymentGateways, verifyPayment,
+  type SubscriptionPlanResponse,
 } from '@/lib/api';
+import { useAuthStore } from '@/store/auth-store';
 import { detectCurrency } from '@/lib/currency';
 import { formatPlanPrice, type BillingInterval } from '../plan/plan-utils';
 
@@ -22,8 +23,9 @@ export default function PaymentPage() {
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [activated, setActivated] = useState<BillingSubscription | null>(null);
   const startingRef = useRef(false);
+
+  const user = useAuthStore((s) => s.user);
 
   const currency = session ? detectCurrency(session) : 'USD';
 
@@ -58,8 +60,6 @@ export default function PaymentPage() {
     try {
       saveField('selectedPlanId', plan.id);
       saveField('planInterval', interval);
-      const subscription = await startFreeTrial(plan.id, interval);
-      setActivated(subscription);
       await persistSession();
       await completeStep(6);
       wizard.goNext();
@@ -181,7 +181,7 @@ export default function PaymentPage() {
   const priceLabel = formatPlanPrice(plan, interval, currency);
   const priceUnit = interval === 'YEARLY' ? '/yr' : '/mo';
   const subscriptionLabel = interval === 'YEARLY' ? 'Annual subscription' : 'Monthly subscription';
-  const payNowDisabled = !paymentEnabled;
+  const payNowDisabled = !paymentEnabled || !user?.organizationId;
 
   const optionCardClass = (selected: boolean, disabled = false) =>
     `group relative flex w-full cursor-pointer items-start gap-3 rounded-xl border-2 p-4 text-left transition-all ${
@@ -265,12 +265,6 @@ export default function PaymentPage() {
               <span className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-white">
                 <Check className="h-3.5 w-3.5 text-emerald-400" strokeWidth={3} /> No charge today
               </span>
-              {activated && activated.status === 'TRIALING' && activated.trialEndsAt && (
-                <span className="flex items-center gap-1.5 rounded-lg bg-blue-500/10 px-2 py-1 text-xs text-blue-400">
-                  <CalendarClock className="h-3.5 w-3.5" />
-                  Trial active until {new Date(activated.trialEndsAt).toLocaleDateString()}
-                </span>
-              )}
             </span>
           </button>
         </div>
@@ -285,7 +279,7 @@ export default function PaymentPage() {
 
         <button
           onClick={handleContinue}
-          disabled={starting || (selectedOption === 'payNow' && !paymentEnabled)}
+          disabled={starting || (selectedOption === 'payNow' && payNowDisabled)}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3.5 font-semibold text-white shadow-lg shadow-blue-600/25 transition-all hover:from-blue-500 hover:to-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {starting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
