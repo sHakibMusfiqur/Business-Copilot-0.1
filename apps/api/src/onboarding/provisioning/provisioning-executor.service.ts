@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { IndustryTemplateFactory } from '../industry-templates/industry-template.factory';
 import type { ProvisioningConfig } from '../industry-templates/types';
 import type { ProvisioningContext } from '../industry-templates/industry-template-provider.interface';
@@ -92,35 +92,32 @@ export class ProvisioningExecutorService {
       }
     }
 
-    const existingByName = await tx.organization.findUnique({
-      where: { name: session.orgName as string },
-    });
-    if (existingByName) {
-      if (session.id) {
-        await tx.onboardingSession.update({
-          where: { id: session.id as string },
-          data: { organizationId: existingByName.id },
-        });
-      }
-      session.organizationId = existingByName.id;
-      tasks.push('Organization created');
-      return { org: existingByName };
-    }
-
     const slug = await this.generateSlug(tx, session);
-    const org = await tx.organization.create({
-      data: {
-        name: session.orgName as string,
-        slug,
-        email: (session.orgEmail as string) ?? null,
-        phone: (session.orgPhone as string) ?? null,
-        address: (session.orgAddress as string) ?? null,
-        city: (session.orgCity as string) ?? null,
-        state: (session.orgState as string) ?? null,
-        country: (session.orgCountry as string) ?? null,
-        timezone: (session.orgTimezone as string) ?? undefined,
-      },
-    });
+    let org: { id: string };
+    try {
+      org = await tx.organization.create({
+        data: {
+          name: session.orgName as string,
+          slug,
+          email: (session.orgEmail as string) ?? null,
+          phone: (session.orgPhone as string) ?? null,
+          address: (session.orgAddress as string) ?? null,
+          city: (session.orgCity as string) ?? null,
+          state: (session.orgState as string) ?? null,
+          country: (session.orgCountry as string) ?? null,
+          timezone: (session.orgTimezone as string) ?? undefined,
+        },
+      });
+    } catch (error) {
+      // A colliding name belongs to another tenant — never reuse it. Failing
+      // provisioning is the only safe outcome.
+      if ((error as { code?: string }).code === 'P2002') {
+        throw new ConflictException(
+          'An organization with this name already exists. Please choose a different name.',
+        );
+      }
+      throw error;
+    }
     if (session.id) {
       await tx.onboardingSession.update({
         where: { id: session.id as string },
@@ -132,22 +129,19 @@ export class ProvisioningExecutorService {
   }
 
   /**
-   * Resolves the organization owned by this session. Prefers the session's
-   * persisted organizationId and only falls back to the most recently created
-   * org for legacy sessions that predate that linkage.
+   * Resolves the organization owned by this session. Only the session's own
+   * organizationId may be used. A globally-scoped lookup (e.g. "latest org")
+   * could attach owner/roles/subscription/settings to another tenant.
    */
   private async resolveOrg(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     tx: any,
     session: Record<string, unknown>,
   ): Promise<{ id: string } | null> {
-    if (session.organizationId) {
-      const org = await tx.organization.findUnique({
-        where: { id: session.organizationId as string },
-      });
-      if (org) return org;
-    }
-    return tx.organization.findFirst({ orderBy: { createdAt: 'desc' } });
+    if (!session.organizationId) return null;
+    return tx.organization.findUnique({
+      where: { id: session.organizationId as string },
+    });
   }
 
   private async doAssignOwner(

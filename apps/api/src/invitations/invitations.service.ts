@@ -409,6 +409,19 @@ export class InvitationsService {
       throw new BadRequestException('This invitation link is invalid or has expired');
     }
 
+    const organization = await this.prisma.organization.findUnique({
+      where: { id: invitation.organizationId },
+      select: { isActive: true, suspendedAt: true, deletedAt: true },
+    });
+    if (
+      !organization ||
+      !organization.isActive ||
+      organization.suspendedAt ||
+      organization.deletedAt
+    ) {
+      throw new BadRequestException('This invitation link is invalid or has expired');
+    }
+
     if (invitation.status !== 'PENDING') {
       throw new BadRequestException(
         invitation.status === 'ACCEPTED'

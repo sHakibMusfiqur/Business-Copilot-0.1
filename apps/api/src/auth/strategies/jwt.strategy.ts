@@ -22,7 +22,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: CurrentUserPayload): Promise<CurrentUserPayload> {
     const user = await this.prisma.user.findUnique({
       where: { id: payload.id },
-      select: { id: true, email: true, role: true, isActive: true, organizationId: true, deletedAt: true },
+      select: {
+        id: true,
+        email: true,
+        role: true,
+        isActive: true,
+        organizationId: true,
+        deletedAt: true,
+        organization: { select: { isActive: true, suspendedAt: true, deletedAt: true } },
+      },
     });
 
     if (!user) {
@@ -35,6 +43,19 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     if (user.deletedAt) {
       throw new UnauthorizedException('User not found');
+    }
+
+
+    if (user.organizationId) {
+      const orgUnavailable =
+        !user.organization ||
+        !user.organization.isActive ||
+        user.organization.suspendedAt ||
+        user.organization.deletedAt;
+
+      if (orgUnavailable) {
+        throw new UnauthorizedException('Organization access is suspended');
+      }
     }
 
     return {

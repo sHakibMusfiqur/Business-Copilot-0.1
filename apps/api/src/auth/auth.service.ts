@@ -230,6 +230,7 @@ export class AuthService {
   async login(dto: LoginDto, ip: string, userAgent?: string) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
+      include: { organization: { select: { isActive: true, suspendedAt: true, deletedAt: true } } },
     });
 
     if (!user) {
@@ -260,6 +261,37 @@ export class AuthService {
         userAgent,
       });
       throw new UnauthorizedException('Account is deactivated. Contact your administrator.');
+    }
+
+    // Users of a suspended, deleted or deactivated organization cannot sign in.
+    // A missing organization relation while organizationId is set is an
+    // inconsistent tenant state and must also be rejected.
+    if (user.organizationId) {
+      const orgUnavailable =
+        !user.organization ||
+        !user.organization.isActive ||
+        user.organization.suspendedAt ||
+        user.organization.deletedAt;
+
+      if (orgUnavailable) {
+        await this.rateLimiter.recordAttempt(`email:${dto.email}`);
+        await this.rateLimiter.recordAttempt(`user:${user.id}`);
+        await this.rateLimiter.recordAttempt(`ip:${ip}`);
+        await this.auditService.record({
+          userId: user.id,
+          organizationId: user.organizationId ?? undefined,
+          action: 'FAILED_LOGIN',
+          status: 'FAILURE',
+          entity: 'User',
+          entityId: user.id,
+          metadata: { email: dto.email, reason: 'Organization access suspended' },
+          ipAddress: ip,
+          userAgent,
+        });
+        throw new UnauthorizedException(
+          'Organization access is suspended. Contact your administrator.',
+        );
+      }
     }
 
     let isPasswordValid: boolean;
@@ -364,6 +396,7 @@ export class AuthService {
           organizationId: true,
           isActive: true,
           deletedAt: true,
+          organization: { select: { isActive: true, suspendedAt: true, deletedAt: true } },
         },
       });
 
@@ -411,6 +444,34 @@ export class AuthService {
           userAgent,
         });
         throw new UnauthorizedException('User not found');
+      }
+
+      if (user.organizationId) {
+        const orgUnavailable =
+          !user.organization ||
+          !user.organization.isActive ||
+          user.organization.suspendedAt ||
+          user.organization.deletedAt;
+
+        if (orgUnavailable) {
+          await this.prisma.refreshToken.delete({ where: { id: storedToken.id } });
+          await this.rateLimiter.recordAttempt(`ip:${ip}`);
+          await this.rateLimiter.recordAttempt(`user:${user.id}`);
+          await this.auditService.record({
+            userId: user.id,
+            organizationId: user.organizationId ?? undefined,
+            action: 'REFRESH_TOKEN',
+            status: 'FAILURE',
+            entity: 'User',
+            entityId: user.id,
+            metadata: { reason: 'Organization access suspended' },
+            ipAddress: ip,
+            userAgent,
+          });
+          throw new UnauthorizedException(
+            'Organization access is suspended. Contact your administrator.',
+          );
+        }
       }
 
       await this.prisma.refreshToken.delete({ where: { id: storedToken.id } });

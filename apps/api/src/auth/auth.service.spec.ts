@@ -37,6 +37,8 @@ function userOfRefresh(payloadId: string) {
     role: 'USER',
     organizationId: 'org1',
     isActive: true,
+    deletedAt: null,
+    organization: { isActive: true, suspendedAt: null, deletedAt: null },
   };
 }
 
@@ -186,6 +188,96 @@ describe('AuthService (refresh / logout / reset security)', () => {
       );
     });
 
+    it('rejects a refresh for a user whose organization is suspended', async () => {
+      jwtService.verify.mockReturnValue({ id: uId });
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        id: 'rt-id',
+        token: oldRefreshToken,
+        userId: uId,
+        expiresAt: new Date(Date.now() + 10000),
+      });
+      prisma.user.findUnique.mockResolvedValue({
+        ...userOfRefresh(uId),
+        deletedAt: null,
+        organization: { isActive: false, suspendedAt: new Date(), deletedAt: null },
+      });
+
+      await expect(service.refreshToken(oldRefreshToken, '1.1.1.1')).rejects.toThrow(
+        UnauthorizedException,
+      );
+
+      expect(prisma.refreshToken.delete).toHaveBeenCalledWith({ where: { id: 'rt-id' } });
+      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a refresh for a user whose organization is deleted', async () => {
+      jwtService.verify.mockReturnValue({ id: uId });
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        id: 'rt-id',
+        token: oldRefreshToken,
+        userId: uId,
+        expiresAt: new Date(Date.now() + 10000),
+      });
+      prisma.user.findUnique.mockResolvedValue({
+        ...userOfRefresh(uId),
+        deletedAt: null,
+        organization: { isActive: true, suspendedAt: null, deletedAt: new Date() },
+      });
+
+      await expect(service.refreshToken(oldRefreshToken, '1.1.1.1')).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a refresh when the organization relation is missing while organizationId is set', async () => {
+      jwtService.verify.mockReturnValue({ id: uId });
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        id: 'rt-id',
+        token: oldRefreshToken,
+        userId: uId,
+        expiresAt: new Date(Date.now() + 10000),
+      });
+      prisma.user.findUnique.mockResolvedValue({
+        ...userOfRefresh(uId),
+        organization: null,
+      });
+
+      await expect(service.refreshToken(oldRefreshToken, '1.1.1.1')).rejects.toThrow(
+        UnauthorizedException,
+      );
+
+      expect(prisma.refreshToken.delete).toHaveBeenCalledWith({ where: { id: 'rt-id' } });
+      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+    });
+
+    it('keeps a valid refresh for an organization-less user (platform account)', async () => {
+      jwtService.verify.mockReturnValue({ id: uId });
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        id: 'rt-id',
+        token: oldRefreshToken,
+        userId: uId,
+        expiresAt: new Date(Date.now() + 10000),
+      });
+      prisma.user.findUnique.mockResolvedValue({
+        ...userOfRefresh(uId),
+        organizationId: null,
+        organization: null,
+      });
+      jwtService.signAsync.mockResolvedValueOnce('new-access').mockResolvedValueOnce('new-refresh');
+
+      const result = await service.refreshToken(oldRefreshToken, '1.1.1.1');
+
+      expect(prisma.refreshToken.delete).toHaveBeenCalledWith({ where: { id: 'rt-id' } });
+      expect(prisma.refreshToken.create).toHaveBeenCalled();
+      expect(result).toEqual(
+        expect.objectContaining({
+          accessToken: 'new-access',
+          refreshToken: 'new-refresh',
+        }),
+      );
+    });
+
     it('rotates the refresh token (old deleted, new stored) on success', async () => {
       jwtService.verify.mockReturnValue({ id: uId });
       prisma.refreshToken.findUnique.mockResolvedValue({
@@ -207,6 +299,117 @@ describe('AuthService (refresh / logout / reset security)', () => {
           refreshToken: 'new-refresh',
         }),
       );
+    });
+  });
+
+  describe('login', () => {
+    it('rejects a user whose organization is suspended without issuing tokens', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: uId,
+        email: 'a@a.com',
+        name: 'A',
+        role: 'USER',
+        password: 'hash',
+        isActive: true,
+        organizationId: 'org1',
+        deletedAt: null,
+        organization: { isActive: false, suspendedAt: new Date(), deletedAt: null },
+      });
+
+      await expect(
+        service.login({ email: 'a@a.com', password: 'whatever' } as never, '1.1.1.1'),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+      expect(rateLimiter.recordAttempt).toHaveBeenCalled();
+    });
+
+    it('rejects a user whose organization is deleted without issuing tokens', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: uId,
+        email: 'a@a.com',
+        name: 'A',
+        role: 'USER',
+        password: 'hash',
+        isActive: true,
+        organizationId: 'org1',
+        deletedAt: null,
+        organization: { isActive: true, suspendedAt: null, deletedAt: new Date() },
+      });
+
+      await expect(
+        service.login({ email: 'a@a.com', password: 'whatever' } as never, '1.1.1.1'),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a user whose organization relation is missing while organizationId is set', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: uId,
+        email: 'a@a.com',
+        name: 'A',
+        role: 'USER',
+        password: 'hash',
+        isActive: true,
+        organizationId: 'org1',
+        deletedAt: null,
+        organization: null,
+      });
+
+      await expect(
+        service.login({ email: 'a@a.com', password: 'whatever' } as never, '1.1.1.1'),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+      expect(rateLimiter.recordAttempt).toHaveBeenCalled();
+    });
+
+    it('accepts an organization-less user (platform account) with no org check', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: uId,
+        email: 'a@a.com',
+        name: 'A',
+        role: 'SUPER_ADMIN',
+        password: 'hash',
+        isActive: true,
+        organizationId: null,
+        deletedAt: null,
+        organization: null,
+      });
+      (argon2.verify as jest.Mock).mockResolvedValue(true);
+      jwtService.signAsync.mockResolvedValueOnce('access').mockResolvedValueOnce('refresh');
+      prisma.refreshToken.create.mockResolvedValue({});
+
+      const result = await service.login(
+        { email: 'a@a.com', password: 'correct' } as never,
+        '1.1.1.1',
+      );
+
+      expect(result).toEqual(expect.objectContaining({ accessToken: 'access' }));
+      expect(prisma.refreshToken.create).toHaveBeenCalled();
+    });
+
+    it('accepts an active user in a live organization', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: uId,
+        email: 'a@a.com',
+        name: 'A',
+        role: 'USER',
+        password: 'hash',
+        isActive: true,
+        organizationId: 'org1',
+        deletedAt: null,
+        organization: { isActive: true, suspendedAt: null, deletedAt: null },
+      });
+      (argon2.verify as jest.Mock).mockResolvedValue(true);
+      jwtService.signAsync.mockResolvedValueOnce('access').mockResolvedValueOnce('refresh');
+      prisma.refreshToken.create.mockResolvedValue({});
+
+      const result = await service.login(
+        { email: 'a@a.com', password: 'correct' } as never,
+        '1.1.1.1',
+      );
+
+      expect(result).toEqual(expect.objectContaining({ accessToken: 'access' }));
+      expect(prisma.refreshToken.create).toHaveBeenCalled();
     });
   });
 

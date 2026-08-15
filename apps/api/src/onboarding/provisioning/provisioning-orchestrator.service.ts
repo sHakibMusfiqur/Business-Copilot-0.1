@@ -146,13 +146,12 @@ export class ProvisioningOrchestratorService {
     tx: any,
     session: Record<string, unknown>,
   ): Promise<ProvisionResult> {
-    let org: { id: string } | null = null;
-    if (session.organizationId) {
-      org = await tx.organization.findUnique({ where: { id: session.organizationId as string } });
+    if (!session.organizationId) {
+      throw new Error('Organization not created during transaction');
     }
-    if (!org) {
-      org = await tx.organization.findFirst({ orderBy: { createdAt: 'desc' } });
-    }
+    const org = await tx.organization.findUnique({
+      where: { id: session.organizationId as string },
+    });
     if (!org) throw new Error('Organization not created during transaction');
     const sub = await tx.subscription.findUnique({ where: { organizationId: org.id } });
     return { org, subscription: sub ?? null };

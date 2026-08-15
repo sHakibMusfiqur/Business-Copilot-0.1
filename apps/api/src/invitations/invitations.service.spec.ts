@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 
 import { InvitationsService } from './invitations.service';
@@ -9,6 +9,7 @@ import { AuditService } from '../audit/audit.service';
 import { SettingsService } from '../settings/settings.service';
 import { MailService } from '../mail/mail.service';
 import type { CreateInvitationDto } from './dto/create-invitation.dto';
+import type { AcceptInvitationDto } from './dto/accept-invitation.dto';
 
 const ORG_ID = 'org-1';
 const INVITER = 'admin-1';
@@ -89,5 +90,84 @@ describe('InvitationsService (Owner role authorization)', () => {
 
     expect(assertCanGrantOwnerRole).toHaveBeenCalledWith(ORG_ID, INVITER, ['role-admin']);
     expect(invitationCreate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('InvitationsService (organization status on verify/accept)', () => {
+  let service: InvitationsService;
+  let invitationFindUnique: jest.Mock;
+  let organizationFindUnique: jest.Mock;
+
+  beforeEach(() => {
+    invitationFindUnique = jest.fn().mockResolvedValue({
+      id: 'inv-1',
+      organizationId: ORG_ID,
+      email: 'emp@x.com',
+      name: 'New Emp',
+      departmentId: null,
+      designation: null,
+      managerId: null,
+      roleIds: [],
+      tokenExpiresAt: new Date(Date.now() + 3600_000),
+      status: 'PENDING',
+    });
+    organizationFindUnique = jest.fn().mockResolvedValue({
+      isActive: true,
+      suspendedAt: null,
+      deletedAt: null,
+    });
+
+    service = new InvitationsService(
+      {
+        user: { findUnique: jest.fn().mockResolvedValue(null) },
+        invitation: { findUnique: invitationFindUnique },
+        organization: { findUnique: organizationFindUnique },
+      } as unknown as PrismaService,
+      {
+        sign: jest.fn(),
+        verify: jest.fn().mockReturnValue({ sub: 'inv-1', purpose: 'invitation', org: ORG_ID }),
+      } as unknown as JwtService,
+      { webUrl: 'https://app.test', jwtSecret: 'secret' } as unknown as ConfigService,
+      { buildEmailBrand: jest.fn().mockResolvedValue({ companyName: 'Acme' }) } as unknown as SettingsService,
+      { sendOrgEmail: jest.fn().mockResolvedValue({ sent: false }) } as unknown as MailService,
+      { record: jest.fn() } as unknown as AuditService,
+      { assertCanGrantOwnerRole: jest.fn() } as unknown as RbacService,
+    );
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('rejects an invitation for an inactive organization', async () => {
+    organizationFindUnique.mockResolvedValue({ isActive: false, suspendedAt: null, deletedAt: null });
+
+    await expect(
+      service.accept('token', { name: 'New Emp', password: 'secret123' } as AcceptInvitationDto),
+    ).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects an invitation for a suspended organization', async () => {
+    organizationFindUnique.mockResolvedValue({
+      isActive: true,
+      suspendedAt: new Date(),
+      deletedAt: null,
+    });
+
+    await expect(service.verify('token')).rejects.toThrow(BadRequestException);
+  });
+
+  it('rejects an invitation for a deleted organization', async () => {
+    organizationFindUnique.mockResolvedValue({
+      isActive: true,
+      suspendedAt: null,
+      deletedAt: new Date(),
+    });
+
+    await expect(service.verify('token')).rejects.toThrow(BadRequestException);
+  });
+
+  it('allows an invitation for an active organization', async () => {
+    await expect(service.verify('token')).resolves.toMatchObject({ valid: true });
   });
 });
