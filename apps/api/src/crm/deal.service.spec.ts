@@ -531,4 +531,93 @@ describe('DealService.softDelete', () => {
     await expect(service.softDelete(ORG_ID, 'actor', 'deal-other')).rejects.toThrow(NotFoundException);
     expect(dealUpdate).not.toHaveBeenCalled();
   });
+
+  it('throws NotFound for an already-soft-deleted deal (repeated delete)', async () => {
+    const { service, dealFindFirst, dealUpdate } = mockService();
+    dealFindFirst.mockResolvedValue(null);
+
+    await expect(service.softDelete(ORG_ID, 'actor', DEAL_ID)).rejects.toThrow(NotFoundException);
+    expect(dealUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe('DealService pipeline/stage consistency', () => {
+  it('create with only stageId resolves the pipeline from the stage', async () => {
+    const { service, pipelineStageFindFirst, pipelineFindFirst, dealCreate } = mockService();
+    pipelineStageFindFirst.mockResolvedValue({ id: STAGE_ID, pipelineId: PIPELINE_ID, isActive: true });
+    pipelineFindFirst.mockResolvedValue({ id: PIPELINE_ID });
+    dealCreate.mockResolvedValue({ id: DEAL_ID });
+
+    await service.create(ORG_ID, 'actor', { title: 'Acme', stageId: STAGE_ID } as never);
+
+    expect(dealCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ pipelineId: PIPELINE_ID, stageId: STAGE_ID }),
+      }),
+    );
+  });
+
+  it('update with only stageId aligns the deal pipeline to the stage pipeline', async () => {
+    const { service, pipelineStageFindFirst, pipelineFindFirst, dealUpdate } = mockService();
+    pipelineStageFindFirst.mockResolvedValue({ id: STAGE_ID, pipelineId: PIPELINE_ID, isActive: true });
+    pipelineFindFirst.mockResolvedValue({ id: PIPELINE_ID });
+    dealUpdate.mockResolvedValue({ id: DEAL_ID, title: 'Acme', value: 100 });
+
+    await service.update(ORG_ID, 'actor', DEAL_ID, { stageId: STAGE_ID } as never);
+
+    expect(dealUpdate).toHaveBeenCalledWith({
+      where: { id: DEAL_ID, organizationId: ORG_ID, deletedAt: null },
+      data: expect.objectContaining({
+        pipeline: { connect: { id: PIPELINE_ID } },
+        stage: { connect: { id: STAGE_ID } },
+      }),
+      select: expect.anything(),
+    });
+  });
+
+  it('update pipeline-only disconnects a stale stage that belongs to another pipeline', async () => {
+    const { service, pipelineFindFirst, dealFindFirst, dealUpdate } = mockService();
+    pipelineFindFirst.mockResolvedValue({ id: 'pipeline-new' });
+    dealFindFirst.mockResolvedValue({
+      id: DEAL_ID,
+      organizationId: ORG_ID,
+      pipelineId: PIPELINE_ID,
+      stageId: 'stage-old',
+    });
+    dealUpdate.mockResolvedValue({ id: DEAL_ID });
+
+    await service.update(ORG_ID, 'actor', DEAL_ID, { pipelineId: 'pipeline-new' } as never);
+
+    expect(dealUpdate).toHaveBeenCalledWith({
+      where: { id: DEAL_ID, organizationId: ORG_ID, deletedAt: null },
+      data: expect.objectContaining({
+        pipeline: { connect: { id: 'pipeline-new' } },
+        stage: { disconnect: true },
+      }),
+      select: expect.anything(),
+    });
+  });
+
+  it('update pipeline-only keeps the existing stage when it already belongs to the new pipeline', async () => {
+    const { service, pipelineFindFirst, dealFindFirst, dealUpdate } = mockService();
+    pipelineFindFirst.mockResolvedValue({ id: PIPELINE_ID });
+    dealFindFirst.mockResolvedValue({
+      id: DEAL_ID,
+      organizationId: ORG_ID,
+      pipelineId: PIPELINE_ID,
+      stageId: STAGE_ID,
+    });
+    dealUpdate.mockResolvedValue({ id: DEAL_ID });
+
+    await service.update(ORG_ID, 'actor', DEAL_ID, { pipelineId: PIPELINE_ID } as never);
+
+    expect(dealUpdate).toHaveBeenCalledWith({
+      where: { id: DEAL_ID, organizationId: ORG_ID, deletedAt: null },
+      data: expect.objectContaining({
+        pipeline: { connect: { id: PIPELINE_ID } },
+        stage: { connect: { id: STAGE_ID } },
+      }),
+      select: expect.anything(),
+    });
+  });
 });

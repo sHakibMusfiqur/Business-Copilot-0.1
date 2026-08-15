@@ -143,7 +143,8 @@ export class DealService {
     let stageId = dto.stageId ?? null;
 
     if (dto.pipelineId || dto.stageId) {
-      await this.assertPipelineAndStageAccessible(orgId, dto.pipelineId, dto.stageId);
+      const resolvedPipelineId = await this.assertPipelineAndStageAccessible(orgId, dto.pipelineId, dto.stageId);
+      if (resolvedPipelineId) pipelineId = resolvedPipelineId;
     } else {
       const resolved = await this.resolveDefaultPipelineAndStage(orgId);
       pipelineId = resolved.pipelineId;
@@ -187,8 +188,12 @@ export class DealService {
   }
 
   async update(orgId: string, userId: string, dealId: string, dto: UpdateDealDto) {
+    let effectivePipelineId: string | null | undefined = dto.pipelineId;
     if (dto.pipelineId || dto.stageId) {
-      await this.assertPipelineAndStageAccessible(orgId, dto.pipelineId, dto.stageId);
+      const resolvedPipelineId = await this.assertPipelineAndStageAccessible(orgId, dto.pipelineId, dto.stageId);
+      if (dto.stageId && dto.pipelineId === undefined && resolvedPipelineId) {
+        effectivePipelineId = resolvedPipelineId;
+      }
     }
     if (dto.contactId) await this.assertContactAccessible(orgId, dto.contactId);
     if (dto.leadId) await this.assertLeadAccessible(orgId, dto.leadId);
@@ -197,11 +202,21 @@ export class DealService {
     const updateData: Prisma.DealUpdateInput = {};
     if (dto.title !== undefined) updateData.title = dto.title.trim();
     if (dto.value !== undefined) updateData.value = new Prisma.Decimal(dto.value);
-    if (dto.pipelineId !== undefined) {
-      updateData.pipeline = dto.pipelineId ? { connect: { id: dto.pipelineId } } : { disconnect: true };
+    if (effectivePipelineId !== undefined) {
+      updateData.pipeline = effectivePipelineId ? { connect: { id: effectivePipelineId } } : { disconnect: true };
     }
     if (dto.stageId !== undefined) {
       updateData.stage = dto.stageId ? { connect: { id: dto.stageId } } : { disconnect: true };
+    }
+    if (dto.pipelineId !== undefined && dto.stageId === undefined) {
+      const existing = await this.prisma.deal.findFirst({
+        where: { id: dealId, organizationId: orgId, deletedAt: null },
+        select: { id: true, stageId: true, pipelineId: true },
+      });
+      if (!existing) throw new NotFoundException('Deal not found');
+      if (existing.stageId && existing.pipelineId !== dto.pipelineId) {
+        updateData.stage = { disconnect: true };
+      }
     }
     if (dto.contactId !== undefined) {
       updateData.contact = dto.contactId ? { connect: { id: dto.contactId } } : { disconnect: true };
@@ -273,13 +288,17 @@ export class DealService {
   /**
    * Ensures the referenced pipeline/stage is either the org-scoped pipeline
    * or the platform default pipeline (organizationId null). When both are
-   * supplied, the stage must belong to the given pipeline.
+   * supplied, the stage must belong to the given pipeline. Returns the
+   * pipeline the stage belongs to (when a stage is supplied) or the given
+   * pipeline, so the caller can keep the deal's pipeline/stage consistent.
    */
   private async assertPipelineAndStageAccessible(
     orgId: string,
     pipelineId?: string,
     stageId?: string,
-  ): Promise<void> {
+  ): Promise<string | null> {
+    let resolvedPipelineId: string | null = pipelineId ?? null;
+
     if (pipelineId) {
       await this.assertPipelineAccessible(orgId, pipelineId);
     }
@@ -299,7 +318,10 @@ export class DealService {
       }
 
       await this.assertPipelineAccessible(orgId, stage.pipelineId);
+      resolvedPipelineId = stage.pipelineId;
     }
+
+    return resolvedPipelineId;
   }
 
   /**
