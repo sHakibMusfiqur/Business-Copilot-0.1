@@ -315,6 +315,36 @@ describe('LeadController (Phase 1F.4 additive Business OS enforcement across CRM
     expect(guards).toBeDefined();
     expect(guards.map((g: () => unknown) => g.name)).toContain('JwtAuthGuard');
   });
+
+  it('does not attach ParseUUIDPipe to any :id/:leadId/:activityId route argument (IDs are cuid())', async () => {
+    const handlers = [
+      'findById',
+      'update',
+      'updateStatus',
+      'assignUser',
+      'remove',
+      'getTimeline',
+      'createActivity',
+      'getActivities',
+      'findActivityById',
+      'toggleActivity',
+      'updateActivity',
+      'deleteActivity',
+    ] as const;
+    const cuidId = 'clxyz1234567890abcdefghijk';
+    for (const handler of handlers) {
+      const routeArgs = Reflect.getMetadata('__routeArguments__', LeadController, handler);
+      expect(routeArgs).toBeDefined();
+      const values = Object.values(routeArgs as Record<number, { pipes?: unknown[] }>);
+      const pipes = values.flatMap((arg) => arg.pipes ?? []);
+      expect(pipes).toHaveLength(0);
+    }
+    const ctx = buildController(async () => ['crm.read']);
+    await ctx.controller.findById(makeUser(), cuidId);
+    expect(ctx.lead.findById).toHaveBeenCalledWith('org-1', cuidId);
+    await ctx.controller.updateActivity(makeUser(), cuidId, {} as never);
+    expect(ctx.activity.update).toHaveBeenCalledWith('org-1', 'user-1', cuidId, expect.anything());
+  });
 });
 
 describe('LeadController (Nest DI wiring)', () => {
