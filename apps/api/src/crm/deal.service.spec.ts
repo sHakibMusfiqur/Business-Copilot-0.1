@@ -504,6 +504,52 @@ describe('DealService.update', () => {
       select: expect.anything(),
     });
   });
+
+  it('update with pipelineId and a matching stageId connects both consistently', async () => {
+    const { service, pipelineFindFirst, pipelineStageFindFirst, dealUpdate } = mockService();
+    pipelineFindFirst.mockResolvedValue({ id: PIPELINE_ID });
+    pipelineStageFindFirst.mockResolvedValue({ id: STAGE_ID, pipelineId: PIPELINE_ID, isActive: true });
+    dealUpdate.mockResolvedValue({ id: DEAL_ID });
+
+    await service.update(ORG_ID, 'actor', DEAL_ID, {
+      pipelineId: PIPELINE_ID,
+      stageId: STAGE_ID,
+    } as never);
+
+    expect(dealUpdate).toHaveBeenCalledWith({
+      where: { id: DEAL_ID, organizationId: ORG_ID, deletedAt: null },
+      data: expect.objectContaining({
+        pipeline: { connect: { id: PIPELINE_ID } },
+        stage: { connect: { id: STAGE_ID } },
+      }),
+      select: expect.anything(),
+    });
+  });
+
+  it('update rejects a stage that does not belong to the selected pipeline and does not mutate', async () => {
+    const { service, pipelineFindFirst, pipelineStageFindFirst, dealUpdate } = mockService();
+    pipelineFindFirst.mockResolvedValue({ id: PIPELINE_ID });
+    pipelineStageFindFirst.mockResolvedValue({ id: STAGE_ID, pipelineId: 'pipeline-other', isActive: true });
+
+    await expect(
+      service.update(ORG_ID, 'actor', DEAL_ID, {
+        pipelineId: PIPELINE_ID,
+        stageId: STAGE_ID,
+      } as never),
+    ).rejects.toThrow(BadRequestException);
+    expect(dealUpdate).not.toHaveBeenCalled();
+  });
+
+  it('update rejects a deal from another organization on a pipeline-only change', async () => {
+    const { service, pipelineFindFirst, dealFindFirst, dealUpdate } = mockService();
+    pipelineFindFirst.mockResolvedValue({ id: 'pipeline-new' });
+    dealFindFirst.mockResolvedValue(null);
+
+    await expect(
+      service.update(ORG_ID, 'actor', 'deal-other', { pipelineId: 'pipeline-new' } as never),
+    ).rejects.toThrow(NotFoundException);
+    expect(dealUpdate).not.toHaveBeenCalled();
+  });
 });
 
 describe('DealService.softDelete', () => {
@@ -615,9 +661,10 @@ describe('DealService pipeline/stage consistency', () => {
       where: { id: DEAL_ID, organizationId: ORG_ID, deletedAt: null },
       data: expect.objectContaining({
         pipeline: { connect: { id: PIPELINE_ID } },
-        stage: { connect: { id: STAGE_ID } },
       }),
       select: expect.anything(),
     });
+    const data = dealUpdate.mock.calls[0][0] as { data: { stage?: unknown } };
+    expect(data.data.stage).toBeUndefined();
   });
 });
