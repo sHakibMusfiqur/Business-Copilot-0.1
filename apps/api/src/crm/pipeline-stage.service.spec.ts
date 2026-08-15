@@ -273,6 +273,19 @@ describe('PipelineStageService.update', () => {
     expect(pipelineStageUpdate).not.toHaveBeenCalled();
   });
 
+  it('throws NotFound when updating a stage whose pipeline is soft-deleted', async () => {
+    const { service, pipelineStageFindFirst, pipelineStageUpdate } = mockService();
+    pipelineStageFindFirst.mockResolvedValue({
+      id: STAGE_ID,
+      pipeline: { id: PIPELINE_ID, organizationId: ORG_ID, deletedAt: new Date() },
+    });
+
+    await expect(
+      service.update(ORG_ID, 'actor', STAGE_ID, { name: 'X' } as never),
+    ).rejects.toThrow(NotFoundException);
+    expect(pipelineStageUpdate).not.toHaveBeenCalled();
+  });
+
   it('maps duplicate name (P2002) to ConflictException', async () => {
     const { service, pipelineStageFindFirst, pipelineStageUpdate } = mockService();
     pipelineStageFindFirst.mockResolvedValue({
@@ -337,6 +350,18 @@ describe('PipelineStageService.softDelete', () => {
     });
 
     await expect(service.softDelete(ORG_ID, 'actor', STAGE_ID)).rejects.toThrow(NotFoundException);
+    expect(pipelineStageUpdate).not.toHaveBeenCalled();
+  });
+
+  it('throws NotFound when the stage is already soft-deleted', async () => {
+    const { service, pipelineStageFindFirst, pipelineStageUpdate } = mockService();
+    pipelineStageFindFirst.mockResolvedValue(null);
+
+    await expect(service.softDelete(ORG_ID, 'actor', STAGE_ID)).rejects.toThrow(NotFoundException);
+    expect(pipelineStageFindFirst).toHaveBeenCalledWith({
+      where: { id: STAGE_ID, deletedAt: null },
+      select: expect.anything(),
+    });
     expect(pipelineStageUpdate).not.toHaveBeenCalled();
   });
 });

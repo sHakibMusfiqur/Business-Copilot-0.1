@@ -707,6 +707,29 @@ describe('LeadService.getSummary (Activity soft-delete isolation)', () => {
     );
     expect(result.upcomingActivities).toEqual([]);
   });
+
+  it('scopes all lead aggregations to the org and excludes soft-deleted leads', async () => {
+    const { service, leadCount, leadGroupBy, leadAggregate } = mockService();
+    leadCount.mockResolvedValue(5);
+    leadGroupBy.mockResolvedValue([{ status: 'NEW', _count: { id: 5 } }]);
+    leadAggregate.mockResolvedValue({ _sum: { estimatedValue: 5000 } });
+
+    const result = await service.getSummary(ORG_ID);
+
+    expect(leadCount).toHaveBeenCalledWith({
+      where: { organizationId: ORG_ID, deletedAt: null },
+    });
+    expect(leadGroupBy).toHaveBeenCalledWith({
+      by: ['status'],
+      where: { organizationId: ORG_ID, deletedAt: null },
+      _count: { id: true },
+    });
+    expect(leadAggregate).toHaveBeenCalledWith({
+      where: { organizationId: ORG_ID, deletedAt: null },
+      _sum: { estimatedValue: true },
+    });
+    expect(result.totalLeads).toBe(5);
+  });
 });
 
 describe('LeadService.findById (tenant isolation + soft-delete exclusion / FS7)', () => {

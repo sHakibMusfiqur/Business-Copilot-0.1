@@ -336,4 +336,12 @@ describe('PipelineService.softDelete', () => {
     );
     expect(pipelineUpdate).not.toHaveBeenCalled();
   });
+
+  it('throws NotFound when the pipeline is already soft-deleted', async () => {
+    const { service, pipelineFindFirst, pipelineUpdate } = mockService();
+    pipelineFindFirst.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+
+    await expect(service.softDelete(ORG_ID, 'actor', PIPELINE_ID)).rejects.toThrow(NotFoundException);
+    expect(pipelineUpdate).not.toHaveBeenCalled();
+  });
 });
