@@ -83,22 +83,42 @@ export interface ChecklistProgress {
 const SSE_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 const ONBOARDING_TOKEN_PREFIX = 'bc_onboarding_token';
 
+
+const onboardingTokenFallback = new Map<string, string>();
+
 function tokenKey(sessionId: string): string {
   return `${ONBOARDING_TOKEN_PREFIX}_${sessionId}`;
 }
 
-function getOnboardingToken(sessionId: string): string | null {
-  if (typeof window === 'undefined') return null;
-  return window.localStorage.getItem(tokenKey(sessionId));
+export function getOnboardingToken(sessionId: string): string | null {
+  const key = tokenKey(sessionId);
+  if (typeof window !== 'undefined') {
+    try {
+      const stored = window.localStorage.getItem(key);
+      if (stored) {
+        onboardingTokenFallback.set(sessionId, stored);
+        return stored;
+      }
+    } catch {
+      // localStorage unavailable/blocked; fall through to the in-memory fallback.
+    }
+  }
+  return onboardingTokenFallback.get(sessionId) ?? null;
 }
 
-function storeOnboardingToken(sessionId: string, token: string | undefined | null): void {
-  if (typeof window === 'undefined') return;
+export function storeOnboardingToken(sessionId: string, token: string | undefined | null): void {
   if (!token) return;
-  window.localStorage.setItem(tokenKey(sessionId), token);
+  onboardingTokenFallback.set(sessionId, token);
+  if (typeof window !== 'undefined') {
+    try {
+      window.localStorage.setItem(tokenKey(sessionId), token);
+    } catch {
+      // localStorage unavailable/blocked; the in-memory fallback already holds it.
+    }
+  }
 }
 
-function sessionHeaders(sessionId: string): Record<string, string> {
+export function sessionHeaders(sessionId: string): Record<string, string> {
   const token = getOnboardingToken(sessionId);
   return token ? { 'X-Onboarding-Token': token } : {};
 }
@@ -181,10 +201,7 @@ export async function getProvisioningSseToken(id: string): Promise<{ token: stri
 }
 
 export function createProvisioningEventSource(id: string, sseToken: string): EventSource {
-  // EventSource cannot set headers, so a bound session's live stream must be
-  // authorized with the short-lived credential issued by `getProvisioningSseToken`
-  // (query param `sseToken`). The onboarding token is not accepted for a bound
-  // session's stream.
+
   const query = sseToken ? `?sseToken=${encodeURIComponent(sseToken)}` : '';
   return new EventSource(`${SSE_BASE_URL}/api/onboarding/sessions/${id}/progress/stream${query}`);
 }

@@ -10,8 +10,10 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import { register as registerUser } from '@/lib/api';
-import { createSession, updateSession } from '@/lib/onboarding-api';
+import { createSession, updateSession, getSessionByEmail } from '@/lib/onboarding-api';
 import { useAuthStore } from '@/store/auth-store';
+
+import { submitRegistration } from './submit-registration';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -51,15 +53,18 @@ export default function RegisterPage() {
     setError(null);
 
     try {
-      const result = await registerUser(data.name, data.email, data.password);
-      setUser(result.user, result.accessToken);
-      const session = await createSession(data.email, data.name);
-      await updateSession(session.id, { userId: result.user.id });
-      router.replace(`/onboarding/verify?session=${session.id}`);
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : 'Registration failed';
-      setError(message);
+      await submitRegistration({
+        name: data.name,
+        email: data.email,
+        password: data.password,
+        registerUser,
+        createSession,
+        updateSession,
+        getSessionByEmail,
+        setUser,
+        navigate: (url) => router.replace(url),
+        setError,
+      });
     } finally {
       setIsSubmitting(false);
     }
