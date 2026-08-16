@@ -201,13 +201,12 @@ export class OnboardingService {
       completed.push(step);
     }
 
-    if (session.userId && !(session.completedSteps as number[]).includes(1)) {
-      completed.push(1);
-    }
+
+    const nextStep = Math.max(step + 1, (session.currentStep as number) ?? 0);
 
     const updated = await this.prisma.onboardingSession.update({
       where: { id: sessionId },
-      data: { currentStep: step + 1, completedSteps: completed, version: { increment: 1 } },
+      data: { currentStep: nextStep, completedSteps: completed, version: { increment: 1 } },
     });
 
     return this.mapSession(updated);
@@ -274,24 +273,7 @@ export class OnboardingService {
     };
   }
 
-  /**
-   * Issues a short-lived, single-purpose SSE credential bound to this session
-   * AND to the current user identity.
-   *
-   * EventSource cannot attach headers, so the owner fetches this token (via a
-   * route protected by OnboardingSessionGuard, i.e. only with the bound user's
-   * JWT once a user is bound) and passes it as the `sseToken` query param.
-   *
-   * The `uid` claim is `null` for an anonymous session and the bound owner's
-   * userId for a bound session. The guard rejects a token whose `uid` does not
-   * match the session's current owner, so a credential issued before binding
-   * stops working once the session is bound, and one user's credential never
-   * works for another.
-   *
-   * `callerUserId` is the authenticated caller resolved from the guard's
-   * request (undefined/anonymous when only the onboarding token was used). It
-   * must match the session's bound owner when the session is bound.
-   */
+
   async issueSseToken(sessionId: string, callerUserId: string | null) {
     const session = await this.prisma.onboardingSession.findUnique({
       where: { id: sessionId },
@@ -317,12 +299,7 @@ export class OnboardingService {
     return { token, expiresInSeconds: SSE_TOKEN_TTL_SECONDS };
   }
 
-  /**
-   * Issues a signed, single-purpose onboarding token bound to this session.
-   * The raw token is only ever returned at session creation or to the
-   * authenticated owner (via getSessionByEmail) and must be presented to
-   * access session endpoints.
-   */
+ 
   private mapSessionWithToken(session: Record<string, unknown> | null) {
     const mapped = this.mapSession(session);
     if (!mapped) return null;

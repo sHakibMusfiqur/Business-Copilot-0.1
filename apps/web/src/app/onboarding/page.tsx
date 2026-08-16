@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { getMe, refreshAccessToken } from '@/lib/api';
 import { getSessionByEmail } from '@/lib/onboarding-api';
 import { useAuthStore } from '@/store/auth-store';
+import { resumePath } from './_hooks/resume-step';
 
 export default function OnboardingRedirect() {
   const router = useRouter();
@@ -39,16 +40,6 @@ export default function OnboardingRedirect() {
 
       if (cancelled) return;
 
-      // The access_token claim can be stale: it is minted as `true` at register
-      // (a placeholder org exists but no session row yet), flips to `false` on
-      // the first refresh while the session is still PENDING, and only becomes
-      // `true` again once the session is COMPLETED. getMe() recomputes
-      // `onboardingCompleted` from the DB (via the 401->refresh round trip), so
-      // it is the authoritative state here. If onboarding is actually complete
-      // the middleware may still have routed us to /onboarding from a stale
-      // claim; go to the dashboard instead of dead-ending on
-      // "No onboarding session was found." (getSessionByEmail only matches
-      // PENDING sessions and 404s for a COMPLETED one).
       if (onboardingCompleted) {
         await refreshAccessToken().catch(() => null);
         if (!cancelled) router.replace('/dashboard');
@@ -59,7 +50,7 @@ export default function OnboardingRedirect() {
         try {
           const restored = await getSessionByEmail(email);
           if (!cancelled && restored?.id) {
-            router.replace(`/onboarding/verify?session=${restored.id}`);
+            router.replace(resumePath(restored));
             return;
           }
         } catch {
@@ -84,8 +75,7 @@ export default function OnboardingRedirect() {
     );
   }
 
-  // No onboarding session exists. Show a start prompt instead of forwarding to
-  // /onboarding/verify (which would render "No session found.").
+  /
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <div className="glass-card max-w-md rounded-2xl p-8 text-center">

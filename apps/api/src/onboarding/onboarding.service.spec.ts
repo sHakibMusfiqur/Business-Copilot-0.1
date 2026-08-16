@@ -164,3 +164,85 @@ describe('OnboardingService (issueSseToken)', () => {
     expect(sign).not.toHaveBeenCalled();
   });
 });
+
+describe('OnboardingService (completeStep)', () => {
+  function buildService(session: Record<string, unknown>) {
+    const prisma = {
+      onboardingSession: {
+        findUnique: jest.fn().mockResolvedValue(session),
+        update: jest
+          .fn()
+          .mockImplementation(({ data }: { data: Record<string, unknown> }) =>
+            Promise.resolve({ ...session, ...data, version: (session.version as number) + 1 }),
+          ),
+      },
+    };
+    const service = new OnboardingService(
+      prisma as unknown as PrismaService,
+      { record: jest.fn() } as unknown as AuditService,
+      {} as unknown as IndustryTemplateFactory,
+      {} as unknown as JwtService,
+      { jwtSecret: 'secret' } as unknown as ConfigService,
+    );
+    return { service, prisma };
+  }
+
+  it('never reduces currentStep when re-entering an earlier step', async () => {
+    const { service, prisma } = buildService(
+      buildSession({ userId: 'user-a', currentStep: 4, completedSteps: [0, 1, 2, 3] }),
+    );
+
+    await service.completeStep('session-1', 0);
+
+    const data = prisma.onboardingSession.update.mock.calls[0][0].data;
+    expect(data.currentStep).toBe(4); // Math.max(0 + 1, 4)
+    expect(data.completedSteps).toEqual([0, 1, 2, 3]);
+  });
+
+  it('advances currentStep to step+1 on the normal forward path', async () => {
+    const { service, prisma } = buildService(
+      buildSession({ userId: 'user-a', currentStep: 0, completedSteps: [] }),
+    );
+
+    await service.completeStep('session-1', 0);
+
+    const data = prisma.onboardingSession.update.mock.calls[0][0].data;
+    expect(data.currentStep).toBe(1);
+    expect(data.completedSteps).toEqual([0]);
+  });
+
+  it('does not auto-complete the Industry step (step 1) on a bound session', async () => {
+    const { service, prisma } = buildService(
+      buildSession({ userId: 'user-a', currentStep: 0, completedSteps: [] }),
+    );
+
+    await service.completeStep('session-1', 0);
+
+    const data = prisma.onboardingSession.update.mock.calls[0][0].data;
+    expect(data.completedSteps).toEqual([0]); // NOT [0, 1]
+  });
+
+  it('still explicitly completes the Industry step via completeStep(1)', async () => {
+    const { service, prisma } = buildService(
+      buildSession({ userId: 'user-a', currentStep: 1, completedSteps: [0] }),
+    );
+
+    await service.completeStep('session-1', 1);
+
+    const data = prisma.onboardingSession.update.mock.calls[0][0].data;
+    expect(data.completedSteps).toEqual([0, 1]);
+    expect(data.currentStep).toBe(2);
+  });
+
+  it('remains idempotent: re-completing a step does not duplicate it', async () => {
+    const { service, prisma } = buildService(
+      buildSession({ userId: 'user-a', currentStep: 3, completedSteps: [0, 1, 2] }),
+    );
+
+    await service.completeStep('session-1', 1);
+
+    const data = prisma.onboardingSession.update.mock.calls[0][0].data;
+    expect(data.completedSteps).toEqual([0, 1, 2]);
+    expect(data.currentStep).toBe(3); // Math.max(1 + 1, 3)
+  });
+});
