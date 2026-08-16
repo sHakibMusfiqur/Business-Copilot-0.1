@@ -22,38 +22,53 @@ function session(
 }
 
 describe('resolveResumeStep', () => {
-  it('resumes a pending session with currentStep=3 at the STEP_PATHS[3] index (not Verify)', () => {
+  it('PENDING + currentStep=0 resumes exactly at Verify (0)', () => {
+    const step = resolveResumeStep(session({ currentStep: 0 }));
+    expect(step).toBe(0);
+    expect(STEP_PATHS[step]).toBe('/onboarding/verify');
+  });
+
+  it('PENDING + currentStep=3 resumes at the STEP_PATHS[3] index (profile)', () => {
     const step = resolveResumeStep(session({ currentStep: 3 }));
     expect(step).toBe(3);
     expect(STEP_PATHS[step]).toBe('/onboarding/profile');
   });
 
-  it('resumes a pending session with currentStep=6 at the Payment index', () => {
+  it('PENDING + currentStep=6 resumes at the STEP_PATHS[6] index (payment)', () => {
     const step = resolveResumeStep(session({ currentStep: 6 }));
     expect(step).toBe(6);
     expect(STEP_PATHS[step]).toBe('/onboarding/payment');
   });
 
-  it('resumes an actively provisioning session at the Provisioning step', () => {
+  it('PENDING + currentStep=7 resumes at the Provisioning step', () => {
+    const step = resolveResumeStep(session({ currentStep: 7 }));
+    expect(step).toBe(PROVISIONING_STEP);
+    expect(STEP_PATHS[step]).toBe('/onboarding/provisioning');
+  });
+
+  it('PENDING + currentStep=8 never jumps to Success; it resumes at Provisioning', () => {
+    const step = resolveResumeStep(session({ currentStep: 8 }));
+    expect(step).toBe(PROVISIONING_STEP);
+    expect(step).toBeLessThan(8);
+  });
+
+  it('PROVISIONING always resumes at the Provisioning step', () => {
     expect(resolveResumeStep(session({ currentStep: 0, provisionStatus: 'PROVISIONING' }))).toBe(
       PROVISIONING_STEP,
     );
   });
 
-  it('never returns the Success step (8) for a still-pending session', () => {
-    const step = resolveResumeStep(session({ currentStep: 8 }));
+  it('COMPLETED maps to Provisioning, and is never routed here as Success', () => {
+    // The COMPLETED->dashboard case is handled by the caller
+    // (`/onboarding/page.tsx`) before this helper is reached; here it must stay
+    // out of Success.
+    const step = resolveResumeStep(session({ currentStep: 8, provisionStatus: 'COMPLETED' }));
     expect(step).toBe(PROVISIONING_STEP);
     expect(step).toBeLessThan(8);
   });
 
   it('clamps a negative currentStep to Verify (0)', () => {
     expect(resolveResumeStep(session({ currentStep: -1 }))).toBe(0);
-  });
-
-  it('maps a completed provisioning status (COMPLETED) to the Provisioning index, not Success', () => {
-    // The COMPLETED->dashboard case is handled by the resolver before this
-    // helper is reached; this asserts the helper never forwards to Success.
-    expect(resolveResumeStep(session({ currentStep: 8, provisionStatus: 'COMPLETED' }))).toBeLessThan(8);
   });
 });
 

@@ -74,9 +74,7 @@ export default function OnboardingRedirect() {
       </div>
     );
   }
-
-  /
-  return (
+return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <div className="glass-card max-w-md rounded-2xl p-8 text-center">
         <h1 className="mb-2 text-xl font-semibold">Onboarding</h1>
