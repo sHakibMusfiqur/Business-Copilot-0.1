@@ -2,8 +2,9 @@ import { Injectable, Logger, Inject, NotFoundException, BadRequestException } fr
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import { IndustryTemplateFactory } from '../industry-templates/industry-template.factory';
-import { ProvisioningExecutorService, type ProvisionResult } from './provisioning-executor.service';
+import { ProvisioningExecutorService, type ProvisionResult, type CheckpointObservation } from './provisioning-executor.service';
 import { ProvisioningRetryService } from './provisioning-retry.service';
+import { ProvisioningProgressService } from './provisioning-progress.service';
 import { PROVISION_EVENT_BUS, type ProvisionEventBus } from './provision-event-bus.interface';
 import { CHECKPOINT_TASKS } from './provisioning-checkpoints';
 import type { ProvisioningConfig } from '../industry-templates/types';
@@ -20,6 +21,7 @@ export class ProvisioningOrchestratorService {
     @Inject(PROVISION_EVENT_BUS) private readonly eventBus: ProvisionEventBus,
     private readonly retryService: ProvisioningRetryService,
     private readonly industryFactory: IndustryTemplateFactory,
+    private readonly progressService: ProvisioningProgressService,
   ) {}
 
   async orchestrate(sessionId: string): Promise<ProvisionResult> {
@@ -117,6 +119,11 @@ export class ProvisioningOrchestratorService {
 
       const checkpointResult = await this.executorService.executeCheckpoint(
         session, config, startCheckpoint, tx,
+        // Observational, best-effort: persisted on the ROOT client so it
+        // commits independently and never fails provisioning.
+        async (observation) => {
+          await this.persistCheckpointObservation(sessionId, observation);
+        },
       );
 
       const result = checkpointResult.result ?? await this.buildProvisionResult(tx, session);
@@ -136,6 +143,26 @@ export class ProvisioningOrchestratorService {
 
       return result;
     });
+  }
+
+  /**
+   * Best-effort observational write. Must never fail provisioning or regress
+   * the authoritative COMPLETED/FAILED terminal state.
+   */
+  private async persistCheckpointObservation(
+    sessionId: string,
+    observation: CheckpointObservation,
+  ): Promise<void> {
+    try {
+      await this.progressService.updateProgress(
+        sessionId,
+        observation.progress,
+        observation.task,
+        observation.completedTasks,
+      );
+    } catch (error) {
+      this.logger.warn(`Progress persistence failed for ${sessionId}: ${(error as Error).message}`);
+    }
   }
 
   private async buildProvisionResult(

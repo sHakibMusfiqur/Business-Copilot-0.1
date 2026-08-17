@@ -39,9 +39,10 @@ export class ProvisioningProgressService {
     progress: number,
     currentTask: string,
     completedTasks: string[],
-  ): Promise<void> {
-    await this.prisma.onboardingSession.update({
-      where: { id: sessionId },
+): Promise<void> {
+    // Atomic guard: never regress the authoritative COMPLETED/FAILED terminal state.
+    await this.prisma.onboardingSession.updateMany({
+      where: { id: sessionId, provisionStatus: { notIn: ['COMPLETED', 'FAILED'] } },
       data: {
         provisionData: { progress, currentTask, completedTasks },
       },

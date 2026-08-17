@@ -19,11 +19,7 @@ function readSession(overrides: Record<string, unknown> = {}) {
   };
 }
 
-/**
- * A Prisma-like repository backstop wired across the full production chain
- * (engine -> dispatcher -> orchestrator -> executor -> progress) so G1's
- * checkpoint-id threading is validated on the real seams, not mocks.
- */
+
 function createBackstop(
   readSession: Record<string, unknown>,
   options: { boundOrgId?: string | null; failAt?: 'applySettings' | null } = {},
@@ -120,6 +116,7 @@ function createBackstop(
   const orchestrator = new ProvisioningOrchestratorService(
     prisma as never, audit as never, executor as never,
     eventBus as never, retryService as never, industryFactory as never,
+    progress as never,
   );
   const dispatcher = new ImmediateExecutionDispatcher(orchestrator);
   const engine = new ProvisioningEngineService(
@@ -179,9 +176,7 @@ describe('Provisioning checkpoint resume (G1)', () => {
     await expect(engine.provision('session-1')).rejects.toThrow('Simulated transient DB failure');
     expect((persisted.provisionData as { failedTask?: string }).failedTask).toBe('Applying industry settings...');
 
-    // The single atomic transaction rolls the org create back, so the retried
-    // provision observes a recorded failedTask but no committed org — the deep
-    // resume-from-checkpoint guard must kick in and re-run from checkpoint 1.
+  
     persisted.organizationId = null;
     failAtRef.value = null;
     const createCalls = (prisma.organization.create as jest.Mock).mock.calls.length;

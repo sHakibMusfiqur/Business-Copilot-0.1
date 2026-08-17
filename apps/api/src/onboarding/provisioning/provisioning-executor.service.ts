@@ -17,6 +17,12 @@ export interface CheckpointResult {
   result?: ProvisionResult;
 }
 
+export interface CheckpointObservation {
+  task: string;
+  progress: number;
+  completedTasks: string[];
+}
+
 @Injectable()
 export class ProvisioningExecutorService {
   constructor(
@@ -29,9 +35,20 @@ export class ProvisioningExecutorService {
     startCheckpoint: number,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     tx: any,
+    onCheckpoint?: (observation: CheckpointObservation) => void | Promise<void>,
   ): Promise<CheckpointResult> {
     const tasks: string[] = [];
     let result: ProvisionResult | undefined;
+
+    const observe = async (index: number): Promise<void> => {
+      if (onCheckpoint) {
+        await onCheckpoint({
+          task: CHECKPOINT_TASKS[index].task,
+          progress: CHECKPOINT_TASKS[index].progress,
+          completedTasks: [...tasks],
+        });
+      }
+    };
 
     if (startCheckpoint <= CHECKPOINT_TASKS[0].checkpoint) {
       await this.runCheckpoint(CHECKPOINT_TASKS[0].task, async () => {
@@ -41,27 +58,34 @@ export class ProvisioningExecutorService {
         // and can attach owner/roles/subscription/settings to the wrong tenant.
         session.organizationId = created.org.id;
       });
+      await observe(0);
     }
     if (startCheckpoint <= CHECKPOINT_TASKS[1].checkpoint) {
       await this.runCheckpoint(CHECKPOINT_TASKS[1].task, () => this.doAssignOwner(session, tasks, tx));
+      await observe(1);
     }
     if (startCheckpoint <= CHECKPOINT_TASKS[2].checkpoint) {
       await this.runCheckpoint(CHECKPOINT_TASKS[2].task, () => this.doCreateOwnerRole(session, tasks, tx));
+      await observe(2);
     }
     if (startCheckpoint <= CHECKPOINT_TASKS[3].checkpoint) {
       await this.runCheckpoint(CHECKPOINT_TASKS[3].task, () => this.doConfigureDepartments(session, config, tasks, tx));
+      await observe(3);
     }
     if (startCheckpoint <= CHECKPOINT_TASKS[4].checkpoint) {
       await this.runCheckpoint(CHECKPOINT_TASKS[4].task, () => this.doSetupSubscription(session, tasks, tx));
+      await observe(4);
     }
     if (startCheckpoint <= CHECKPOINT_TASKS[5].checkpoint) {
       await this.runCheckpoint(CHECKPOINT_TASKS[5].task, () => this.doApplySettings(session, config, tasks, tx));
+      await observe(5);
     }
     if (startCheckpoint <= CHECKPOINT_TASKS[6].checkpoint) {
       await this.runCheckpoint(CHECKPOINT_TASKS[6].task, async () => {
         const lifecycleResult = await this.doIndustryLifecycle(session, tasks, tx);
         if (lifecycleResult) result = lifecycleResult;
       });
+      await observe(6);
     }
 
     if (!result) {
