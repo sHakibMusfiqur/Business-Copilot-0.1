@@ -220,4 +220,34 @@ describe('ProvisioningOrchestratorService', () => {
       subscription: null,
     });
   });
+
+  it('persists checkpoint observations only after the transaction commits (no root-client writes inside it)', async () => {
+    const mocks = buildMocks();
+    mocks.prisma.onboardingSession.findUnique.mockResolvedValue({
+      id: 'session-1',
+      email: 'a@b.com',
+      organizationId: 'org-1',
+    });
+    mocks.prisma.organization.findUnique.mockResolvedValue({ id: 'org-1' });
+    let insideTx = false;
+    mocks.prisma.$transaction.mockImplementation(async (fn: (tx: never) => Promise<unknown>) => {
+      insideTx = true;
+      try {
+        return await fn(mocks.prisma as never);
+      } finally {
+        insideTx = false;
+      }
+    });
+    mocks.progress.updateProgress.mockImplementation(() => {
+      if (insideTx) throw new Error('progress persisted inside the transaction');
+      return Promise.resolve();
+    });
+    const service = buildService(mocks);
+
+    await expect(service.orchestrate('session-1')).resolves.toEqual({
+      org: { id: 'org-1' },
+      subscription: null,
+    });
+    expect(mocks.progress.updateProgress).toHaveBeenCalled();
+  });
 });

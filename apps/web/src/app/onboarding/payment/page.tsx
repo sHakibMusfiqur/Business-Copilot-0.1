@@ -19,7 +19,7 @@ type PaymentOption = 'payNow' | 'trial';
 
 export default function PaymentPage() {
   const { wizard, session, saveField, completeStep, persistSession } = useOnboarding();
-  const [selectedOption, setSelectedOption] = useState<PaymentOption>('trial');
+  const [selectedOption, setSelectedOption] = useState<PaymentOption | null>(null);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -90,7 +90,7 @@ export default function PaymentPage() {
   };
 
   const handleContinue = async () => {
-    if (!plan || starting || startingRef.current) return;
+    if (!plan || starting || startingRef.current || selectedOption === null) return;
     if (selectedOption === 'payNow') {
       if (!paymentEnabled) return;
       await handlePayNow();
@@ -279,7 +279,7 @@ export default function PaymentPage() {
 
         <button
           onClick={handleContinue}
-          disabled={starting || (selectedOption === 'payNow' && payNowDisabled)}
+          disabled={starting || selectedOption === null || (selectedOption === 'payNow' && payNowDisabled)}
           className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-6 py-3.5 font-semibold text-white shadow-lg shadow-blue-600/25 transition-all hover:from-blue-500 hover:to-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {starting ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}

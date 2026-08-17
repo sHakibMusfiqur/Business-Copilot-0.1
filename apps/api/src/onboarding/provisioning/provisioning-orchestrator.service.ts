@@ -103,8 +103,16 @@ export class ProvisioningOrchestratorService {
     config: ProvisioningConfig,
     _context: ProvisioningContext,
   ): Promise<ProvisionResult> {
+    // Observational progress is only buffered here, never awaited on the DB
+    // inside the interactive transaction. A root-client write on the same
+    // onboardingSession row the transaction has updated would block on the
+    // uncommitted row lock, pinning the transaction open until Prisma's
+    // default interactive-transaction timeout (5s) aborts it. The observations
+    // are flushed after the transaction commits.
+    const observations: CheckpointObservation[] = [];
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return this.prisma.$transaction(async (tx: any) => {
+    const result = await this.prisma.$transaction(async (tx: any) => {
       const provisionData = (session.provisionData as Record<string, unknown>) ?? {};
       const failedTask = provisionData.failedTask as string | null;
       // Resuming from a mid-pipeline checkpoint is only safe when the earlier
@@ -119,14 +127,10 @@ export class ProvisioningOrchestratorService {
 
       const checkpointResult = await this.executorService.executeCheckpoint(
         session, config, startCheckpoint, tx,
-        // Observational, best-effort: persisted on the ROOT client so it
-        // commits independently and never fails provisioning.
-        async (observation) => {
-          await this.persistCheckpointObservation(sessionId, observation);
-        },
+        (observation) => { observations.push(observation); },
       );
 
-      const result = checkpointResult.result ?? await this.buildProvisionResult(tx, session);
+      const provisionResult = checkpointResult.result ?? await this.buildProvisionResult(tx, session);
 
       CHECKPOINT_TASKS.forEach((c) => {
         this.eventBus.publish({
@@ -141,8 +145,16 @@ export class ProvisioningOrchestratorService {
         });
       });
 
-      return result;
+      return provisionResult;
     });
+
+    // Observational, best-effort: flushed after the transaction commits so the
+    // root-client write never runs inside (or blocks on) the transaction.
+    for (const observation of observations) {
+      await this.persistCheckpointObservation(sessionId, observation);
+    }
+
+    return result;
   }
 
   /**
