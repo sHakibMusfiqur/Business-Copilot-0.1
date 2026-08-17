@@ -201,15 +201,26 @@ export class OnboardingService {
       completed.push(step);
     }
 
-
     const nextStep = Math.max(step + 1, (session.currentStep as number) ?? 0);
 
-    const updated = await this.prisma.onboardingSession.update({
-      where: { id: sessionId },
+    // Optimistic-concurrency guard: only overwrite completedSteps if the
+    // version we read is unchanged, otherwise the stale writer throws below.
+    const updated = await this.prisma.onboardingSession.updateMany({
+      where: { id: sessionId, version: session.version },
       data: { currentStep: nextStep, completedSteps: completed, version: { increment: 1 } },
     });
 
-    return this.mapSession(updated);
+    if (updated.count === 0) {
+      const current = await this.prisma.onboardingSession.findUnique({ where: { id: sessionId } });
+      throw new SessionConflictError({
+        sessionId,
+        currentVersion: (current?.version as number) ?? session.version,
+        incomingVersion: session.version,
+        requestedFields: ['currentStep', 'completedSteps'],
+      });
+    }
+
+    return this.mapSession(await this.prisma.onboardingSession.findUnique({ where: { id: sessionId } }));
   }
 
   async getProvisioningPreview(sessionId: string) {

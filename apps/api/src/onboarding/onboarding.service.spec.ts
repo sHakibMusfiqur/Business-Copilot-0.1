@@ -7,6 +7,7 @@ import { AuditService } from '../audit/audit.service';
 import { ConfigService } from '../config/config.service';
 import { IndustryTemplateFactory } from './industry-templates/industry-template.factory';
 import type { UpdateSessionDto } from './dto/update-session.dto';
+import { SessionConflictError } from './errors/session-conflict.error';
 
 function buildSession(overrides: Record<string, unknown> = {}) {
   return {
@@ -170,10 +171,13 @@ describe('OnboardingService (completeStep)', () => {
     const prisma = {
       onboardingSession: {
         findUnique: jest.fn().mockResolvedValue(session),
-        update: jest
+        updateMany: jest
           .fn()
           .mockImplementation(({ data }: { data: Record<string, unknown> }) =>
-            Promise.resolve({ ...session, ...data, version: (session.version as number) + 1 }),
+            Promise.resolve({
+              count: 1,
+              _written: { ...session, ...data, version: (session.version as number) + 1 },
+            }),
           ),
       },
     };
@@ -194,7 +198,7 @@ describe('OnboardingService (completeStep)', () => {
 
     await service.completeStep('session-1', 0);
 
-    const data = prisma.onboardingSession.update.mock.calls[0][0].data;
+    const data = prisma.onboardingSession.updateMany.mock.calls[0][0].data;
     expect(data.currentStep).toBe(4); // Math.max(0 + 1, 4)
     expect(data.completedSteps).toEqual([0, 1, 2, 3]);
   });
@@ -206,7 +210,7 @@ describe('OnboardingService (completeStep)', () => {
 
     await service.completeStep('session-1', 0);
 
-    const data = prisma.onboardingSession.update.mock.calls[0][0].data;
+    const data = prisma.onboardingSession.updateMany.mock.calls[0][0].data;
     expect(data.currentStep).toBe(1);
     expect(data.completedSteps).toEqual([0]);
   });
@@ -218,7 +222,7 @@ describe('OnboardingService (completeStep)', () => {
 
     await service.completeStep('session-1', 0);
 
-    const data = prisma.onboardingSession.update.mock.calls[0][0].data;
+    const data = prisma.onboardingSession.updateMany.mock.calls[0][0].data;
     expect(data.completedSteps).toEqual([0]); // NOT [0, 1]
   });
 
@@ -229,7 +233,7 @@ describe('OnboardingService (completeStep)', () => {
 
     await service.completeStep('session-1', 1);
 
-    const data = prisma.onboardingSession.update.mock.calls[0][0].data;
+    const data = prisma.onboardingSession.updateMany.mock.calls[0][0].data;
     expect(data.completedSteps).toEqual([0, 1]);
     expect(data.currentStep).toBe(2);
   });
@@ -241,8 +245,73 @@ describe('OnboardingService (completeStep)', () => {
 
     await service.completeStep('session-1', 1);
 
-    const data = prisma.onboardingSession.update.mock.calls[0][0].data;
+    const data = prisma.onboardingSession.updateMany.mock.calls[0][0].data;
     expect(data.completedSteps).toEqual([0, 1, 2]);
     expect(data.currentStep).toBe(3); // Math.max(1 + 1, 3)
+  });
+
+it('rejects a stale concurrent writer instead of silently losing a completed step', async () => {
+    // In-memory model of the DB-boundary optimistic guard: findUnique always
+    // hands every request the same initial v5 snapshot (like requests that
+    // raced and read at the same instant), whereas updateMany only applies
+    // when the row's current version matches the predicate, so the second
+    // stale writer matches nothing.
+    const base = {
+      ...buildSession({ userId: 'user-a', currentStep: 2, completedSteps: [0, 1, 2], version: 5 }),
+    };
+    let row = structuredClone(base);
+    const prisma = {
+      onboardingSession: {
+        findUnique: jest.fn().mockImplementation(() => Promise.resolve(structuredClone(base))),
+        updateMany: jest.fn().mockImplementation(({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+          if (where.version !== row.version) return Promise.resolve({ count: 0 });
+          row = { ...row, ...data, version: (row.version as number) + 1 } as typeof row;
+          return Promise.resolve({ count: 1 });
+        }),
+      },
+    };
+    const service = new OnboardingService(
+      prisma as unknown as PrismaService,
+      { record: jest.fn() } as unknown as AuditService,
+      {} as unknown as IndustryTemplateFactory,
+      {} as unknown as JwtService,
+      { jwtSecret: 'secret' } as unknown as ConfigService,
+    );
+
+    // Fire both writers concurrently. One wins and persists its step; the
+    // stale one must be rejected (SessionConflictError), never silently merged.
+    const settled = await Promise.allSettled([
+      service.completeStep('session-1', 3),
+      service.completeStep('session-1', 4),
+    ]);
+
+    const ok = settled.filter((s) => s.status === 'fulfilled');
+    const rejected = settled.filter((s) => s.status === 'rejected');
+    expect(ok).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(SessionConflictError);
+
+    // The winning write was the only one applied: exactly one new step, version 6.
+    expect(row.completedSteps).toEqual([0, 1, 2, 3]);
+    expect(row.completedSteps).not.toContain(4);
+    expect(row.version).toBe(6);
+  });
+
+  it('throws SessionConflictError when the DB-boundary write matches nothing', async () => {
+    const prisma = {
+      onboardingSession: {
+        findUnique: jest.fn().mockResolvedValue(buildSession({ userId: 'user-a', version: 9 })),
+        updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+    };
+    const service = new OnboardingService(
+      prisma as unknown as PrismaService,
+      { record: jest.fn() } as unknown as AuditService,
+      {} as unknown as IndustryTemplateFactory,
+      {} as unknown as JwtService,
+      { jwtSecret: 'secret' } as unknown as ConfigService,
+    );
+
+    await expect(service.completeStep('session-1', 1)).rejects.toBeInstanceOf(SessionConflictError);
   });
 });
