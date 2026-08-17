@@ -82,7 +82,7 @@ function createBackstop(
       create: jest.fn(async ({ data }: { data: { name: string } }) => ({ id: 'org-1', name: data.name })),
     },
     user: {
-      findUnique: jest.fn(async () => ({ organizationId: boundOrgId })),
+      findUnique: jest.fn(async () => ({ organizationId: boundOrgId, emailVerified: true })),
       updateMany: jest.fn(async () => ({ count: 1 })),
     },
     organizationMember: {

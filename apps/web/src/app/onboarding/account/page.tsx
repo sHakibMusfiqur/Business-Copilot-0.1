@@ -9,7 +9,7 @@ import { useAuthStore } from '@/store/auth-store';
 
 export default function AccountPage() {
   const { wizard, session, saveField, completeStep, persistSession, loading: sessionLoading } = useOnboarding();
-  const { user: authUser, setUser } = useAuthStore();
+  const { user: authUser } = useAuthStore();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -47,7 +47,9 @@ export default function AccountPage() {
         saveField('userId', authUser.id);
       } else {
         const result = await registerUser(session.name, session.email, password);
-        setUser(result.user, result.accessToken);
+        // Registration never establishes an authenticated session: the account
+        // stays unverified until it proves email ownership, so no tokens are
+        // stored here. The new user is simply bound to the session.
         saveField('userId', result.user.id);
       }
       await persistSession();

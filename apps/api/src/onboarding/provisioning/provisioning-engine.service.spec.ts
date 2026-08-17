@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { ProvisioningEngineService } from './provisioning-engine.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
@@ -41,7 +41,7 @@ describe('ProvisioningEngineService (bound-user requirement)', () => {
     getProvider: jest.fn().mockReturnValue(null),
   };
 
-  function buildEngine(session: Record<string, unknown>, owner: Record<string, unknown> = { organizationId: null }) {
+  function buildEngine(session: Record<string, unknown>, owner: Record<string, unknown> = { organizationId: null, emailVerified: true }) {
     const prisma = {
       onboardingSession: {
         findUnique: jest.fn().mockResolvedValue(session),
@@ -76,6 +76,17 @@ describe('ProvisioningEngineService (bound-user requirement)', () => {
     expect(dispatcher.dispatch).not.toHaveBeenCalled();
   });
 
+  it('rejects provisioning for an unverified owner before dispatching tasks', async () => {
+    const { engine, prisma } = buildEngine(
+      buildSession(),
+      { organizationId: null, emailVerified: false },
+    );
+
+    await expect(engine.provision('session-1')).rejects.toThrow(ForbiddenException);
+    expect(dispatcher.dispatch).not.toHaveBeenCalled();
+    expect(prisma.onboardingSession.update).not.toHaveBeenCalled();
+  });
+
   it('allows provisioning when the session is bound to a user', async () => {
     const { engine, prisma } = buildEngine(buildSession());
 
@@ -92,7 +103,7 @@ describe('ProvisioningEngineService (bound-user requirement)', () => {
   it('rejects a second organization for a user that already belongs to one', async () => {
     const { engine, prisma } = buildEngine(
       buildSession(),
-      { organizationId: 'org-existing' },
+      { organizationId: 'org-existing', emailVerified: true },
     );
 
     await expect(engine.provision('session-1')).rejects.toThrow(ConflictException);
@@ -106,7 +117,7 @@ describe('ProvisioningEngineService (bound-user requirement)', () => {
     (progress.getProgress as jest.Mock).mockResolvedValueOnce({ failedTask: 'DoConfigureDepartments' });
     const { engine } = buildEngine(
       buildSession({ provisionStatus: 'PROVISIONING', organizationId: 'org-1' }),
-      { organizationId: 'org-1' },
+      { organizationId: 'org-1', emailVerified: true },
     );
 
     await expect(engine.provision('session-1')).resolves.toBeDefined();

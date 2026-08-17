@@ -34,6 +34,9 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
+import { VerifyEmailCodeDto } from './dto/verify-email-code.dto';
+import { ResendVerificationDto } from './dto/resend-verification.dto';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -52,15 +55,75 @@ export class AuthController {
   @ApiTooManyRequestsResponse({ description: 'Too many registration attempts' })
   async register(
     @Body() dto: RegisterDto,
+    @Req() request: Request,
+  ) {
+    const ip = request.ip ?? '';
+    const userAgent = request.headers['user-agent'] ?? '';
+    // Registration never issues tokens or creates an authenticated session: the
+    // new account is unverified until it proves email ownership.
+    return this.authService.register(dto, ip, userAgent);
+  }
+
+  @Public()
+  @UseGuards(AuthThrottleGuard)
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: { token: { type: 'string' } },
+    },
+  })
+  @ApiOkResponse({ description: 'Email verified successfully' })
+  @ApiTooManyRequestsResponse({ description: 'Too many verification attempts' })
+  async verifyEmail(
+    @Body() dto: VerifyEmailDto,
+    @Req() request: Request,
+  ) {
+    const ip = request.ip ?? '';
+    const userAgent = request.headers['user-agent'] ?? '';
+    return this.authService.verifyEmail(dto.token, ip, userAgent);
+  }
+
+  @Public()
+  @UseGuards(AuthThrottleGuard)
+  @Post('verify-email/code')
+  @HttpCode(HttpStatus.OK)
+  @ApiBody({ type: VerifyEmailCodeDto })
+  @ApiOkResponse({ description: 'Email verified; authenticated session established' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired verification code' })
+  @ApiTooManyRequestsResponse({ description: 'Too many verification attempts' })
+  async verifyEmailByCode(
+    @Body() dto: VerifyEmailCodeDto,
     @Res({ passthrough: true }) response: Response,
     @Req() request: Request,
   ) {
     const ip = request.ip ?? '';
     const userAgent = request.headers['user-agent'] ?? '';
-    const result = await this.authService.register(dto, ip, userAgent);
+    // A correct code proves email ownership, so this is the first legitimate
+    // point to mint an authenticated session (tokens only exist AFTER the email
+    // is verified — never at registration). Cookies are set so onboarding can
+    // continue seamlessly to the next step.
+    const result = await this.authService.verifyEmailByCode(dto, ip, userAgent);
     this.setRefreshTokenCookie(response, result.refreshToken);
     this.setAccessTokenCookie(response, result.accessToken);
     return result;
+  }
+
+  @Public()
+  @UseGuards(AuthThrottleGuard)
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  @ApiBody({ type: ResendVerificationDto })
+  @ApiOkResponse({ description: 'If the email exists, a verification link has been sent' })
+  @ApiTooManyRequestsResponse({ description: 'Too many resend attempts' })
+  async resendVerification(
+    @Body() dto: ResendVerificationDto,
+    @Req() request: Request,
+  ) {
+    const ip = request.ip ?? '';
+    const userAgent = request.headers['user-agent'] ?? '';
+    return this.authService.resendVerificationEmail(dto.email, ip, userAgent);
   }
 
   @Public()

@@ -8,6 +8,7 @@ import {
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import { TokenExpiredError, JsonWebTokenError, NotBeforeError } from 'jsonwebtoken';
 import * as argon2 from 'argon2';
+import { randomInt } from 'node:crypto';
 
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 
@@ -15,12 +16,14 @@ import { ConfigService } from '../config/config.service';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
+import { RedisService } from '../infrastructure/redis/redis.service';
 
 import { AuditService } from '../audit/audit.service';
 import { AuthRateLimiterService } from './auth-rate-limiter.service';
 import { redactString } from '../common/observability/redact';
 import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
+import type { VerifyEmailCodeDto } from './dto/verify-email-code.dto';
 
 interface Tokens {
   accessToken: string;
@@ -30,6 +33,16 @@ interface Tokens {
 const PASSWORD_RESET_ISSUER = 'bc-password-reset';
 const PASSWORD_RESET_AUDIENCE = 'bc-password-reset-consume';
 const PASSWORD_RESET_TTL = 60 * 60; // seconds
+
+const VERIFY_EMAIL_ISSUER = 'bc-verify-email';
+const VERIFY_EMAIL_AUDIENCE = 'bc-verify-email-consume';
+const VERIFY_EMAIL_TTL = 60 * 60 * 24; // seconds
+
+// Email verification is offered as a 6-digit code in the onboarding wizard (and
+// resend path) in addition to the purpose-bound JWT. The code is stored hashed,
+// bound to the email, single-use, and short-lived.
+const VERIFY_CODE_TTL = 15 * 60; // seconds
+const VERIFY_CODE_STORAGE_PREFIX = 'auth:verify-code';
 
 @Injectable()
 export class AuthService {
@@ -42,25 +55,49 @@ export class AuthService {
     private readonly rateLimiter: AuthRateLimiterService,
     private readonly auditService: AuditService,
     private readonly mailService: MailService,
+    private readonly redis: RedisService,
   ) {}
 
   async register(dto: RegisterDto, ip: string, userAgent?: string) {
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
+      select: { id: true, email: true, isActive: true, emailVerified: true },
     });
 
     if (existingUser) {
-      await this.rateLimiter.recordAttempt(`email:${dto.email}`);
-      await this.rateLimiter.recordAttempt(`ip:${ip}`);
+      // Verified or deactivated email: preserve the existing duplicate-email
+      // protection (a 409 that does not reveal whether the account is usable).
+      if (existingUser.emailVerified || !existingUser.isActive) {
+        await this.rateLimiter.recordAttempt(`email:${dto.email}`);
+        await this.rateLimiter.recordAttempt(`ip:${ip}`);
+        await this.auditService.record({
+          action: 'REGISTER',
+          status: 'FAILURE',
+          entity: 'User',
+          metadata: { email: dto.email, reason: 'Email already registered' },
+          ipAddress: ip,
+          userAgent,
+        });
+        throw new ConflictException('Email already registered');
+      }
+
+      // Unverified but active account: do NOT create a second User, do NOT
+      // overwrite the password. Resend a fresh verification link so the owner
+      // can prove ownership. Returning the same generic success as a brand-new
+      // registration avoids disclosing that an account exists mid-flow.
+      await this.sendVerificationEmail(existingUser.id, existingUser.email, null);
       await this.auditService.record({
         action: 'REGISTER',
-        status: 'FAILURE',
+        status: 'SUCCESS',
         entity: 'User',
-        metadata: { email: dto.email, reason: 'Email already registered' },
+        metadata: { email: dto.email, reason: 'Unverified account exists; verification resent' },
         ipAddress: ip,
         userAgent,
       });
-      throw new ConflictException('Email already registered');
+      return {
+        user: { id: existingUser.id, email: existingUser.email, name: existingUser.email },
+        message: 'If this email is new, a verification link has been sent. Check your inbox.',
+      };
     }
 
     // Employees join through invitations, never public registration. If a
@@ -86,20 +123,17 @@ export class AuthService {
       );
     }
 
-    this.logger.log(`=== AUTH SERVICE about to hash password ===`);
     const hashedPassword = await argon2.hash(dto.password);
-    this.logger.log(`=== AUTH SERVICE password hashed successfully ===`);
 
     try {
-      this.logger.log(`=== AUTH SERVICE entering Prisma $transaction ===`);
       const { user } = await this.prisma.$transaction(async (tx) => {
-        this.logger.log(`=== TRANSACTION: creating user ===`);
         const createdUser = await tx.user.create({
           data: {
             email: dto.email,
             password: hashedPassword,
             name: dto.name,
             role: 'USER',
+            emailVerified: false,
           },
           select: {
             id: true,
@@ -117,18 +151,13 @@ export class AuthService {
         // be null or the session's org) and orphan an unused org on every signup.
         return { user: createdUser };
       });
-      this.logger.log(`=== AUTH SERVICE Prisma $transaction completed successfully ===`);
 
       await this.rateLimiter.clearAttempts(`email:${user.email}`);
       await this.rateLimiter.clearAttempts(`ip:${ip}`);
 
-      this.logger.log(`=== AUTH SERVICE generating tokens ===`);
-      const tokens = await this.generateTokens({
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        organizationId: user.organizationId ?? undefined,
-      });
+      // Send the verification email after the account is committed. A mail
+      // delivery failure must not roll back the account; the user can resend.
+      await this.sendVerificationEmail(user.id, user.email, null);
 
       await this.auditService.record({
         userId: user.id,
@@ -141,32 +170,17 @@ export class AuthService {
         userAgent,
       });
 
-      this.logger.log(`=== AUTH SERVICE register() returning successfully ===`);
-      const onboardingCompleted = await this.getOnboardingCompleted(user);
-      return { user: { ...user, onboardingCompleted }, ...tokens };
+      // No access/refresh tokens are issued here: an unverified account gets no
+      // authenticated session until it proves email ownership.
+      return {
+        user,
+        message: 'Account created. Please verify your email address to continue.',
+      };
     } catch (error) {
-      this.logger.error(`=== AUTH SERVICE register() CAUGHT EXCEPTION ===`);
-      this.logger.error(`error type=${typeof error} ${error instanceof Error ? error.constructor.name : 'unknown'}`);
-      const secretValues = this.authSecretValues();
-      this.logger.error(`error message=${this.redact(error instanceof Error ? error.message : String(error), secretValues)}`);
-      if (error instanceof Error) {
-        this.logger.error(`error stack=${this.redact(error.stack ?? '', secretValues)}`);
-      }
+      this.logger.error(
+        `register() error=${this.redact(error instanceof Error ? error.message : String(error), this.authSecretValues())}`,
+      );
       if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
-        const meta = error.meta as Record<string, unknown> | undefined;
-        const modelName = meta?.modelName as string | undefined;
-        const target = meta?.target as string | string[] | undefined;
-        const fields = Array.isArray(target) ? target : target ? [target] : [];
-
-        if (modelName === 'Organization') {
-          if (fields.includes('name')) {
-            throw new ConflictException('Organization name already exists');
-          }
-          if (fields.includes('slug')) {
-            throw new ConflictException('Organization slug already exists');
-          }
-        }
-
         await this.rateLimiter.recordAttempt(`email:${dto.email}`);
         await this.rateLimiter.recordAttempt(`ip:${ip}`);
         await this.auditService.record({
@@ -217,6 +231,24 @@ export class AuthService {
         userAgent,
       });
       throw new UnauthorizedException('Account is deactivated. Contact your administrator.');
+    }
+
+    // An account that has not proven email ownership must not authenticate.
+    if (!user.emailVerified) {
+      await this.rateLimiter.recordAttempt(`email:${dto.email}`);
+      await this.rateLimiter.recordAttempt(`user:${user.id}`);
+      await this.rateLimiter.recordAttempt(`ip:${ip}`);
+      await this.auditService.record({
+        userId: user.id,
+        action: 'FAILED_LOGIN',
+        status: 'FAILURE',
+        entity: 'User',
+        entityId: user.id,
+        metadata: { email: dto.email, reason: 'Email not verified' },
+        ipAddress: ip,
+        userAgent,
+      });
+      throw new UnauthorizedException('Please verify your email address before signing in.');
     }
 
     // Users of a suspended, deleted or deactivated organization cannot sign in.
@@ -351,6 +383,7 @@ export class AuthService {
           role: true,
           organizationId: true,
           isActive: true,
+          emailVerified: true,
           deletedAt: true,
           organization: { select: { isActive: true, suspendedAt: true, deletedAt: true } },
         },
@@ -383,6 +416,24 @@ export class AuthService {
           userAgent,
         });
         throw new UnauthorizedException('Account is deactivated. Contact your administrator.');
+      }
+
+      // Unverified users must not obtain a fresh authenticated session.
+      if (!user.emailVerified) {
+        await this.prisma.refreshToken.delete({ where: { id: storedToken.id } });
+        await this.rateLimiter.recordAttempt(`ip:${ip}`);
+        await this.rateLimiter.recordAttempt(`user:${user.id}`);
+        await this.auditService.record({
+          userId: user.id,
+          action: 'REFRESH_TOKEN',
+          status: 'FAILURE',
+          entity: 'User',
+          entityId: user.id,
+          metadata: { reason: 'Email not verified' },
+          ipAddress: ip,
+          userAgent,
+        });
+        throw new UnauthorizedException('Please verify your email address to continue.');
       }
 
       if (user.deletedAt) {
@@ -609,6 +660,317 @@ export class AuthService {
     });
 
     return { message: 'Password reset successfully. You can now sign in.' };
+  }
+
+  async verifyEmail(token: string, ip: string, userAgent?: string): Promise<{ message: string }> {
+    let payload: { sub?: string; purpose?: string; email?: string };
+    try {
+      payload = this.jwtService.verify<{ sub?: string; purpose?: string; email?: string }>(token, {
+        secret: this.configService.jwtSecret,
+        issuer: VERIFY_EMAIL_ISSUER,
+        audience: VERIFY_EMAIL_AUDIENCE,
+      });
+    } catch {
+      throw new BadRequestException('This verification link is invalid or has expired');
+    }
+
+    if (payload.purpose !== 'verify-email' || !payload.sub) {
+      throw new BadRequestException('This verification link is invalid or has expired');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { id: true, email: true, isActive: true, emailVerified: true, deletedAt: true, organizationId: true },
+    });
+
+    if (!user || user.deletedAt) {
+      throw new BadRequestException('This verification link is invalid or has expired');
+    }
+    if (!user.isActive) {
+      throw new BadRequestException('This account has been deactivated');
+    }
+    // The token is bound to the email it was issued for, so it can never verify
+    // a different account even if the userId claim were replayed.
+    if (payload.email && user.email !== payload.email) {
+      throw new BadRequestException('This verification link is invalid or has expired');
+    }
+
+    if (user.emailVerified) {
+      return { message: 'Your email is already verified. You can now sign in.' };
+    }
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { emailVerified: true },
+    });
+
+    await this.auditService.record({
+      userId: user.id,
+      organizationId: user.organizationId ?? undefined,
+      action: 'VERIFY_EMAIL',
+      status: 'SUCCESS',
+      entity: 'User',
+      entityId: user.id,
+      ipAddress: ip,
+      userAgent,
+    });
+
+    return { message: 'Email verified successfully. You can now sign in.' };
+  }
+
+  async resendVerificationEmail(email: string, ip: string, userAgent?: string): Promise<{ message: string }> {
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true, email: true, isActive: true, emailVerified: true, organizationId: true },
+    });
+
+    // Never reveal whether (or in what state) an account exists.
+    const notFound = async () => {
+      await this.rateLimiter.recordAttempt(`email:${email}`);
+      await this.rateLimiter.recordAttempt(`ip:${ip}`);
+      await this.auditService.record({
+        action: 'RESEND_VERIFICATION',
+        status: 'FAILURE',
+        metadata: { email, reason: user ? 'No resend (already verified or deactivated)' : 'Email not found' },
+        ipAddress: ip,
+        userAgent,
+      });
+      return { message: 'If the email exists, a verification link has been sent' };
+    };
+
+    if (!user) return notFound();
+    // Verified users must not become unverified, and deactivated accounts are never resent.
+    if (user.emailVerified || !user.isActive) return notFound();
+
+    await this.sendVerificationEmail(user.id, user.email, user.organizationId ?? null);
+
+    await this.auditService.record({
+      userId: user.id,
+      organizationId: user.organizationId ?? undefined,
+      action: 'RESEND_VERIFICATION',
+      status: 'SUCCESS',
+      entity: 'User',
+      entityId: user.id,
+      metadata: { email },
+      ipAddress: ip,
+      userAgent,
+    });
+
+    return { message: 'If the email exists, a verification link has been sent' };
+  }
+
+  async verifyEmailByCode(
+    dto: VerifyEmailCodeDto,
+    ip: string,
+    userAgent?: string,
+  ): Promise<{ user: Record<string, unknown>; accessToken: string; refreshToken: string }> {
+    this.logger.log(`Verification by code requested for ${dto.email}`);
+
+    const user = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        emailVerified: true,
+        deletedAt: true,
+        organizationId: true,
+        createdAt: true,
+        organization: { select: { isActive: true, suspendedAt: true, deletedAt: true } },
+      },
+    });
+
+    const reject = async (reason: string) => {
+      await this.rateLimiter.recordAttempt(`email:${dto.email}`);
+      await this.rateLimiter.recordAttempt(`ip:${ip}`);
+      if (user?.id) await this.rateLimiter.recordAttempt(`user:${user.id}`);
+      await this.auditService.record({
+        userId: user?.id,
+        organizationId: user?.organizationId ?? undefined,
+        action: 'VERIFY_EMAIL_CODE',
+        status: 'FAILURE',
+        entity: 'User',
+        entityId: user?.id,
+        metadata: { email: dto.email, reason },
+        ipAddress: ip,
+        userAgent,
+      });
+      throw new UnauthorizedException('Invalid verification code');
+    };
+
+    if (!user || !user.isActive || user.deletedAt) {
+      return reject('Email not found or account unavailable');
+    }
+
+    const key = this.verifyCodeKey(dto.email);
+    const stored = await this.redis.get<{ hash: string; expiresAt: number }>(key);
+    if (!stored || typeof stored.expiresAt !== 'number' || !stored.hash) {
+      return reject('No verification code issued or code already used');
+    }
+    if (stored.expiresAt < Date.now()) {
+      await this.redis.delete(key);
+      return reject('Verification code expired');
+    }
+
+    let matches = false;
+    try {
+      matches = await argon2.verify(stored.hash, dto.code);
+    } catch {
+      matches = false;
+    }
+    if (!matches) {
+      return reject('Verification code mismatch');
+    }
+
+    // Consume the single-use code before committing so a failed write never
+    // leaves a replayable code behind.
+    await this.redis.delete(key);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { emailVerified: true },
+    });
+    // Bind the just-verified user to any anonymous onboarding session still
+    // waiting for an owner (created at registration, before the user could
+    // authenticate). Provisioning requires a bound + verified user.
+    await this.prisma.onboardingSession.updateMany({
+      where: { email: user.email, userId: null },
+      data: { userId: user.id },
+    });
+
+    await this.rateLimiter.clearAttempts(`email:${dto.email}`);
+    await this.rateLimiter.clearAttempts(`user:${user.id}`);
+    await this.rateLimiter.clearAttempts(`ip:${ip}`);
+
+    await this.auditService.record({
+      userId: user.id,
+      organizationId: user.organizationId ?? undefined,
+      action: 'VERIFY_EMAIL',
+      status: 'SUCCESS',
+      entity: 'User',
+      entityId: user.id,
+      ipAddress: ip,
+      userAgent,
+    });
+
+    // Verification proves email ownership, so this is the first legitimate point
+    // to mint a session and let the user continue onboarding seamlessly. It is
+    // explicitly NOT a login (no password) but the account has now proven the
+    // email it registered with, satisfying the same bar as login's verified gate.
+    return this.issueAuthenticatedSession(user.id, ip, userAgent);
+  }
+
+  private async issueAuthenticatedSession(
+    userId: string,
+    ip: string,
+    userAgent?: string,
+  ): Promise<{ user: Record<string, unknown>; accessToken: string; refreshToken: string }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        emailVerified: true,
+        deletedAt: true,
+        organizationId: true,
+        createdAt: true,
+        organization: { select: { isActive: true, suspendedAt: true, deletedAt: true } },
+      },
+    });
+
+    if (!user || !user.isActive || user.deletedAt) {
+      throw new UnauthorizedException('Invalid verification code');
+    }
+    if (!user.emailVerified) {
+      throw new UnauthorizedException('Please verify your email address before signing in.');
+    }
+    if (user.organizationId) {
+      const orgUnavailable =
+        !user.organization ||
+        !user.organization.isActive ||
+        user.organization.suspendedAt ||
+        user.organization.deletedAt;
+      if (orgUnavailable) {
+        throw new UnauthorizedException('Organization access is suspended. Contact your administrator.');
+      }
+    }
+
+    const tokens = await this.generateTokens({
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      organizationId: user.organizationId ?? undefined,
+    });
+
+    await this.auditService.record({
+      userId: user.id,
+      organizationId: user.organizationId ?? undefined,
+      action: 'LOGIN',
+      status: 'SUCCESS',
+      entity: 'User',
+      entityId: user.id,
+      ipAddress: ip,
+      userAgent,
+    });
+
+    const onboardingCompleted = await this.getOnboardingCompleted(user);
+    return { user: { ...user, onboardingCompleted }, ...tokens };
+  }
+
+  private async sendVerificationEmail(
+    userId: string,
+    email: string,
+    orgId: string | null,
+  ): Promise<void> {
+    this.logger.log(`Verification email requested for ${email}`);
+    try {
+      const token = this.jwtService.sign(
+        { sub: userId, purpose: 'verify-email', email },
+        {
+          secret: this.configService.jwtSecret,
+          expiresIn: VERIFY_EMAIL_TTL,
+          issuer: VERIFY_EMAIL_ISSUER,
+          audience: VERIFY_EMAIL_AUDIENCE,
+        },
+      );
+      // The 6-digit code is the primary verification mechanism in the onboarding
+      // wizard. It is stored hashed in Redis, single-use, bound to the email and
+      // short-lived. The purpose-bound JWT (token) is kept so the verify-email
+      // endpoint (email links / API clients) remains valid and passwordless.
+      this.logger.debug(`Verification JWT issued for ${email} (${token.length} chars)`);
+      const code = this.generateVerifyCode();
+      const codeHash = await argon2.hash(code);
+      const key = this.verifyCodeKey(email);
+      await this.redis.delete(key);
+      await this.redis.set(
+        key,
+        { hash: codeHash, expiresAt: Date.now() + VERIFY_CODE_TTL * 1000 },
+        { ttlSeconds: VERIFY_CODE_TTL },
+      );
+      const result = await this.mailService.sendOrgEmail(orgId, {
+        to: email,
+        type: 'emailVerification',
+        data: { emailVerification: { code, expiresInHours: VERIFY_CODE_TTL / 3600 } },
+      });
+      if (!result.sent) {
+        this.logger.warn(`Verification email not delivered for ${email} (${result.reason})`);
+      }
+    } catch (error) {
+      this.logger.error(`Failed to send verification email for ${email}: ${(error as Error).message}`);
+    }
+  }
+
+  private verifyCodeKey(email: string): string {
+    return `${VERIFY_CODE_STORAGE_PREFIX}:${email.trim().toLowerCase()}`;
+  }
+
+  private generateVerifyCode(): string {
+    return String(randomInt(0, 1000000)).padStart(6, '0');
   }
 
   async logout(userId: string, ip?: string, userAgent?: string) {

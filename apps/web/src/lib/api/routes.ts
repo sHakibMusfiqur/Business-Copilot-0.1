@@ -8,6 +8,9 @@ export const API_ROUTES = {
     REFRESH: '/auth/refresh',
     FORGOT_PASSWORD: '/auth/forgot-password',
     RESET_PASSWORD: '/auth/reset-password',
+    VERIFY_EMAIL: '/auth/verify-email',
+    VERIFY_EMAIL_CODE: '/auth/verify-email/code',
+    RESEND_VERIFICATION: '/auth/resend-verification',
   },
   ORGANIZATIONS: {
     ROOT: '/organizations',

@@ -3,6 +3,7 @@
 import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Mail, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { verifyEmailCode, resendVerification } from '@/lib/api';
 import { useOnboarding } from '../_hooks/onboarding-context';
 
 export default function VerifyPage() {
@@ -54,13 +55,29 @@ export default function VerifyPage() {
     }
     setLocalError(null);
     setIsSubmitting(true);
-    await completeStep(0).then(() => {
+    try {
+      // A correct code proves email ownership, so the backend marks the account
+      // verified and mints an authenticated session; onboarding then continues
+      // seamlessly to the next step (no account re-registration happens here).
+      await verifyEmailCode(session.email, full);
+      await completeStep(0);
       wizard.goNext();
-    }).catch((e) => {
+    } catch (e) {
       setLocalError((e as Error).message ?? 'Verification failed');
-    }).finally(() => {
+    } finally {
       setIsSubmitting(false);
-    });
+    }
+  };
+
+  const handleResend = async () => {
+    setLocalError(null);
+    setTimer(60);
+    setCode(['', '', '', '', '', '']);
+    try {
+      await resendVerification(session.email);
+    } catch (e) {
+      setLocalError((e as Error).message ?? 'Could not resend the code');
+    }
   };
 
   return (
@@ -110,7 +127,7 @@ export default function VerifyPage() {
             <>Resend code in {timer}s</>
           ) : (
             <button
-              onClick={() => { setTimer(60); setCode(['', '', '', '', '', '']); }}
+              onClick={handleResend}
               className="text-blue-400 hover:text-blue-300"
             >
               Resend code

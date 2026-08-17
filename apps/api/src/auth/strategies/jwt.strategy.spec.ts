@@ -36,6 +36,7 @@ describe('JwtStrategy (auth boundary)', () => {
       email: 'a@a.com',
       role: 'USER',
       isActive: true,
+      emailVerified: true,
       organizationId: 'org1',
       deletedAt: null,
       organization: { isActive: true, suspendedAt: null, deletedAt: null },
@@ -54,6 +55,7 @@ describe('JwtStrategy (auth boundary)', () => {
       email: 'a@a.com',
       role: 'SUPER_ADMIN',
       isActive: true,
+      emailVerified: true,
       organizationId: null,
       deletedAt: null,
       organization: null,
@@ -62,12 +64,30 @@ describe('JwtStrategy (auth boundary)', () => {
     await expect(strategy.validate({ id: 'user-1' } as never)).resolves.toBeDefined();
   });
 
+  it('rejects an unverified user even when active and in a live organization', async () => {
+    prisma.user.findUnique.mockResolvedValue({
+      id: 'user-1',
+      email: 'a@a.com',
+      role: 'USER',
+      isActive: true,
+      emailVerified: false,
+      organizationId: 'org1',
+      deletedAt: null,
+      organization: { isActive: true, suspendedAt: null, deletedAt: null },
+    });
+
+    await expect(strategy.validate({ id: 'user-1' } as never)).rejects.toThrow(
+      UnauthorizedException,
+    );
+  });
+
   it('rejects a user whose organization is suspended', async () => {
     prisma.user.findUnique.mockResolvedValue({
       id: 'user-1',
       email: 'a@a.com',
       role: 'USER',
       isActive: true,
+      emailVerified: true,
       organizationId: 'org1',
       deletedAt: null,
       organization: { isActive: false, suspendedAt: new Date(), deletedAt: null },
@@ -84,6 +104,7 @@ describe('JwtStrategy (auth boundary)', () => {
       email: 'a@a.com',
       role: 'USER',
       isActive: true,
+      emailVerified: true,
       organizationId: 'org1',
       deletedAt: null,
       organization: { isActive: true, suspendedAt: null, deletedAt: new Date() },
@@ -100,6 +121,7 @@ describe('JwtStrategy (auth boundary)', () => {
       email: 'a@a.com',
       role: 'USER',
       isActive: true,
+      emailVerified: true,
       organizationId: 'org1',
       deletedAt: null,
       organization: null,
@@ -136,6 +158,7 @@ describe('JwtStrategy (auth boundary)', () => {
       email: 'a@a.com',
       role: 'USER',
       isActive: true,
+      emailVerified: true,
       organizationId: 'org1',
       deletedAt: new Date(),
     });

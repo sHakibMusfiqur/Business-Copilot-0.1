@@ -16,6 +16,7 @@ export interface BrandEmailContent {
   body: string;
   ctaLabel?: string;
   ctaUrl?: string;
+  code?: string;
   footer?: string;
 }
 
@@ -77,6 +78,10 @@ export function renderEmailTemplate(
     ? `<a href="${escapeHtml(content.ctaUrl)}" target="_blank" style="display:inline-block; margin:24px 0 8px; padding:12px 28px; border-radius:10px; background:${primary}; color:#ffffff; font-size:14px; font-weight:600; text-decoration:none;">${escapeHtml(content.ctaLabel)}</a>`
     : '';
 
+  const codeBlock = content.code
+    ? `<div align="center" style="margin:24px 0 8px; padding:16px 24px; border:1px solid #e2e8f0; border-radius:12px; background:#f8fafc;"><span style="font-size:30px; font-weight:700; letter-spacing:8px; color:#0f172a;">${escapeHtml(content.code)}</span></div>`
+    : '';
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -110,6 +115,7 @@ export function renderEmailTemplate(
             <td style="padding:24px 32px;">
               <h1 style="margin:0 0 12px; font-size:20px; font-weight:700; color:#0f172a;">${escapeHtml(content.title)}</h1>
               <p style="margin:0; font-size:14px; line-height:1.7; color:#334155;">${bodyHtml}</p>
+              ${codeBlock}
               ${cta ? `<div align="center">${cta}</div>` : ''}
             </td>
           </tr>

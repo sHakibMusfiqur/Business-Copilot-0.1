@@ -203,6 +203,7 @@ model User {
   phone          String?
   role           UserRole      @default(USER)
   isActive       Boolean       @default(true)
+  emailVerified  Boolean       @default(false)
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id])
   departmentId   String?

@@ -10,8 +10,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import { register as registerUser } from '@/lib/api';
-import { createSession, updateSession, getSessionByEmail } from '@/lib/onboarding-api';
-import { useAuthStore } from '@/store/auth-store';
+import { createSession } from '@/lib/onboarding-api';
 
 import { submitRegistration } from './submit-registration';
 
@@ -35,7 +34,6 @@ type RegisterFormData = z.infer<typeof registerSchema>;
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { setUser } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -59,9 +57,6 @@ export default function RegisterPage() {
         password: data.password,
         registerUser,
         createSession,
-        updateSession,
-        getSessionByEmail,
-        setUser,
         navigate: (url) => router.replace(url),
         setError,
       });

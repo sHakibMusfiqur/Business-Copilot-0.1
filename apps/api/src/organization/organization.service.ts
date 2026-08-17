@@ -1,6 +1,7 @@
 import {
   Injectable,
   ConflictException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
@@ -23,11 +24,15 @@ export class OrganizationService {
   async create(dto: CreateOrganizationDto, userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
-      select: { organizationId: true, email: true, role: true },
+      select: { organizationId: true, email: true, role: true, emailVerified: true },
     });
 
     if (!user) {
       throw new ConflictException('User not found');
+    }
+
+    if (!user.emailVerified) {
+      throw new ForbiddenException('Please verify your email address before creating an organization');
     }
 
     if (user.organizationId) {

@@ -27,6 +27,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         email: true,
         role: true,
         isActive: true,
+        emailVerified: true,
         organizationId: true,
         deletedAt: true,
         organization: { select: { isActive: true, suspendedAt: true, deletedAt: true } },
@@ -39,6 +40,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     if (!user.isActive) {
       throw new UnauthorizedException('User account is deactivated');
+    }
+
+    // The JWT is loaded from current DB state, so a token issued before or
+    // without verification is rejected the moment the account is unverified.
+    if (!user.emailVerified) {
+      throw new UnauthorizedException('Please verify your email address before continuing');
     }
 
     if (user.deletedAt) {

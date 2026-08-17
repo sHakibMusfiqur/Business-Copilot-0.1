@@ -64,7 +64,7 @@ function createSharedPrisma(
     },
     organization: { findUnique: async ({ where }: { where: { id: string } }) =>
       persisted.organizationId !== null && where.id === persisted.organizationId ? { id: where.id } : null },
-    user: { findUnique: async () => ({ organizationId: boundOrgId }) },
+    user: { findUnique: async () => ({ organizationId: boundOrgId, emailVerified: true }) },
     subscription: { findUnique: async () => null },
   };
   // markCompleted path goes through prisma.onboardingSession.update; wire it to

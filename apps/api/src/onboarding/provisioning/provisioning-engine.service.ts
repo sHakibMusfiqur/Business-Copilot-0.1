@@ -1,4 +1,4 @@
-import { Injectable, Logger, ConflictException, BadRequestException, Inject } from '@nestjs/common';
+import { Injectable, Logger, ConflictException, BadRequestException, ForbiddenException, Inject } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { AuditService } from '../../audit/audit.service';
 import { IndustryTemplateFactory } from '../industry-templates/industry-template.factory';
@@ -77,8 +77,11 @@ export class ProvisioningEngineService {
 
     const owner = await this.prisma.user.findUnique({
       where: { id: session.userId },
-      select: { organizationId: true },
+      select: { organizationId: true, emailVerified: true },
     });
+    if (owner && !owner.emailVerified) {
+      throw new ForbiddenException('Please verify your email address before completing onboarding');
+    }
     if (owner?.organizationId && owner.organizationId !== session.organizationId) {
       throw new ConflictException(
         'This account already belongs to an organization and cannot provision another one',
