@@ -98,7 +98,11 @@ export class ProvisioningEngineService {
     try {
       const dispatchResult = await this.dispatcher.dispatch(sessionId);
       if (!dispatchResult.success || !dispatchResult.result) {
-        throw new Error(dispatchResult.error ?? 'Provisioning failed');
+        const err = new Error(dispatchResult.error ?? 'Provisioning failed');
+       
+        
+        (err as { failedTask?: string }).failedTask = dispatchResult.failedTask;
+        throw err;
       }
       const result = dispatchResult.result;
 
@@ -136,7 +140,8 @@ export class ProvisioningEngineService {
         metadata: { error: (error as Error).message, email: session.email },
       });
 
-      await this.progressService.markFailed(sessionId, 'provisioning', (error as Error).message);
+      const failedTask = (error as { failedTask?: string }).failedTask ?? 'provisioning';
+      await this.progressService.markFailed(sessionId, failedTask, (error as Error).message);
       await this.compensationManager.rollback(sessionId);
       throw error;
     }

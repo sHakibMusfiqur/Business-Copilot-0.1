@@ -2,6 +2,7 @@ import { ConflictException, Injectable } from '@nestjs/common';
 import { IndustryTemplateFactory } from '../industry-templates/industry-template.factory';
 import type { ProvisioningConfig } from '../industry-templates/types';
 import type { ProvisioningContext } from '../industry-templates/industry-template-provider.interface';
+import { CHECKPOINT_TASKS } from './provisioning-checkpoints';
 
 export interface ProvisionResult {
   org: { id: string };
@@ -32,31 +33,35 @@ export class ProvisioningExecutorService {
     const tasks: string[] = [];
     let result: ProvisionResult | undefined;
 
-    if (startCheckpoint <= 1) {
-      const created = await this.doCreateOrg(session, tasks, tx);
-      // Bind this invocation (and any resume) to the organization we just
-      // created. Resolving by "latest org" races with concurrent provisions
-      // and can attach owner/roles/subscription/settings to the wrong tenant.
-      session.organizationId = created.org.id;
+    if (startCheckpoint <= CHECKPOINT_TASKS[0].checkpoint) {
+      await this.runCheckpoint(CHECKPOINT_TASKS[0].task, async () => {
+        const created = await this.doCreateOrg(session, tasks, tx);
+        // Bind this invocation (and any resume) to the organization we just
+        // created. Resolving by "latest org" races with concurrent provisions
+        // and can attach owner/roles/subscription/settings to the wrong tenant.
+        session.organizationId = created.org.id;
+      });
     }
-    if (startCheckpoint <= 2) {
-      await this.doAssignOwner(session, tasks, tx);
+    if (startCheckpoint <= CHECKPOINT_TASKS[1].checkpoint) {
+      await this.runCheckpoint(CHECKPOINT_TASKS[1].task, () => this.doAssignOwner(session, tasks, tx));
     }
-    if (startCheckpoint <= 3) {
-      await this.doCreateOwnerRole(session, tasks, tx);
+    if (startCheckpoint <= CHECKPOINT_TASKS[2].checkpoint) {
+      await this.runCheckpoint(CHECKPOINT_TASKS[2].task, () => this.doCreateOwnerRole(session, tasks, tx));
     }
-    if (startCheckpoint <= 4) {
-      await this.doConfigureDepartments(session, config, tasks, tx);
+    if (startCheckpoint <= CHECKPOINT_TASKS[3].checkpoint) {
+      await this.runCheckpoint(CHECKPOINT_TASKS[3].task, () => this.doConfigureDepartments(session, config, tasks, tx));
     }
-    if (startCheckpoint <= 5) {
-      await this.doSetupSubscription(session, tasks, tx);
+    if (startCheckpoint <= CHECKPOINT_TASKS[4].checkpoint) {
+      await this.runCheckpoint(CHECKPOINT_TASKS[4].task, () => this.doSetupSubscription(session, tasks, tx));
     }
-    if (startCheckpoint <= 6) {
-      await this.doApplySettings(session, config, tasks, tx);
+    if (startCheckpoint <= CHECKPOINT_TASKS[5].checkpoint) {
+      await this.runCheckpoint(CHECKPOINT_TASKS[5].task, () => this.doApplySettings(session, config, tasks, tx));
     }
-    if (startCheckpoint <= 7) {
-      const lifecycleResult = await this.doIndustryLifecycle(session, tasks, tx);
-      if (lifecycleResult) result = lifecycleResult;
+    if (startCheckpoint <= CHECKPOINT_TASKS[6].checkpoint) {
+      await this.runCheckpoint(CHECKPOINT_TASKS[6].task, async () => {
+        const lifecycleResult = await this.doIndustryLifecycle(session, tasks, tx);
+        if (lifecycleResult) result = lifecycleResult;
+      });
     }
 
     if (!result) {
@@ -74,6 +79,21 @@ export class ProvisioningExecutorService {
       tasks,
       result,
     };
+  }
+
+  /**
+   * Runs a single checkpoint and, on failure, records the checkpoint id that
+   * was in flight on the thrown error so the engine can persist the real
+   * failing checkpoint into provisionData.failedTask (instead of the generic
+   * "provisioning") and the next dispatch resumes at the correct place.
+   */
+  private async runCheckpoint(task: string, fn: () => Promise<void>): Promise<void> {
+    try {
+      await fn();
+    } catch (error) {
+      (error as { failedTask?: string }).failedTask = task;
+      throw error;
+    }
   }
 
   private async doCreateOrg(

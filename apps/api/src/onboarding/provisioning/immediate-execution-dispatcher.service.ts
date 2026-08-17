@@ -15,16 +15,14 @@ export class ImmediateExecutionDispatcher implements ProvisionDispatcher {
       const result = await this.orchestrator.orchestrate(sessionId);
       return { success: true, result };
     } catch (error) {
-      // Domain rejections (e.g. a ConflictException for a second organization
-      // or a taken name) must reach the caller as their real status code, not
-      // as a generic 500. Only infrastructure/transient failures are folded
-      // into a DispatchResult for the engine to record and rethrow.
+    
       if (error instanceof HttpException) {
         throw error;
       }
       const message = error instanceof Error ? error.message : String(error);
+      const failedTask = (error as { failedTask?: string }).failedTask;
       this.logger.error(`Dispatch failed for ${sessionId}: ${message}`);
-      return { success: false, error: message };
+      return { success: false, error: message, ...(failedTask ? { failedTask } : {}) };
     }
   }
 }

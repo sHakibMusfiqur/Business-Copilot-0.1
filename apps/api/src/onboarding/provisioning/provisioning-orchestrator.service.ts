@@ -5,18 +5,9 @@ import { IndustryTemplateFactory } from '../industry-templates/industry-template
 import { ProvisioningExecutorService, type ProvisionResult } from './provisioning-executor.service';
 import { ProvisioningRetryService } from './provisioning-retry.service';
 import { PROVISION_EVENT_BUS, type ProvisionEventBus } from './provision-event-bus.interface';
+import { CHECKPOINT_TASKS } from './provisioning-checkpoints';
 import type { ProvisioningConfig } from '../industry-templates/types';
 import type { ProvisioningContext } from '../industry-templates/industry-template-provider.interface';
-
-const CHECKPOINT_TASKS = [
-  { checkpoint: 1, task: 'Creating organization...', progress: 5 },
-  { checkpoint: 2, task: 'Assigning owner...', progress: 15 },
-  { checkpoint: 3, task: 'Creating owner role...', progress: 30 },
-  { checkpoint: 4, task: 'Configuring departments...', progress: 45 },
-  { checkpoint: 5, task: 'Setting up subscription...', progress: 65 },
-  { checkpoint: 6, task: 'Applying industry settings...', progress: 85 },
-  { checkpoint: 7, task: 'Industry lifecycle...', progress: 95 },
-];
 
 @Injectable()
 export class ProvisioningOrchestratorService {
@@ -114,9 +105,15 @@ export class ProvisioningOrchestratorService {
     return this.prisma.$transaction(async (tx: any) => {
       const provisionData = (session.provisionData as Record<string, unknown>) ?? {};
       const failedTask = provisionData.failedTask as string | null;
-      const startCheckpoint = failedTask
-        ? CHECKPOINT_TASKS.findIndex((c) => c.task === failedTask) + 1
-        : 1;
+      // Resuming from a mid-pipeline checkpoint is only safe when the earlier
+      // checkpoints were committed (the session is bound to its org). A failed
+      // run rolls back atomically, leaving organizationId null, so resuming at
+      // the failed checkpoint would skip work that was never persisted — fall
+      // back to a full re-run from checkpoint 1.
+      const startCheckpoint =
+        failedTask && session.organizationId
+          ? CHECKPOINT_TASKS.findIndex((c) => c.task === failedTask) + 1
+          : 1;
 
       const checkpointResult = await this.executorService.executeCheckpoint(
         session, config, startCheckpoint, tx,

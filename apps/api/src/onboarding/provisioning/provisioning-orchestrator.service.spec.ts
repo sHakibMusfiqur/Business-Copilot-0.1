@@ -87,4 +87,58 @@ describe('ProvisioningOrchestratorService', () => {
     });
     expect(mocks.prisma.organization.findFirst).not.toHaveBeenCalled();
   });
+
+  it('resumes at the checkpoint matching a recorded failedTask (startCheckpoint = index + 1)', async () => {
+    const mocks = buildMocks();
+    mocks.prisma.onboardingSession.findUnique.mockResolvedValue({
+      id: 'session-1',
+      email: 'a@b.com',
+      organizationId: 'org-1',
+      provisionData: { failedTask: 'Configuring departments...' },
+    });
+    mocks.prisma.organization.findUnique.mockResolvedValue({ id: 'org-1' });
+    const service = buildService(mocks);
+
+    await service.orchestrate('session-1');
+
+    expect(mocks.executor.executeCheckpoint).toHaveBeenCalledWith(
+      expect.anything(), expect.anything(), 4, expect.anything(),
+    );
+  });
+
+  it('falls back to a full re-run (startCheckpoint 0) for an unrecognized failedTask', async () => {
+    const mocks = buildMocks();
+    mocks.prisma.onboardingSession.findUnique.mockResolvedValue({
+      id: 'session-1',
+      email: 'a@b.com',
+      organizationId: 'org-1',
+      provisionData: { failedTask: 'not-a-real-checkpoint' },
+    });
+    mocks.prisma.organization.findUnique.mockResolvedValue({ id: 'org-1' });
+    const service = buildService(mocks);
+
+    await service.orchestrate('session-1');
+
+    expect(mocks.executor.executeCheckpoint).toHaveBeenCalledWith(
+      expect.anything(), expect.anything(), 0, expect.anything(),
+    );
+  });
+
+  it('falls back to a full re-run (startCheckpoint 1) when the failedTask was recorded but the org was rolled back', async () => {
+    const mocks = buildMocks();
+    mocks.prisma.onboardingSession.findUnique.mockResolvedValue({
+      id: 'session-1',
+      email: 'a@b.com',
+      organizationId: null,
+      provisionData: { failedTask: 'Configuring departments...' },
+    });
+    const service = buildService(mocks);
+
+    await expect(service.orchestrate('session-1')).rejects.toThrow(
+      'Organization not created during transaction',
+    );
+    expect(mocks.executor.executeCheckpoint).toHaveBeenCalledWith(
+      expect.anything(), expect.anything(), 1, expect.anything(),
+    );
+  });
 });
