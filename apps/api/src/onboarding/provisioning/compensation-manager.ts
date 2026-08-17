@@ -30,6 +30,25 @@ export class CompensationManager {
     });
     const existingProvisionData = (session?.provisionData as Record<string, unknown> | null) ?? {};
 
+    
+    
+    
+    const claim = await this.prisma.onboardingSession.updateMany({
+      where: { id: sessionId, provisionStatus: { not: 'COMPLETED' } },
+      data: {
+        provisionStatus: 'FAILED',
+        provisionData: {
+          ...existingProvisionData,
+          rolledBack: true,
+          rolledBackAt: new Date().toISOString(),
+        },
+      },
+    });
+    if (claim.count === 0) {
+      this.actions.length = 0;
+      return;
+    }
+
     await this.auditService.record({
       action: 'ROLLBACK_STARTED',
       status: 'SUCCESS',
@@ -50,20 +69,18 @@ export class CompensationManager {
       }
     }
 
-    await this.prisma.onboardingSession.update({
-      where: { id: sessionId },
-      data: {
-        provisionStatus: 'FAILED',
-        provisionData: {
-          ...existingProvisionData,
-          rolledBack: true,
-          rollbackErrors: errors.length > 0 ? errors : undefined,
-          rolledBackAt: new Date().toISOString(),
-        },
-      },
-    });
-
     if (errors.length > 0) {
+      await this.prisma.onboardingSession.update({
+        where: { id: sessionId },
+        data: {
+          provisionData: {
+            ...existingProvisionData,
+            rolledBack: true,
+            rollbackErrors: errors,
+            rolledBackAt: new Date().toISOString(),
+          },
+        },
+      });
       await this.auditService.record({
         action: 'ROLLBACK_FAILED',
         status: 'FAILURE',

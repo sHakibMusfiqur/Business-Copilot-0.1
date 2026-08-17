@@ -55,6 +55,11 @@ export class ProvisioningEngineService {
     if (session.provisionStatus === 'PROVISIONING') {
       const progress = await this.progressService.getProgress(sessionId);
       if (!progress?.failedTask) {
+        if (await this.tryRecoverCommittedProvision(session, selectedIndustry)) {
+          return this.mapSession(
+            await this.prisma.onboardingSession.findUnique({ where: { id: sessionId } }),
+          );
+        }
         throw new ConflictException('Provisioning already in progress');
       }
       this.logger.log(`Resuming provisioning from checkpoint: ${progress.failedTask}`);
@@ -68,7 +73,7 @@ export class ProvisioningEngineService {
       throw new BadRequestException(
         'The onboarding session must be linked to a user account before it can be provisioned',
       );
-}
+    }
 
     const owner = await this.prisma.user.findUnique({
       where: { id: session.userId },
@@ -135,6 +140,44 @@ export class ProvisioningEngineService {
       await this.compensationManager.rollback(sessionId);
       throw error;
     }
+  }
+
+
+  private async tryRecoverCommittedProvision(
+    session: Record<string, unknown>,
+    industry: string | null,
+  ): Promise<boolean> {
+    const sessionId = session.id as string;
+    const orgId = session.organizationId as string | null;
+    const userId = session.userId as string | null;
+    if (!orgId || !userId) return false;
+
+    const org = await this.prisma.organization.findUnique({ where: { id: orgId } });
+    if (!org) return false;
+
+    const owner = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { organizationId: true },
+    });
+    if (!owner || owner.organizationId !== orgId) return false;
+
+    const sub = await this.prisma.subscription.findUnique({ where: { organizationId: orgId } });
+
+    await this.progressService.markCompleted(sessionId, orgId, sub?.id ?? null);
+    await this.checklistService.initChecklist(sessionId);
+    this.metricsService.recordSessionComplete(sessionId);
+    await this.auditService.record({
+      userId: userId ?? undefined,
+      organizationId: orgId,
+      action: 'ONBOARDING_PROVISIONED',
+      status: 'SUCCESS',
+      entity: 'OnboardingSession',
+      entityId: sessionId,
+      metadata: { email: session.email, industry: industry ?? undefined },
+    });
+    this.compensationManager.clear();
+
+    return true;
   }
 
   private mapSession(session: Record<string, unknown> | null) {

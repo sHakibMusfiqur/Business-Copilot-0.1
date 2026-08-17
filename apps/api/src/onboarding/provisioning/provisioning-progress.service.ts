@@ -49,8 +49,8 @@ export class ProvisioningProgressService {
   }
 
   async markFailed(sessionId: string, failedTask: string, error: string): Promise<void> {
-    await this.prisma.onboardingSession.update({
-      where: { id: sessionId },
+    await this.prisma.onboardingSession.updateMany({
+      where: { id: sessionId, provisionStatus: { not: 'COMPLETED' } },
       data: {
         provisionStatus: 'FAILED',
         provisionData: {
