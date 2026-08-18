@@ -4,6 +4,7 @@ export * from './auth';
 export * from './org-lookup';
 export * from './billing';
 export * from './dashboard';
+export * from './health';
 export * from './copilot';
 export * from './onboarding';
 export * from './users';

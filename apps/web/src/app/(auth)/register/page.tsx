@@ -4,12 +4,11 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { motion } from 'framer-motion';
 import { User, Mail, Lock, Eye, EyeOff, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
-import { register as registerUser } from '@/lib/api';
+import { register as registerUser, checkApiHealth } from '@/lib/api';
 import { createSession } from '@/lib/onboarding-api';
 
 import { submitRegistration } from './submit-registration';
@@ -33,10 +32,10 @@ const registerSchema = z.object({
 type RegisterFormData = z.infer<typeof registerSchema>;
 
 export default function RegisterPage() {
-  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [status, setStatus] = useState<string | null>(null);
 
   const {
     register,
@@ -57,11 +56,30 @@ export default function RegisterPage() {
         password: data.password,
         registerUser,
         createSession,
-        navigate: (url) => router.replace(url),
+        // Full document navigation after the account and session are committed.
+        // Unlike the SPA router, it does not race Next.js dev's first-time
+        // on-demand compile of /onboarding/verify, which used to trigger a Fast
+        // Refresh full reload that tore the app down back to /register.
+        navigate: (url) => {
+          // Commit the target URL in the address bar synchronously (no
+          // navigation) before starting the document navigation. Next.js dev
+          // compiles /onboarding/verify on first request, and that on-demand
+          // compile makes Fast Refresh perform a full reload of the *current*
+          // document URL. Without this, the reload lands back on /register
+          // (the verify document request is still in-flight during the
+          // multi-second compile), stranding the user after a successful
+          // registration + session. With the URL already committed, the reload
+          // targets /onboarding/verify and the user lands on the code page.
+          window.history.pushState({}, '', url);
+          window.location.assign(url);
+        },
         setError,
+        pingHealth: checkApiHealth,
+        onStatus: setStatus,
       });
     } finally {
       setIsSubmitting(false);
+      setStatus(null);
     }
   }
 
@@ -206,6 +224,12 @@ export default function RegisterPage() {
                 </>
               )}
             </button>
+
+            {status && (
+              <p className="mt-3 text-center text-sm text-muted-foreground">
+                {status}
+              </p>
+            )}
           </form>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
