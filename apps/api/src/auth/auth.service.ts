@@ -36,13 +36,15 @@ const PASSWORD_RESET_TTL = 60 * 60; // seconds
 
 const VERIFY_EMAIL_ISSUER = 'bc-verify-email';
 const VERIFY_EMAIL_AUDIENCE = 'bc-verify-email-consume';
-const VERIFY_EMAIL_TTL = 60 * 60 * 24; // seconds
 
 // Email verification is offered as a 6-digit code in the onboarding wizard (and
 // resend path) in addition to the purpose-bound JWT. The code is stored hashed,
 // bound to the email, single-use, and short-lived.
 const VERIFY_CODE_TTL = 15 * 60; // seconds
 const VERIFY_CODE_STORAGE_PREFIX = 'auth:verify-code';
+// How long a PendingRegistration is usable before it must be resubmitted. Aligned
+// with the code TTL so a pending claim (and its code) expire together.
+const PENDING_REGISTRATION_TTL = 15 * 60; // seconds
 
 @Injectable()
 export class AuthService {
@@ -59,45 +61,24 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto, ip: string, userAgent?: string) {
+    // A real, usable account for this email (verified or deactivated) blocks
+    // registration with a 409 that does not reveal whether it is usable.
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
       select: { id: true, email: true, isActive: true, emailVerified: true },
     });
-
-    if (existingUser) {
-      // Verified or deactivated email: preserve the existing duplicate-email
-      // protection (a 409 that does not reveal whether the account is usable).
-      if (existingUser.emailVerified || !existingUser.isActive) {
-        await this.rateLimiter.recordAttempt(`email:${dto.email}`);
-        await this.rateLimiter.recordAttempt(`ip:${ip}`);
-        await this.auditService.record({
-          action: 'REGISTER',
-          status: 'FAILURE',
-          entity: 'User',
-          metadata: { email: dto.email, reason: 'Email already registered' },
-          ipAddress: ip,
-          userAgent,
-        });
-        throw new ConflictException('Email already registered');
-      }
-
-      // Unverified but active account: do NOT create a second User, do NOT
-      // overwrite the password. Resend a fresh verification link so the owner
-      // can prove ownership. Returning the same generic success as a brand-new
-      // registration avoids disclosing that an account exists mid-flow.
-      await this.sendVerificationEmail(existingUser.id, existingUser.email, null);
+    if (existingUser?.emailVerified || (existingUser && !existingUser.isActive)) {
+      await this.rateLimiter.recordAttempt(`email:${dto.email}`);
+      await this.rateLimiter.recordAttempt(`ip:${ip}`);
       await this.auditService.record({
         action: 'REGISTER',
-        status: 'SUCCESS',
+        status: 'FAILURE',
         entity: 'User',
-        metadata: { email: dto.email, reason: 'Unverified account exists; verification resent' },
+        metadata: { email: dto.email, reason: 'Email already registered' },
         ipAddress: ip,
         userAgent,
       });
-      return {
-        user: { id: existingUser.id, email: existingUser.email, name: existingUser.email },
-        message: 'If this email is new, a verification link has been sent. Check your inbox.',
-      };
+      throw new ConflictException('Email already registered');
     }
 
     // Employees join through invitations, never public registration. If a
@@ -123,78 +104,62 @@ export class AuthService {
       );
     }
 
-    const hashedPassword = await argon2.hash(dto.password);
+    // "Register" creates ONLY a PendingRegistration claim on the email. No real
+    // User (so no authenticated/usable account, org, or provisioning) exists
+    // until the 6-digit verification code proves ownership. Repeated submits for
+    // an in-flight email reuse or replace the same pending record — never a
+    // second User, and never a silent password overwrite.
+    const now = Date.now();
+    const expiresAt = new Date(now + PENDING_REGISTRATION_TTL * 1000);
+    const existingPending = await this.prisma.pendingRegistration.findUnique({
+      where: { email: dto.email },
+    });
 
-    try {
-      const { user } = await this.prisma.$transaction(async (tx) => {
-        const createdUser = await tx.user.create({
-          data: {
-            email: dto.email,
-            password: hashedPassword,
-            name: dto.name,
-            role: 'USER',
-            emailVerified: false,
-          },
-          select: {
-            id: true,
-            email: true,
-            name: true,
-            role: true,
-            organizationId: true,
-            createdAt: true,
-          },
-        });
-
-        // No organization is created here: a registered user gets a real
-        // workspace only when provisioning assigns one. Assigning a placeholder
-        // org would trip the provisioning guard (the owner's organizationId must
-        // be null or the session's org) and orphan an unused org on every signup.
-        return { user: createdUser };
+    if (existingPending && existingPending.expiresAt.getTime() > now) {
+      // Still-valid pending claim: refresh only the display name and the
+      // validity window. The stored password hash is preserved so a re-submit
+      // never silently changes the account password.
+      await this.prisma.pendingRegistration.update({
+        where: { email: dto.email },
+        data: { name: dto.name, expiresAt },
       });
-
-      await this.rateLimiter.clearAttempts(`email:${user.email}`);
-      await this.rateLimiter.clearAttempts(`ip:${ip}`);
-
-      // Send the verification email after the account is committed. A mail
-      // delivery failure must not roll back the account; the user can resend.
-      await this.sendVerificationEmail(user.id, user.email, null);
-
-      await this.auditService.record({
-        userId: user.id,
-        organizationId: user.organizationId ?? undefined,
-        action: 'REGISTER',
-        status: 'SUCCESS',
-        entity: 'User',
-        entityId: user.id,
-        ipAddress: ip,
-        userAgent,
+    } else {
+      // New claim, or an expired one is safe to replace wholesale.
+      const hashedPassword = await argon2.hash(dto.password);
+      await this.prisma.pendingRegistration.upsert({
+        where: { email: dto.email },
+        update: {
+          name: dto.name,
+          passwordHash: hashedPassword,
+          expiresAt,
+        },
+        create: {
+          email: dto.email,
+          name: dto.name,
+          passwordHash: hashedPassword,
+          expiresAt,
+        },
       });
-
-      // No access/refresh tokens are issued here: an unverified account gets no
-      // authenticated session until it proves email ownership.
-      return {
-        user,
-        message: 'Account created. Please verify your email address to continue.',
-      };
-    } catch (error) {
-      this.logger.error(
-        `register() error=${this.redact(error instanceof Error ? error.message : String(error), this.authSecretValues())}`,
-      );
-      if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
-        await this.rateLimiter.recordAttempt(`email:${dto.email}`);
-        await this.rateLimiter.recordAttempt(`ip:${ip}`);
-        await this.auditService.record({
-          action: 'REGISTER',
-          status: 'FAILURE',
-          entity: 'User',
-          metadata: { email: dto.email, reason: 'Unique constraint violation' },
-          ipAddress: ip,
-          userAgent,
-        });
-        throw new ConflictException('Email already registered');
-      }
-      throw error;
     }
+
+    // Issue + send a fresh 6-digit code (rotates any previously issued one). A
+    // mail delivery failure must not fail registration; the user can resend.
+    await this.sendVerificationCode(dto.email, null);
+
+    await this.auditService.record({
+      action: 'REGISTER',
+      status: 'SUCCESS',
+      entity: 'PendingRegistration',
+      metadata: { email: dto.email, reason: 'Pending registration confirmed; verification code sent' },
+      ipAddress: ip,
+      userAgent,
+    });
+
+    // No access/refresh tokens here: no account exists until verification.
+    return {
+      email: dto.email,
+      message: 'If this email is new, a verification code has been sent. Check your inbox.',
+    };
   }
 
   async login(dto: LoginDto, ip: string, userAgent?: string) {
@@ -719,44 +684,46 @@ export class AuthService {
   }
 
   async resendVerificationEmail(email: string, ip: string, userAgent?: string): Promise<{ message: string }> {
-    const user = await this.prisma.user.findUnique({
+    // The pending registration — not a real User — is the claim being verified.
+    // Never reveal whether (or in what state) a registration exists.
+    const pending = await this.prisma.pendingRegistration.findUnique({
       where: { email },
-      select: { id: true, email: true, isActive: true, emailVerified: true, organizationId: true },
     });
 
-    // Never reveal whether (or in what state) an account exists.
-    const notFound = async () => {
+    const notFound = async (reason: string) => {
       await this.rateLimiter.recordAttempt(`email:${email}`);
       await this.rateLimiter.recordAttempt(`ip:${ip}`);
       await this.auditService.record({
         action: 'RESEND_VERIFICATION',
         status: 'FAILURE',
-        metadata: { email, reason: user ? 'No resend (already verified or deactivated)' : 'Email not found' },
+        metadata: { email, reason },
         ipAddress: ip,
         userAgent,
       });
-      return { message: 'If the email exists, a verification link has been sent' };
+      return { message: 'If the email exists, a verification code has been sent' };
     };
 
-    if (!user) return notFound();
-    // Verified users must not become unverified, and deactivated accounts are never resent.
-    if (user.emailVerified || !user.isActive) return notFound();
+    if (!pending) return notFound('No pending registration');
 
-    await this.sendVerificationEmail(user.id, user.email, user.organizationId ?? null);
+    // Expired pending registrations are safe to drop: re-registering creates a
+    // fresh claim and never a duplicate User.
+    if (pending.expiresAt.getTime() <= Date.now()) {
+      await this.prisma.pendingRegistration.delete({ where: { email } }).catch(() => undefined);
+      return notFound('Pending registration expired');
+    }
+
+    await this.sendVerificationCode(email, null);
 
     await this.auditService.record({
-      userId: user.id,
-      organizationId: user.organizationId ?? undefined,
       action: 'RESEND_VERIFICATION',
       status: 'SUCCESS',
-      entity: 'User',
-      entityId: user.id,
+      entity: 'PendingRegistration',
       metadata: { email },
       ipAddress: ip,
       userAgent,
     });
 
-    return { message: 'If the email exists, a verification link has been sent' };
+    return { message: 'If the email exists, a verification code has been sent' };
   }
 
   async verifyEmailByCode(
@@ -766,52 +733,38 @@ export class AuthService {
   ): Promise<{ user: Record<string, unknown>; accessToken: string; refreshToken: string }> {
     this.logger.log(`Verification by code requested for ${dto.email}`);
 
-    const user = await this.prisma.user.findUnique({
+    const pending = await this.prisma.pendingRegistration.findUnique({
       where: { email: dto.email },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        isActive: true,
-        emailVerified: true,
-        deletedAt: true,
-        organizationId: true,
-        createdAt: true,
-        organization: { select: { isActive: true, suspendedAt: true, deletedAt: true } },
-      },
     });
 
-    const reject = async (reason: string) => {
+    const reject = async (userId?: string) => {
       await this.rateLimiter.recordAttempt(`email:${dto.email}`);
       await this.rateLimiter.recordAttempt(`ip:${ip}`);
-      if (user?.id) await this.rateLimiter.recordAttempt(`user:${user.id}`);
+      if (userId) await this.rateLimiter.recordAttempt(`user:${userId}`);
       await this.auditService.record({
-        userId: user?.id,
-        organizationId: user?.organizationId ?? undefined,
+        userId,
         action: 'VERIFY_EMAIL_CODE',
         status: 'FAILURE',
         entity: 'User',
-        entityId: user?.id,
-        metadata: { email: dto.email, reason },
+        entityId: userId,
+        metadata: { email: dto.email, reason: 'Invalid verification code' },
         ipAddress: ip,
         userAgent,
       });
       throw new UnauthorizedException('Invalid verification code');
     };
 
-    if (!user || !user.isActive || user.deletedAt) {
-      return reject('Email not found or account unavailable');
-    }
+    // Without a pending registration there is nothing to verify (and no User).
+    if (!pending) return reject();
 
     const key = this.verifyCodeKey(dto.email);
     const stored = await this.redis.get<{ hash: string; expiresAt: number }>(key);
     if (!stored || typeof stored.expiresAt !== 'number' || !stored.hash) {
-      return reject('No verification code issued or code already used');
+      return reject();
     }
     if (stored.expiresAt < Date.now()) {
       await this.redis.delete(key);
-      return reject('Verification code expired');
+      return reject();
     }
 
     let matches = false;
@@ -821,36 +774,82 @@ export class AuthService {
       matches = false;
     }
     if (!matches) {
-      return reject('Verification code mismatch');
+      return reject();
+    }
+
+    // An expired pending registration cannot be promoted. Drop the stale claim
+    // so it can be re-registered cleanly; no User is created here.
+    if (pending.expiresAt.getTime() <= Date.now()) {
+      await this.redis.delete(key);
+      await this.prisma.pendingRegistration.delete({ where: { email: dto.email } }).catch(() => undefined);
+      return reject();
     }
 
     // Consume the single-use code before committing so a failed write never
     // leaves a replayable code behind.
     await this.redis.delete(key);
 
-    await this.prisma.user.update({
-      where: { id: user.id },
-      data: { emailVerified: true },
-    });
-    // Bind the just-verified user to any anonymous onboarding session still
-    // waiting for an owner (created at registration, before the user could
-    // authenticate). Provisioning requires a bound + verified user.
+    // Promote the pending claim into the real User — exactly once. With the
+    // claim removed below and User.email unique, no two verifications can create
+    // two accounts for the same email.
+    let userId: string;
+    let promoted = false;
+    try {
+      const created = await this.prisma.user.create({
+        data: {
+          email: pending.email,
+          name: pending.name,
+          password: pending.passwordHash,
+          role: 'USER',
+          emailVerified: true,
+        },
+        select: { id: true },
+      });
+      userId = created.id;
+      promoted = true;
+    } catch (error) {
+      if (error instanceof PrismaClientKnownRequestError && error.code === 'P2002') {
+        // A legacy unverified User already exists for this email (created before
+        // verification enforcement). Verify it in place rather than create or
+        // overwrite anything. emailVerified is only ever switched ON here.
+        const existing = await this.prisma.user.findUnique({
+          where: { email: pending.email },
+          select: { id: true },
+        });
+        if (!existing) throw error;
+        userId = existing.id;
+        await this.prisma.user.update({
+          where: { id: existing.id },
+          data: { emailVerified: true },
+        });
+      } else {
+        throw error;
+      }
+    }
+
+    // Bind the verified user to any anonymous onboarding session created at
+    // registration (provisioning requires a bound + verified user). Sessions are
+    // matched by email because they are created after the pending claim.
     await this.prisma.onboardingSession.updateMany({
-      where: { email: user.email, userId: null },
-      data: { userId: user.id },
+      where: { email: pending.email, userId: null },
+      data: { userId },
     });
 
+    // The claim is now redundant; drop it so the code cannot be replayed and a
+    // future register starts from a clean slate. P2002 is impossible here.
+    await this.prisma.pendingRegistration.delete({ where: { email: pending.email } }).catch(() => undefined);
+
     await this.rateLimiter.clearAttempts(`email:${dto.email}`);
-    await this.rateLimiter.clearAttempts(`user:${user.id}`);
+    await this.rateLimiter.clearAttempts(`user:${userId}`);
     await this.rateLimiter.clearAttempts(`ip:${ip}`);
 
     await this.auditService.record({
-      userId: user.id,
-      organizationId: user.organizationId ?? undefined,
+      userId,
       action: 'VERIFY_EMAIL',
       status: 'SUCCESS',
       entity: 'User',
-      entityId: user.id,
+      entityId: userId,
+      metadata: { email: pending.email, promoted: promoted ? 'pending' : 'legacy' },
       ipAddress: ip,
       userAgent,
     });
@@ -859,7 +858,7 @@ export class AuthService {
     // to mint a session and let the user continue onboarding seamlessly. It is
     // explicitly NOT a login (no password) but the account has now proven the
     // email it registered with, satisfying the same bar as login's verified gate.
-    return this.issueAuthenticatedSession(user.id, ip, userAgent);
+    return this.issueAuthenticatedSession(userId, ip, userAgent);
   }
 
   private async issueAuthenticatedSession(
@@ -922,27 +921,12 @@ export class AuthService {
     return { user: { ...user, onboardingCompleted }, ...tokens };
   }
 
-  private async sendVerificationEmail(
-    userId: string,
+  private async sendVerificationCode(
     email: string,
     orgId: string | null,
   ): Promise<void> {
-    this.logger.log(`Verification email requested for ${email}`);
+    this.logger.log(`Verification code requested for ${email}`);
     try {
-      const token = this.jwtService.sign(
-        { sub: userId, purpose: 'verify-email', email },
-        {
-          secret: this.configService.jwtSecret,
-          expiresIn: VERIFY_EMAIL_TTL,
-          issuer: VERIFY_EMAIL_ISSUER,
-          audience: VERIFY_EMAIL_AUDIENCE,
-        },
-      );
-      // The 6-digit code is the primary verification mechanism in the onboarding
-      // wizard. It is stored hashed in Redis, single-use, bound to the email and
-      // short-lived. The purpose-bound JWT (token) is kept so the verify-email
-      // endpoint (email links / API clients) remains valid and passwordless.
-      this.logger.debug(`Verification JWT issued for ${email} (${token.length} chars)`);
       const code = this.generateVerifyCode();
       const codeHash = await argon2.hash(code);
       const key = this.verifyCodeKey(email);
@@ -961,7 +945,7 @@ export class AuthService {
         this.logger.warn(`Verification email not delivered for ${email} (${result.reason})`);
       }
     } catch (error) {
-      this.logger.error(`Failed to send verification email for ${email}: ${(error as Error).message}`);
+      this.logger.error(`Failed to send verification code for ${email}: ${(error as Error).message}`);
     }
   }
 

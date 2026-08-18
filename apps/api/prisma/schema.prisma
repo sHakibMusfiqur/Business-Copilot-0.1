@@ -238,6 +238,21 @@ model User {
   acceptedInvitation    Invitation?            @relation("AcceptedInvitation")
 }
 
+// A registration whose email ownership has not yet been proven. No real User
+// exists until the 6-digit verification code is redeemed, so a new signup never
+// creates an authenticated/usable account (and never any org or provisioning).
+// Keyed by a unique email so a repeated submit reuses/promotes the same record
+// without ever creating a duplicate User or silently overwriting a password.
+model PendingRegistration {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
 model Permission {
   id          String   @id @default(cuid())
   name        String   @unique

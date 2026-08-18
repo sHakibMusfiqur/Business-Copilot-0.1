@@ -1,17 +1,39 @@
+import { ApiError } from '@/lib/api/client';
+
 export interface RegistrationDeps {
   name: string;
   email: string;
   password: string;
-  registerUser: (name: string, email: string, password: string) => Promise<{ user: { id: string; email: string; name: string }; message: string }>;
+  registerUser: (name: string, email: string, password: string) => Promise<{ email: string; message: string }>;
   createSession: (email: string, name: string) => Promise<{ id: string; onboardingToken?: string }>;
   navigate: (url: string) => void;
   setError: (message: string | null) => void;
 }
 
+const RETRY_DELAY_MS = 500;
+
+function isConnectionFailure(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 0;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export async function submitRegistration(p: RegistrationDeps): Promise<void> {
   let accountCreated = false;
   try {
-    await p.registerUser(p.name, p.email, p.password);
+    try {
+      await p.registerUser(p.name, p.email, p.password);
+    } catch (firstError) {
+      if (!isConnectionFailure(firstError)) throw firstError;
+      // A connection-level failure means the request never reached the server
+      // (e.g. the API is still cold-starting in dev), so no pending registration
+      // exists. Retry exactly once after a short delay; HTTP/application errors
+      // (400, 409, 429, 500, ...) are never retried.
+      await delay(RETRY_DELAY_MS);
+      await p.registerUser(p.name, p.email, p.password);
+    }
     accountCreated = true;
 
     // Reserve an onboarding session so the user can complete the wizard. The

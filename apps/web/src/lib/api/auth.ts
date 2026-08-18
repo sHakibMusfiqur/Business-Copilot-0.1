@@ -21,11 +21,9 @@ export async function adminLogin(email: string, password: string) {
 }
 
 export async function register(name: string, email: string, password: string) {
-  const response = await api.post(API_ROUTES.AUTH.REGISTER, { name, email, password });
-  // Registration never authenticates the user; the account stays unverified
-  // until it proves email ownership, so no access token is stored here.
+const response = await api.post(API_ROUTES.AUTH.REGISTER, { name, email, password });
   resetAuthSession();
-  return response.data as { user: { id: string; email: string; name: string }; message: string };
+  return response.data as { email: string; message: string };
 }
 
 export async function verifyEmail(token: string) {
@@ -34,10 +32,6 @@ export async function verifyEmail(token: string) {
 }
 
 export async function verifyEmailCode(email: string, code: string) {
-  // A correct code proves email ownership, so it is the first legitimate point
-  // to mint a session (tokens only exist AFTER verification — never at
-  // registration). Mirroring login, the tokens establish the authenticated
-  // session so onboarding continues seamlessly to the next step.
   const response = await api.post(API_ROUTES.AUTH.VERIFY_EMAIL_CODE, { email, code });
   resetAuthSession();
   const { accessToken: token, user } = response.data;

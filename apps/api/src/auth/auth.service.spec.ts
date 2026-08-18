@@ -1,5 +1,6 @@
 import { UnauthorizedException, BadRequestException, ConflictException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 import * as argon2 from 'argon2';
 
 import { AuthService } from './auth.service';
@@ -20,6 +21,12 @@ type MutablePrisma = {
     findUnique: jest.Mock;
     update: jest.Mock;
     create: jest.Mock;
+  };
+  pendingRegistration: {
+    findUnique: jest.Mock;
+    update: jest.Mock;
+    upsert: jest.Mock;
+    delete: jest.Mock;
   };
   refreshToken: {
     findUnique: jest.Mock;
@@ -65,6 +72,12 @@ describe('AuthService (refresh / logout / reset security)', () => {
         findUnique: jest.fn(),
         update: jest.fn(),
         create: jest.fn(),
+      },
+      pendingRegistration: {
+        findUnique: jest.fn(),
+        update: jest.fn(),
+        upsert: jest.fn(),
+        delete: jest.fn(),
       },
       refreshToken: {
         findUnique: jest.fn(),
@@ -468,41 +481,28 @@ describe('AuthService (refresh / logout / reset security)', () => {
   });
 
   describe('register', () => {
-    const createdUser = {
-      id: 'user-new',
-      email: 'new@a.com',
-      name: 'New',
-      role: 'USER',
-      organizationId: null,
-      createdAt: new Date('2024-01-01'),
-    };
-    const tx = {
-      user: { create: jest.fn(), update: jest.fn() },
-      organization: { create: jest.fn(), findUnique: jest.fn() },
-      organizationMember: { create: jest.fn() },
-      userRoleAssignment: { create: jest.fn() },
-    };
-    let txUserCreate: jest.Mock;
-
     beforeEach(() => {
       prisma.user.findUnique.mockReset();
+      prisma.user.create.mockReset();
+      prisma.pendingRegistration.findUnique.mockReset();
+      prisma.pendingRegistration.update.mockReset();
+      prisma.pendingRegistration.upsert.mockReset();
+      prisma.pendingRegistration.delete.mockReset();
+      prisma.pendingRegistration.update.mockResolvedValue(undefined);
+      prisma.pendingRegistration.upsert.mockResolvedValue(undefined);
+      prisma.pendingRegistration.delete.mockResolvedValue(undefined);
       prisma.invitation.findFirst.mockReset();
       (argon2.hash as jest.Mock).mockReset();
-      jwtService.sign.mockReset();
       prisma.refreshToken.create.mockClear();
       prisma.user.update.mockClear();
       mail.sendOrgEmail.mockReset();
-      txUserCreate = tx.user.create;
-      (tx.user.create as jest.Mock).mockReset();
-      txUserCreate.mockResolvedValue(createdUser);
-      prisma.$transaction.mockImplementation(async (cb: (t: typeof tx) => unknown) => cb(tx));
     });
 
-    it('creates an unverified user with no organization and issues no session tokens', async () => {
+    it('creates a pending registration (no real User, no org, no tokens) and sends a code', async () => {
       prisma.user.findUnique.mockResolvedValue(null);
+      prisma.pendingRegistration.findUnique.mockResolvedValue(null);
       prisma.invitation.findFirst.mockResolvedValue(null);
       (argon2.hash as jest.Mock).mockResolvedValue('hashed-password');
-      jwtService.sign.mockReturnValue('verify-token');
       mail.sendOrgEmail.mockResolvedValue({ sent: true });
 
       const result = await service.register(
@@ -510,58 +510,79 @@ describe('AuthService (refresh / logout / reset security)', () => {
         '1.1.1.1',
       );
 
-      expect(txUserCreate).toHaveBeenCalledWith(
+      // Only a pending claim is written — no User ever at registration.
+      expect(prisma.pendingRegistration.upsert).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ email: 'new@a.com', emailVerified: false }),
+          create: expect.objectContaining({
+            email: 'new@a.com',
+            name: 'New',
+            passwordHash: 'hashed-password',
+          }),
         }),
       );
-      // No organization is ever assigned at registration; the created user's
-      // organizationId stays null (schema default).
-      expect(txUserCreate.mock.calls[0][0].data).not.toHaveProperty('organizationId');
-      expect(result.user).toMatchObject({ id: 'user-new', email: 'new@a.com' });
-      expect(tx.organization.create).not.toHaveBeenCalled();
-      expect(tx.organization.findUnique).not.toHaveBeenCalled();
-      expect(tx.organizationMember.create).not.toHaveBeenCalled();
-      expect(tx.userRoleAssignment.create).not.toHaveBeenCalled();
+      expect(prisma.user.create).not.toHaveBeenCalled();
       expect(prisma.refreshToken.create).not.toHaveBeenCalled();
-      // A verification email is sent instead of an authenticated session.
-      expect(jwtService.sign).toHaveBeenCalledWith(
-        expect.objectContaining({ sub: 'user-new', purpose: 'verify-email' }),
-        expect.any(Object),
-      );
+      // A verification code is emailed instead of an authenticated session.
       expect(mail.sendOrgEmail).toHaveBeenCalledWith(
         null,
-        expect.objectContaining({ type: 'emailVerification' }),
+        expect.objectContaining({
+          to: 'new@a.com',
+          type: 'emailVerification',
+          data: expect.objectContaining({ emailVerification: expect.objectContaining({ code: expect.any(String) }) }),
+        }),
       );
-      expect(result).toEqual(expect.objectContaining({ message: expect.any(String) }));
+      expect(result.email).toBe('new@a.com');
+      expect(result).not.toHaveProperty('user');
       expect(result).not.toHaveProperty('accessToken');
       expect(result).not.toHaveProperty('refreshToken');
     });
 
-    it('resends a verification link for an existing unverified account instead of creating a second user', async () => {
-      prisma.user.findUnique.mockResolvedValue({
-        id: 'user-exists',
+    it('reuses a still-valid pending registration without overwriting the password', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.pendingRegistration.findUnique.mockResolvedValue({
+        id: 'p1',
         email: 'new@a.com',
-        isActive: true,
-        emailVerified: false,
+        name: 'Old',
+        passwordHash: 'orig-hash',
+        expiresAt: new Date(Date.now() + 120000),
       });
-      jwtService.sign.mockReturnValue('verify-token');
+      prisma.invitation.findFirst.mockResolvedValue(null);
       mail.sendOrgEmail.mockResolvedValue({ sent: true });
 
-      const result = await service.register(
-        { email: 'new@a.com', name: 'New', password: 'pw2' } as never,
-        '1.1.1.1',
-      );
+      await service.register({ email: 'new@a.com', name: 'New', password: 'pw2' } as never, '1.1.1.1');
 
-      expect(txUserCreate).not.toHaveBeenCalled();
+      expect(prisma.pendingRegistration.update).toHaveBeenCalled();
+      // The stored password hash is preserved on a re-submit.
+      expect(prisma.pendingRegistration.update.mock.calls[0][0].data).not.toHaveProperty('passwordHash');
+      expect(prisma.pendingRegistration.upsert).not.toHaveBeenCalled();
+      expect(prisma.user.create).not.toHaveBeenCalled();
       expect(mail.sendOrgEmail).toHaveBeenCalledTimes(1);
-      // The password must never be overwritten on a resend path.
-      expect(prisma.user.update).not.toHaveBeenCalled();
-      expect(result.user.id).toBe('user-exists');
-      expect(result.user.email).toBe('new@a.com');
     });
 
-    it('rejects a verified duplicate email with 409 and does not resend', async () => {
+    it('replaces an expired pending registration with a fresh password hash', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.pendingRegistration.findUnique.mockResolvedValue({
+        id: 'p1',
+        email: 'new@a.com',
+        name: 'Old',
+        passwordHash: 'old-hash',
+        expiresAt: new Date(Date.now() - 1000),
+      });
+      prisma.invitation.findFirst.mockResolvedValue(null);
+      (argon2.hash as jest.Mock).mockResolvedValue('hashed-password');
+      mail.sendOrgEmail.mockResolvedValue({ sent: true });
+
+      await service.register({ email: 'new@a.com', name: 'New', password: 'pw2' } as never, '1.1.1.1');
+
+      expect(prisma.pendingRegistration.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          update: expect.objectContaining({ passwordHash: 'hashed-password' }),
+        }),
+      );
+      expect(prisma.user.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a verified duplicate email with 409 and does not create a pending claim', async () => {
       prisma.user.findUnique.mockResolvedValue({
         id: 'user-exists',
         email: 'new@a.com',
@@ -572,8 +593,24 @@ describe('AuthService (refresh / logout / reset security)', () => {
       await expect(
         service.register({ email: 'new@a.com', name: 'New', password: 'pw' } as never, '1.1.1.1'),
       ).rejects.toThrow(ConflictException);
-      expect(txUserCreate).not.toHaveBeenCalled();
+      expect(prisma.pendingRegistration.upsert).not.toHaveBeenCalled();
+      expect(prisma.user.create).not.toHaveBeenCalled();
       expect(mail.sendOrgEmail).not.toHaveBeenCalled();
+    });
+
+    it('rejects a deactivated duplicate email with 409', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-exists',
+        email: 'new@a.com',
+        isActive: false,
+        emailVerified: false,
+      });
+
+      await expect(
+        service.register({ email: 'new@a.com', name: 'New', password: 'pw' } as never, '1.1.1.1'),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.pendingRegistration.upsert).not.toHaveBeenCalled();
+      expect(prisma.user.create).not.toHaveBeenCalled();
     });
   });
 
@@ -670,71 +707,82 @@ describe('AuthService (refresh / logout / reset security)', () => {
 
   describe('resendVerificationEmail', () => {
     beforeEach(() => {
-      prisma.user.findUnique.mockReset();
-      jwtService.sign.mockReset();
+      prisma.pendingRegistration.findUnique.mockReset();
+      prisma.pendingRegistration.delete.mockReset();
+      prisma.pendingRegistration.delete.mockResolvedValue(undefined);
       mail.sendOrgEmail.mockReset();
     });
 
-    it('resends a link for an unverified active user without revealing account existence', async () => {
-      prisma.user.findUnique.mockResolvedValue({
-        id: 'user-new',
+    it('resends a code for an in-flight pending registration', async () => {
+      prisma.pendingRegistration.findUnique.mockResolvedValue({
+        id: 'p1',
         email: 'a@a.com',
-        isActive: true,
-        emailVerified: false,
-        organizationId: null,
+        name: 'A',
+        passwordHash: 'hash',
+        expiresAt: new Date(Date.now() + 120000),
       });
-      jwtService.sign.mockReturnValue('verify-token');
       mail.sendOrgEmail.mockResolvedValue({ sent: true });
 
       const result = await service.resendVerificationEmail('a@a.com', '1.1.1.1');
 
       expect(mail.sendOrgEmail).toHaveBeenCalledTimes(1);
-      expect(result.message).toBe('If the email exists, a verification link has been sent');
+      expect(result.message).toBe('If the email exists, a verification code has been sent');
     });
 
     it('returns the generic message for a nonexistent email without sending', async () => {
-      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.pendingRegistration.findUnique.mockResolvedValue(null);
 
       const result = await service.resendVerificationEmail('nope@a.com', '1.1.1.1');
 
       expect(mail.sendOrgEmail).not.toHaveBeenCalled();
-      expect(result.message).toBe('If the email exists, a verification link has been sent');
+      expect(result.message).toBe('If the email exists, a verification code has been sent');
     });
 
-    it('never resent to an already-verified emailed', async () => {
-      prisma.user.findUnique.mockResolvedValue({
-        id: 'user-new',
+    it('drops an expired pending registration without sending', async () => {
+      prisma.pendingRegistration.findUnique.mockResolvedValue({
+        id: 'p1',
         email: 'a@a.com',
-        isActive: true,
-        emailVerified: true,
-        organizationId: null,
+        name: 'A',
+        passwordHash: 'hash',
+        expiresAt: new Date(Date.now() - 1000),
       });
 
       const result = await service.resendVerificationEmail('a@a.com', '1.1.1.1');
 
+      expect(prisma.pendingRegistration.delete).toHaveBeenCalledWith({ where: { email: 'a@a.com' } });
       expect(mail.sendOrgEmail).not.toHaveBeenCalled();
-      expect(result.message).toBe('If the email exists, a verification link has been sent');
+      expect(result.message).toBe('If the email exists, a verification code has been sent');
     });
   });
 
   describe('verifyEmailByCode', () => {
-    const unverifiedUser = {
+    const pendingClaim = {
+      id: 'p1',
+      email: 'a@a.com',
+      name: 'A',
+      passwordHash: 'hashed-pending',
+      expiresAt: new Date(Date.now() + 120000),
+    };
+    const createdUser = {
       id: 'user-code',
       email: 'a@a.com',
       name: 'A',
       role: 'USER',
       isActive: true,
-      emailVerified: false,
+      emailVerified: true,
       deletedAt: null,
       organizationId: null,
       createdAt: new Date('2024-01-01'),
       organization: null,
     };
-    const verifiedUser = { ...unverifiedUser, emailVerified: true };
 
     beforeEach(() => {
-      prisma.user.findUnique.mockReset();
+      prisma.pendingRegistration.findUnique.mockReset();
+      prisma.pendingRegistration.delete.mockReset();
+      prisma.pendingRegistration.delete.mockResolvedValue(undefined);
+      prisma.user.create.mockReset();
       prisma.user.update.mockClear();
+      prisma.user.findUnique.mockReset();
       prisma.onboardingSession.updateMany.mockReset();
       redis.get.mockReset();
       redis.delete.mockReset();
@@ -743,12 +791,12 @@ describe('AuthService (refresh / logout / reset security)', () => {
       prisma.refreshToken.create.mockClear();
     });
 
-    it('marks the user verified, binds the onboarding session, and mints an authenticated session (auto-continue)', async () => {
+    it('promotes the pending claim into exactly one verified User, binds the session, and mints a session', async () => {
+      prisma.pendingRegistration.findUnique.mockResolvedValue(pendingClaim);
       redis.get.mockResolvedValue({ hash: 'code-hash', expiresAt: Date.now() + 120000 });
       (argon2.verify as jest.Mock).mockResolvedValue(true);
-      prisma.user.findUnique
-        .mockResolvedValueOnce(unverifiedUser)
-        .mockResolvedValue(verifiedUser);
+      prisma.user.create.mockResolvedValue({ id: 'user-code' });
+      prisma.user.findUnique.mockResolvedValue(createdUser);
       prisma.onboardingSession.updateMany.mockResolvedValue({ count: 1 });
       jwtService.signAsync.mockResolvedValueOnce('access-1').mockResolvedValueOnce('refresh-1');
 
@@ -758,14 +806,23 @@ describe('AuthService (refresh / logout / reset security)', () => {
       );
 
       expect(redis.delete).toHaveBeenCalledWith(expect.stringContaining('auth:verify-code'));
-      expect(prisma.user.update).toHaveBeenCalledWith({
-        where: { id: 'user-code' },
-        data: { emailVerified: true },
+      // The User is created fresh from the pending claim and is verified on day one.
+      expect(prisma.user.create).toHaveBeenCalledWith({
+        data: {
+          email: 'a@a.com',
+          name: 'A',
+          password: 'hashed-pending',
+          role: 'USER',
+          emailVerified: true,
+        },
+        select: { id: true },
       });
       expect(prisma.onboardingSession.updateMany).toHaveBeenCalledWith({
         where: { email: 'a@a.com', userId: null },
         data: { userId: 'user-code' },
       });
+      // The claim is consumed so the code cannot be replayed.
+      expect(prisma.pendingRegistration.delete).toHaveBeenCalledWith({ where: { email: 'a@a.com' } });
       expect(prisma.refreshToken.create).toHaveBeenCalled();
       expect(result).toEqual(
         expect.objectContaining({ accessToken: 'access-1', refreshToken: 'refresh-1' }),
@@ -773,43 +830,94 @@ describe('AuthService (refresh / logout / reset security)', () => {
       expect(result.user).toMatchObject({ id: 'user-code', email: 'a@a.com' });
     });
 
-    it('rejects a wrong code without verifying or issuing tokens', async () => {
+    it('creates no User for a wrong code', async () => {
+      prisma.pendingRegistration.findUnique.mockResolvedValue(pendingClaim);
       redis.get.mockResolvedValue({ hash: 'code-hash', expiresAt: Date.now() + 120000 });
       (argon2.verify as jest.Mock).mockResolvedValue(false);
-      prisma.user.findUnique.mockResolvedValue(unverifiedUser);
 
       await expect(
         service.verifyEmailByCode({ email: 'a@a.com', code: '000000' } as never, '1.1.1.1'),
       ).rejects.toThrow(UnauthorizedException);
 
-      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect(prisma.user.create).not.toHaveBeenCalled();
+      expect(redis.delete).not.toHaveBeenCalled();
       expect(prisma.onboardingSession.updateMany).not.toHaveBeenCalled();
       expect(prisma.refreshToken.create).not.toHaveBeenCalled();
     });
 
-    it('rejects an email with no issued (or already-consumed) code without verifying', async () => {
+    it('creates no User with no issued (or already-consumed) code', async () => {
+      prisma.pendingRegistration.findUnique.mockResolvedValue(pendingClaim);
       redis.get.mockResolvedValue(null);
-      prisma.user.findUnique.mockResolvedValue(unverifiedUser);
 
       await expect(
         service.verifyEmailByCode({ email: 'a@a.com', code: '123456' } as never, '1.1.1.1'),
       ).rejects.toThrow(UnauthorizedException);
 
-      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect(prisma.user.create).not.toHaveBeenCalled();
       expect(prisma.refreshToken.create).not.toHaveBeenCalled();
     });
 
-    it('rejects an expired code without verifying', async () => {
+    it('creates no User for an expired / no-pending claim', async () => {
+      // Two distinct reject scenarios: no pending at all, and an expired code.
+      prisma.pendingRegistration.findUnique.mockResolvedValue(null);
+      await expect(
+        service.verifyEmailByCode({ email: 'ghost@a.com', code: '123456' } as never, '1.1.1.1'),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(prisma.user.create).not.toHaveBeenCalled();
+
+      prisma.pendingRegistration.findUnique.mockResolvedValue(pendingClaim);
       redis.get.mockResolvedValue({ hash: 'code-hash', expiresAt: Date.now() - 1000 });
-      prisma.user.findUnique.mockResolvedValue(unverifiedUser);
+      await expect(
+        service.verifyEmailByCode({ email: 'a@a.com', code: '123456' } as never, '1.1.1.1'),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(prisma.user.create).not.toHaveBeenCalled();
+      expect(redis.delete).toHaveBeenCalled();
+    });
+
+    it('promotes an expired pending claim only after dropping it (no User, claim removed)', async () => {
+      prisma.pendingRegistration.findUnique.mockResolvedValue({
+        ...pendingClaim,
+        expiresAt: new Date(Date.now() - 1000),
+      });
+      redis.get.mockResolvedValue({ hash: 'code-hash', expiresAt: Date.now() + 120000 });
+      (argon2.verify as jest.Mock).mockResolvedValue(true);
 
       await expect(
         service.verifyEmailByCode({ email: 'a@a.com', code: '123456' } as never, '1.1.1.1'),
       ).rejects.toThrow(UnauthorizedException);
 
-      expect(redis.delete).toHaveBeenCalled();
-      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect(prisma.user.create).not.toHaveBeenCalled();
+      expect(prisma.pendingRegistration.delete).toHaveBeenCalledWith({ where: { email: 'a@a.com' } });
       expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+    });
+
+    it('verifies a legacy unverified User in place instead of creating a duplicate', async () => {
+      prisma.pendingRegistration.findUnique.mockResolvedValue(pendingClaim);
+      redis.get.mockResolvedValue({ hash: 'code-hash', expiresAt: Date.now() + 120000 });
+      (argon2.verify as jest.Mock).mockResolvedValue(true);
+      const p2002 = new PrismaClientKnownRequestError(
+        'Unique constraint failed on the fields: (`email`)',
+        { code: 'P2002', clientVersion: 'test' },
+      );
+      (prisma.user.create as jest.Mock).mockRejectedValue(p2002);
+      prisma.user.findUnique
+        .mockResolvedValueOnce({ id: 'legacy-user' })
+        .mockResolvedValue(createdUser);
+      prisma.user.update.mockResolvedValue({});
+      jwtService.signAsync.mockResolvedValueOnce('access-1').mockResolvedValueOnce('refresh-1');
+
+      const result = await service.verifyEmailByCode(
+        { email: 'a@a.com', code: '123456' } as never,
+        '1.1.1.1',
+      );
+
+      expect(prisma.user.create).toHaveBeenCalledTimes(1);
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'legacy-user' },
+        data: { emailVerified: true },
+      });
+      expect(prisma.pendingRegistration.delete).toHaveBeenCalled();
+      expect(result.accessToken).toBe('access-1');
     });
   });
 
