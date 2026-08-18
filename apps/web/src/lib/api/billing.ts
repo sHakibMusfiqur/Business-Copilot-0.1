@@ -64,6 +64,8 @@ export interface PaymentGateway {
   code: string;
   name: string;
   isEnabled: boolean;
+  /** Whether the provider has the credentials to process real payments. */
+  configured: boolean;
   config: Record<string, unknown> | null;
   sortOrder: number;
 }
@@ -140,8 +142,8 @@ export async function createCheckoutSession(
   return response.data;
 }
 
-export async function verifyPayment(paymentId: string): Promise<VerifiedPayment> {
-  const response = await api.post(API_ROUTES.BILLING.VERIFY, { paymentId });
+export async function verifyPayment(paymentId: string, valId?: string): Promise<VerifiedPayment> {
+  const response = await api.post(API_ROUTES.BILLING.VERIFY, valId ? { paymentId, valId } : { paymentId });
   return response.data;
 }
 

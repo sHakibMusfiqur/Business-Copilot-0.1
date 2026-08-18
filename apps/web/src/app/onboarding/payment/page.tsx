@@ -41,7 +41,11 @@ export default function PaymentPage() {
     staleTime: 60_000,
   });
 
-  const paymentEnabled = gateways?.some((g) => g.isEnabled) ?? false;
+  // A gateway must be enabled in the DB *and* configured (has credentials) to
+  // actually process a real payment. An enabled-but-not-configured gateway (e.g.
+  // Stripe enabled but STRIPE_SECRET_KEY unset) cannot charge, so paid checkout
+  // stays unavailable and the UI explains why.
+  const paymentAvailable = gateways?.some((g) => g.isEnabled && g.configured) ?? false;
 
   if (!session) {
     return <div className="flex items-center justify-center pt-20"><p className="text-slate-400">No session found.</p></div>;
@@ -92,7 +96,7 @@ export default function PaymentPage() {
   const handleContinue = async () => {
     if (!plan || starting || startingRef.current || selectedOption === null) return;
     if (selectedOption === 'payNow') {
-      if (!paymentEnabled) return;
+      if (!paymentAvailable) return;
       await handlePayNow();
     } else {
       await handleStartTrial();
@@ -125,7 +129,7 @@ export default function PaymentPage() {
       setStarting(true);
       (async () => {
         try {
-          const result = await verifyPayment(paymentId);
+          const result = await verifyPayment(paymentId, params.get('val_id') ?? undefined);
           // Only a backend-confirmed, succeeded payment may advance. If the
           // payment is still pending (webhook not yet delivered), hold the
           // user on this step rather than provisioning without a subscription.
@@ -181,7 +185,7 @@ export default function PaymentPage() {
   const priceLabel = formatPlanPrice(plan, interval, currency);
   const priceUnit = interval === 'YEARLY' ? '/yr' : '/mo';
   const subscriptionLabel = interval === 'YEARLY' ? 'Annual subscription' : 'Monthly subscription';
-  const payNowDisabled = !paymentEnabled || !user?.organizationId;
+  const payNowDisabled = !paymentAvailable || !user?.organizationId;
 
   const optionCardClass = (selected: boolean, disabled = false) =>
     `group relative flex w-full cursor-pointer items-start gap-3 rounded-xl border-2 p-4 text-left transition-all ${
@@ -286,9 +290,11 @@ export default function PaymentPage() {
           {starting ? 'Processing…' : 'Continue'}
         </button>
 
-        {!paymentEnabled && (
-          <p className="mt-3 text-center text-xs text-slate-500">
-            No payment is required to start. You can add a payment method later from Billing.
+        {!paymentAvailable && (
+          <p className="mt-3 text-center text-xs text-slate-400">
+            <span className="font-medium text-slate-300">Pay Now is unavailable</span> because no payment
+            gateway is currently configured. Configure Stripe to enable paid checkout, or start your free
+            trial now and add a payment method later from Billing.
           </p>
         )}
 

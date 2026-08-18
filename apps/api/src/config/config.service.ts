@@ -150,7 +150,42 @@ export class ConfigService {
     return this.getOptionalEnv('STRIPE_WEBHOOK_SECRET');
   }
 
- 
+  // --- SSLCommerz (Bangladesh payment gateway) -------------------------------
+  get sslcommerzStoreId(): string {
+    return this.getOptionalEnv('SSLCOMMERZ_STORE_ID');
+  }
+
+  get sslcommerzStorePassword(): string {
+    return this.getOptionalEnv('SSLCOMMERZ_STORE_PASSWORD');
+  }
+
+  /** When true, SSLCommerz calls are routed to the production endpoints. */
+  get sslcommerzIsLive(): boolean {
+    return this.getOptionalEnv('SSLCOMMERZ_IS_LIVE') === 'true';
+  }
+
+  /**
+   * Fixed USD->BDT rate used to convert the backend-resolved USD plan price into
+   * the BDT amount SSLCommerz charges. Sandbox-only for now; keep in sync with
+   * the live FX rate before enabling production payments.
+   */
+  get sslcommerzUsdToBdtRate(): number {
+    const raw = this.getOptionalEnv('SSLCOMMERZ_USD_TO_BDT_RATE');
+    const parsed = Number.parseFloat(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 110;
+  }
+
+  /**
+   * SSLCommerz IPN callback URL. Defaults to the API's SSLCommerz webhook
+   * endpoint; override with a public tunnel (e.g. ngrok) for local testing.
+   */
+  get sslcommerzIpnUrl(): string {
+    return (
+      this.getOptionalEnv('SSLCOMMERZ_IPN_URL') ||
+      `${this.apiUrl}/api/billing/webhooks/sslcommerz`
+    );
+  }
+
   get smtpHost(): string {
     return this.getOptionalEnv('SMTP_HOST');
   }

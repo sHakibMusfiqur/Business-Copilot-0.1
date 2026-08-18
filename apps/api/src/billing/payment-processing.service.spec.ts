@@ -264,9 +264,57 @@ describe('PaymentProcessingService', () => {
         }),
       );
     });
+
+    it('uses provider.resolveAmount to derive the charged amount and currency', async () => {
+      mockPrisma.subscriptionPlan.findUnique.mockResolvedValue(makePlan());
+      mockPrisma.subscriptionPayment.findFirst.mockResolvedValue(null);
+      mockPrisma.subscriptionPayment.create.mockResolvedValue(
+        makePayment({ amount: 16390, currency: 'BDT' }),
+      );
+      (mockProvider as { resolveAmount?: jest.Mock }).resolveAmount = jest.fn(() => ({
+        amount: 16390,
+        currency: 'BDT',
+      }));
+      const resolveAmountMock = (mockProvider as unknown as { resolveAmount: jest.Mock }).resolveAmount;
+      mockProvider.createCheckoutSession.mockResolvedValue({
+        checkoutUrl: 'https://checkout.example/api.php',
+        sessionRef: 'cs_1',
+      });
+      mockPrisma.subscriptionPayment.update.mockResolvedValue(makePayment());
+
+      await service.createCheckout(orgId, userId, planId, BillingInterval.MONTHLY);
+
+      expect(resolveAmountMock).toHaveBeenCalledWith({ amount: 79, currency: 'USD' });
+      expect(mockPrisma.subscriptionPayment.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ amount: 16390, currency: 'BDT' }),
+      });
+      expect(mockProvider.createCheckoutSession).toHaveBeenCalledWith(
+        expect.objectContaining({ amount: 16390, currency: 'BDT' }),
+      );
+    });
   });
 
   describe('verifyPayment', () => {
+    it('forwards a provider valId and persists it for idempotent recovery', async () => {
+      mockPrisma.subscriptionPayment.findFirst.mockResolvedValue(makePayment());
+      mockProvider.verifyPayment.mockResolvedValue({
+        verified: false,
+        status: 'PENDING',
+        transactionRef: null,
+      });
+      mockPrisma.subscriptionPayment.update.mockResolvedValue(makePayment());
+
+      const result = await service.verifyPayment(orgId, userId, 'pay-1', { valId: 'val-9' });
+
+      expect(mockPrisma.subscriptionPayment.update).toHaveBeenCalledWith({
+        where: { id: 'pay-1' },
+        data: expect.objectContaining({ gatewayData: expect.objectContaining({ valId: 'val-9' }) }),
+      });
+      expect(mockProvider.verifyPayment).toHaveBeenCalledWith(
+        expect.objectContaining({ valId: 'val-9' }),
+      );
+      expect(result.payment.status).toBe('PENDING');
+    });
     it('returns immediately for an already-succeeded payment', async () => {
       mockPrisma.subscriptionPayment.findFirst.mockResolvedValue(makePayment({ status: 'SUCCEEDED' }));
       mockPrisma.subscription.findUnique.mockResolvedValue(null);

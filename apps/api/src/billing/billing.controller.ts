@@ -125,7 +125,7 @@ export class BillingController {
   @ApiForbiddenResponse({ description: 'User does not belong to an organization' })
   async verifyPayment(@CurrentUser() user: CurrentUserPayload, @Body() dto: VerifyPaymentDto) {
     const orgId = this.billingService.requireOrg(user.organizationId);
-    return this.paymentService.verifyPayment(orgId, user.id, dto.paymentId);
+    return this.paymentService.verifyPayment(orgId, user.id, dto.paymentId, dto.valId ? { valId: dto.valId } : undefined);
   }
 
   @Post('refund')

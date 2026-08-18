@@ -3,12 +3,14 @@ import { Injectable, NotFoundException, ForbiddenException, BadRequestException 
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 import { BillingInterval } from './dto/billing.dto';
+import { GatewayRegistry } from './gateways/gateway-registry';
 
 @Injectable()
 export class BillingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly gatewayRegistry: GatewayRegistry,
   ) {}
 
   async getPublicPlans() {
@@ -194,13 +196,16 @@ export class BillingService {
     const gateways = await this.prisma.paymentGateway.findMany({
       orderBy: { sortOrder: 'asc' },
     });
-    // Never expose gateway credentials (config JSON) to clients.
+    // Never expose gateway credentials (config JSON) to clients. `configured`
+    // is only a boolean availability hint (can the provider authenticate?),
+    // so the UI can explain why paid checkout is unavailable.
     return gateways.map((gateway) => ({
       id: gateway.id,
       code: gateway.code,
       name: gateway.name,
       isEnabled: gateway.isEnabled,
       sortOrder: gateway.sortOrder,
+      configured: this.gatewayRegistry.isGatewayConfigured(gateway),
     }));
   }
 

@@ -77,6 +77,20 @@ export class GatewayRegistry {
     return provider;
   }
 
+  /**
+   * Whether a gateway record has the credentials needed to process real
+   * payments. Non-throwing: a configured gateway is one whose provider reports
+   * it can authenticate (e.g. Stripe has a secret key). This exposes only a
+   * boolean availability hint to the UI — never any credential value.
+   */
+  isGatewayConfigured(record: PaymentGatewayRecord): boolean {
+    try {
+      return this.buildProvider(record).isConfigured();
+    } catch {
+      return false;
+    }
+  }
+
   private buildProvider(record: PaymentGatewayRecord): PaymentGateway {
     const config = (record.config ?? {}) as GatewayConfig;
     switch (record.code) {

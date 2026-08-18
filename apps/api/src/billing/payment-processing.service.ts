@@ -11,7 +11,7 @@ import type { SubscriptionPayment } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { GatewayRegistry } from './gateways/gateway-registry';
-import type { PaymentVerificationResult, WebhookHandlingResult } from './gateways/payment-gateway.interface';
+import type { PaymentVerificationResult, VerifyPaymentInput, WebhookHandlingResult } from './gateways/payment-gateway.interface';
 import { BillingInterval } from './dto/billing.dto';
 
 export interface CheckoutResult {
@@ -54,8 +54,16 @@ export class PaymentProcessingService {
     if (!plan.isActive) throw new BadRequestException('This plan is not available');
 
     const provider = await this.gatewayRegistry.getActiveProvider();
-    const amount = billingInterval === 'YEARLY' ? Number(plan.yearlyPrice ?? plan.price) : Number(plan.price);
-    const currency = plan.currency || 'USD';
+    let amount = billingInterval === 'YEARLY' ? Number(plan.yearlyPrice ?? plan.price) : Number(plan.price);
+    let currency = plan.currency || 'USD';
+
+    // Some gateways charge in a different currency than the plan's default (e.g.
+    // SSLCommerz converts the USD price to BDT). Resolve the exact charge
+    // server-side so the persisted payment, invoice and validation all match the
+    // amount the gateway will honor. The browser never supplies this value.
+    const charge = provider.resolveAmount?.({ amount, currency }) ?? { amount, currency };
+    amount = charge.amount;
+    currency = charge.currency;
 
     // Prevent duplicate checkouts: reuse an in-flight PENDING payment for the
     // same org + plan + interval instead of stacking new sessions.
@@ -102,6 +110,7 @@ export class PaymentProcessingService {
       billingInterval,
       successUrl,
       cancelUrl,
+      failUrl: cancelUrl,
       metadata: { paymentId: payment.id },
     });
 
@@ -147,6 +156,7 @@ export class PaymentProcessingService {
     organizationId: string,
     userId: string,
     paymentId: string,
+    redirect?: { valId?: string },
   ): Promise<VerifyResult> {
     const payment = await this.prisma.subscriptionPayment.findFirst({
       where: { id: paymentId, organizationId },
@@ -168,13 +178,24 @@ export class PaymentProcessingService {
     }
 
     const provider = await this.gatewayRegistry.getProviderByCode(gateway);
-    const verification = await provider.verifyPayment({
+    const verifyInput: VerifyPaymentInput = {
       sessionRef,
       paymentId: payment.id,
       organizationId,
       amount: Number(payment.amount),
       currency: payment.currency,
-    });
+    };
+    if (redirect?.valId) {
+      // Capture the gateway's val_id forwarded from the success redirect so the
+      // provider can run its server-side Order Validation. Persisted so a later
+      // IPN can recover it; safe to call on every verify (idempotent write).
+      await this.prisma.subscriptionPayment.update({
+        where: { id: payment.id },
+        data: { gatewayData: this.mergeGatewayData(payment.gatewayData, { valId: redirect.valId }) },
+      });
+      verifyInput.valId = redirect.valId;
+    }
+    const verification = await provider.verifyPayment(verifyInput);
 
     switch (verification.status) {
       case 'SUCCEEDED':

@@ -18,6 +18,7 @@ export interface CheckoutSessionInput {
   billingInterval: BillingInterval;
   successUrl: string;
   cancelUrl: string;
+  failUrl?: string;
   metadata?: Record<string, string>;
 }
 
@@ -33,6 +34,12 @@ export interface VerifyPaymentInput {
   organizationId: string;
   amount: number;
   currency: string;
+  /**
+   * Gateway-specific identifier needed for server-side verification (e.g.
+   * SSLCommerz's `val_id`, forwarded from the success-redirect). Optional; the
+   * provider reports the payment as PENDING when it is absent.
+   */
+  valId?: string;
 }
 
 export interface PaymentVerificationResult {
@@ -102,6 +109,13 @@ export interface PaymentGateway {
   readonly code: string;
   /** Whether the provider has the credentials/config needed to process payments. */
   isConfigured(): boolean;
+  /**
+   * Optionally compute the exact charge the gateway will honor. Defaults to the
+   * plan's own amount/currency when absent. E.g. SSLCommerz converts the USD
+   * plan price to BDT. Invoked by the orchestrator BEFORE the checkout session
+   * is created, so the persisted payment/invoice always match the gateway charge.
+   */
+  resolveAmount?(input: { amount: number; currency: string }): { amount: number; currency: string };
   createCheckoutSession(input: CheckoutSessionInput): Promise<CheckoutSessionResult>;
   verifyPayment(input: VerifyPaymentInput): Promise<PaymentVerificationResult>;
   handleWebhook(input: WebhookInput): Promise<WebhookHandlingResult>;
