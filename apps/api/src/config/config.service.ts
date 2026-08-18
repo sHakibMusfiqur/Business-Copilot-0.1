@@ -150,12 +150,41 @@ export class ConfigService {
     return this.getOptionalEnv('STRIPE_WEBHOOK_SECRET');
   }
 
-  /**
-   * Optional, comma-separated CORS origins (used mainly for production). An
-   * empty string yields an empty list. Each entry must pass URL validation in
-   * {@link validate}, so malformed entries fail loudly instead of silently
-   * widening the allow-list.
-   */
+ 
+  get smtpHost(): string {
+    return this.getOptionalEnv('SMTP_HOST');
+  }
+
+  get smtpPort(): number {
+    return this.getInt('SMTP_PORT', 587);
+  }
+
+  get smtpUser(): string {
+    return this.getOptionalEnv('SMTP_USER');
+  }
+
+  get smtpPass(): string {
+    return this.getOptionalEnv('SMTP_PASS');
+  }
+
+  get smtpFromEmail(): string {
+    return this.getOptionalEnv('SMTP_FROM_EMAIL');
+  }
+
+  get smtpFromName(): string {
+    return this.getOptionalEnv('SMTP_FROM_NAME') || 'Business Copilot';
+  }
+
+  get smtpSecure(): boolean {
+    return this.getOptionalEnv('SMTP_SECURE') === 'true';
+  }
+
+  /** True when a host and sender are configured so a real message can be sent. */
+  get hasSmtpConfig(): boolean {
+    return Boolean(this.smtpHost) && Boolean(this.smtpFromEmail);
+  }
+
+ 
   private getCorsOriginList(): string[] {
     const raw = this.getOptionalEnv('CORS_ORIGINS');
     if (!raw) return [];
@@ -165,24 +194,12 @@ export class ConfigService {
       .filter((entry) => entry.length > 0);
   }
 
-  /**
-   * True when a full set of Stripe credentials is present. An absent or empty
-   * key means Stripe is not configured and payments must gracefully fall back
-   * to the free trial instead of failing hard.
-   */
+  
   get hasStripeCredentials(): boolean {
     return Boolean(this.stripeSecretKey) && Boolean(this.stripeWebhookSecret);
   }
 
-  /**
-   * Validates the environment and throws a clear, secret-free error listing
-   * every problem. Required variables fail loudly; optional integrations
-   * (Redis, Stripe, AI, Swagger) degrade where appropriate. In production,
-   * weak or placeholder JWT secrets are rejected and localhost CORS origins are
-   * never applied.
-   *
-   * The error message contains only variable NAMES, never values.
-   */
+  
   validate(): void {
     const problems: string[] = [];
 
@@ -192,8 +209,7 @@ export class ConfigService {
       }
     }
 
-    // NODE_ENV must be a recognized value. Unknown values are caught here so a
-    // typo (e.g. NODE_ENV=stg) cannot silently run with unsafe assumptions.
+
     const nodeEnvRaw = this.getOptionalEnv('NODE_ENV');
     if (nodeEnvRaw && !VALID_NODE_ENV_VALUES.includes(nodeEnvRaw as NodeEnv)) {
       problems.push(
@@ -210,8 +226,7 @@ export class ConfigService {
       }
     }
 
-    // Public URLs are validated as http(s) when present. This keeps the CORS
-    // allow-list and generated links well-formed instead of silently misbehaving.
+   
     for (const key of ['API_URL', 'WEB_URL'] as const) {
       const value = this.getOptionalEnv(key);
       if (value && !HTTP_URL_PATTERN.test(value.trim())) {
@@ -220,7 +235,7 @@ export class ConfigService {
     }
 
     // JWT expiration values feed directly into jsonwebtoken; reject anything
-    // that jose/jsonwebtoken would reject at sign time to fail early.
+    // that jose/jsonwebtil early.
     for (const key of ['JWT_EXPIRES_IN', 'JWT_REFRESH_EXPIRES_IN'] as const) {
       const value = this.getOptionalEnv(key);
       if (value && !JWT_EXPIRY_PATTERN.test(value.trim())) {
@@ -246,6 +261,17 @@ export class ConfigService {
       problems.push(
         'STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET must both be set, or both be empty.',
       );
+    }
+
+    // SMTP is optional (mail gracefully degrades to a logged "not configured"
+    // state). When SMTP_PORT is present it must be a valid network port so a
+    // typo cannot silently change the transport to a wrong port.
+    const smtpPortRaw = this.getOptionalEnv('SMTP_PORT');
+    if (smtpPortRaw) {
+      const parsedSmtpPort = Number(smtpPortRaw);
+      if (!/^\d+$/.test(smtpPortRaw.trim()) || parsedSmtpPort < PORT_MIN || parsedSmtpPort > PORT_MAX) {
+        problems.push(`SMTP_PORT must be an integer between ${PORT_MIN} and ${PORT_MAX}.`);
+      }
     }
 
     // CORS entries (used in production) must be valid HTTP origins.

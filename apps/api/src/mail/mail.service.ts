@@ -3,6 +3,7 @@ import * as nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
 import type { SentMessageInfo } from 'nodemailer';
 
+import { ConfigService } from '../config/config.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import { renderEmailTemplate, type BrandEmailContext } from '../settings/email-template';
@@ -57,12 +58,17 @@ export class MailService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly settingsService: SettingsService,
+    private readonly config: ConfigService,
   ) {}
 
   /**
    * Resolves the organization's SMTP configuration from the `email` settings
    * namespace. The password is read directly from storage (never through the
    * sanitized settings API) so transactional mail can be sent.
+   *
+   * When the organization has no SMTP configured (e.g. the verification-code
+   * email at registration, before any organization exists), the platform-level
+   * SMTP from environment variables is used instead.
    */
   async getEmailConfig(orgId: string): Promise<EmailConfig> {
     const row = await this.prisma.organizationSettings.findUnique({
@@ -82,22 +88,27 @@ export class MailService {
         ? (email[key] as string).trim()
         : fallback;
 
-    const host = str('smtpHost', '');
-    const port = typeof email.smtpPort === 'number' ? email.smtpPort : 587;
-    const user = str('smtpUsername', '');
-    const pass = str('smtpPassword', '');
-    const fromEmail = str('fromEmail', '');
-    const fromName = str('fromName', '');
+    // A fully configured org-level SMTP always wins. Without one (new
+    // registrations, platform mail), fall back to the platform SMTP so the
+    // verification email can actually be delivered.
+    const useOrgSmtp = Boolean(str('smtpHost', '') && str('fromEmail', ''));
 
     return {
-      host,
-      port,
-      user,
-      pass,
-      fromEmail,
-      fromName,
-      useSSL: email.useSSL === true,
-      configured: Boolean(host && fromEmail),
+      host: useOrgSmtp ? str('smtpHost', '') : this.config.smtpHost,
+      port: useOrgSmtp
+        ? typeof email.smtpPort === 'number'
+          ? email.smtpPort
+          : 587
+        : this.config.smtpPort,
+      user: useOrgSmtp ? str('smtpUsername', '') : this.config.smtpUser,
+      pass: useOrgSmtp ? str('smtpPassword', '') : this.config.smtpPass,
+      fromEmail: useOrgSmtp ? str('fromEmail', '') : this.config.smtpFromEmail,
+      fromName: useOrgSmtp ? str('fromName', '') : this.config.smtpFromName,
+      useSSL: useOrgSmtp ? email.useSSL === true : this.config.smtpSecure,
+      configured: Boolean(
+        (useOrgSmtp ? str('smtpHost', '') : this.config.smtpHost) &&
+          (useOrgSmtp ? str('fromEmail', '') : this.config.smtpFromEmail),
+      ),
     };
   }
 
