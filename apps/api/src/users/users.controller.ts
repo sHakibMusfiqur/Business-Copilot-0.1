@@ -15,6 +15,7 @@ import {
 import {
   ApiTags,
   ApiBearerAuth,
+  ApiOperation,
   ApiOkResponse,
   ApiCreatedResponse,
   ApiUnauthorizedResponse,
@@ -53,6 +54,7 @@ export class UsersController {
   @UseGuards(PermissionGuard)
   @Permissions(['users.read'])
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'List users in the organization' })
   @ApiOkResponse({ description: 'Paginated list of users' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
@@ -68,6 +70,7 @@ export class UsersController {
   @UseGuards(PermissionGuard)
   @Permissions(['users.read'])
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'List assignable users in the organization' })
   @ApiOkResponse({ description: 'All assignable users in organization' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
@@ -80,6 +83,7 @@ export class UsersController {
   @UseGuards(PermissionGuard)
   @Permissions(['users.read'])
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Get a user by ID' })
   @ApiOkResponse({ description: 'User details' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
@@ -97,6 +101,7 @@ export class UsersController {
   @Permissions(['users.create'])
   @HttpCode(HttpStatus.CREATED)
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Create a user in the organization' })
   @ApiCreatedResponse({ description: 'User created successfully' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
@@ -113,6 +118,7 @@ export class UsersController {
   @UseGuards(PermissionGuard)
   @Permissions(['users.update'])
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Update a user in the organization' })
   @ApiOkResponse({ description: 'User updated successfully' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
@@ -131,6 +137,7 @@ export class UsersController {
   @Permissions(['users.delete'])
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Soft delete a user' })
   @ApiOkResponse({ description: 'User deleted successfully' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
@@ -148,6 +155,7 @@ export class UsersController {
   @UseGuards(PermissionGuard)
   @Permissions(['users.update'])
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Activate or deactivate a user' })
   @ApiOkResponse({ description: 'User status updated successfully' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })

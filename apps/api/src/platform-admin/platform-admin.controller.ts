@@ -209,7 +209,7 @@ export class PlatformAdminController {
   @Throttle({ default: THROTTLE.standard })
   @Get('organizations/:id/statistics')
   @ApiOkResponse({ description: 'Organization statistics' })
-  async getOrganizationStatistics(@Param('id') id: string) {
+  async getOrganizationStatistics(@Param('id', ParseCuidPipe) id: string) {
     return this.adminService.getOrganizationStatistics(id);
   }
 

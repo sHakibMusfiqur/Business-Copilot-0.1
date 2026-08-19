@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import * as argon2 from 'argon2';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { syncSystemRolesForOrg } from '../rbac/permission-catalog';
 
 import { CreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
@@ -399,20 +400,11 @@ export class PlatformAdminService {
         },
       });
 
-      let ownerRole = await tx.role.findFirst({
-        where: { organizationId: organization.id, name: 'Owner', isSystem: true },
-      });
-
-      if (!ownerRole) {
-        ownerRole = await tx.role.create({
-          data: {
-            name: 'Owner',
-            description: 'Organization owner with full access',
-            isSystem: true,
-            organizationId: organization.id,
-          },
-        });
-      }
+      // Create the Owner + Admin system roles AND wire the full permission
+      // catalog onto them (same helper as the regular onboarding flow). The
+      // Owner role must carry every permission or the platform-created org's
+      // owner would be locked out of the RBAC-managed features.
+      const { ownerRole } = await syncSystemRolesForOrg(tx, organization.id);
 
       await tx.userRoleAssignment.create({
         data: { userId: user.id, roleId: ownerRole.id },

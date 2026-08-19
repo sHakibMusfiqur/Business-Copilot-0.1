@@ -12,7 +12,17 @@ import {
   HttpStatus,
   ForbiddenException,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiOkResponse,
+  ApiCreatedResponse,
+  ApiUnauthorizedResponse,
+  ApiForbiddenResponse,
+  ApiNotFoundResponse,
+  ApiBadRequestResponse,
+} from '@nestjs/swagger';
 
 import { CurrentUser, type CurrentUserPayload } from '../common/decorators/current-user.decorator';
 import { ParseCuidPipe } from '../common/pipes/parse-cuid.pipe';
@@ -43,6 +53,10 @@ export class ProductsController {
   @UseGuards(PermissionGuard)
   @Permissions(['products.read'])
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'List products for the organization' })
+  @ApiOkResponse({ description: 'Paginated list of products' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
   async findAll(
     @CurrentUser() user: CurrentUserPayload,
     @Query() query: QueryProductsDto,
@@ -55,6 +69,11 @@ export class ProductsController {
   @UseGuards(PermissionGuard)
   @Permissions(['products.read'])
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Get a product by ID' })
+  @ApiOkResponse({ description: 'Product details' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  @ApiNotFoundResponse({ description: 'Product not found' })
   async findById(
     @CurrentUser() user: CurrentUserPayload,
     @Param('id', ParseCuidPipe) id: string,
@@ -68,6 +87,11 @@ export class ProductsController {
   @Permissions(['products.create'])
   @HttpCode(HttpStatus.CREATED)
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Create a new product' })
+  @ApiCreatedResponse({ description: 'Product created successfully' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  @ApiBadRequestResponse({ description: 'Validation failed' })
   async create(
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: CreateProductDto,
@@ -80,6 +104,11 @@ export class ProductsController {
   @UseGuards(PermissionGuard)
   @Permissions(['products.update'])
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Update a product' })
+  @ApiOkResponse({ description: 'Product updated successfully' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  @ApiNotFoundResponse({ description: 'Product not found' })
   async update(
     @CurrentUser() user: CurrentUserPayload,
     @Param('id', ParseCuidPipe) id: string,
@@ -94,6 +123,11 @@ export class ProductsController {
   @Permissions(['products.delete'])
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Soft delete a product' })
+  @ApiOkResponse({ description: 'Product deleted successfully' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  @ApiNotFoundResponse({ description: 'Product not found' })
   async remove(
     @CurrentUser() user: CurrentUserPayload,
     @Param('id', ParseCuidPipe) id: string,
@@ -106,6 +140,11 @@ export class ProductsController {
   @UseGuards(PermissionGuard)
   @Permissions(['products.update'])
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Activate or deactivate a product' })
+  @ApiOkResponse({ description: 'Product status updated successfully' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  @ApiNotFoundResponse({ description: 'Product not found' })
   async updateStatus(
     @CurrentUser() user: CurrentUserPayload,
     @Param('id', ParseCuidPipe) id: string,

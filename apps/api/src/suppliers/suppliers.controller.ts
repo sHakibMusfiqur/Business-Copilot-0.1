@@ -12,7 +12,17 @@ import {
   HttpStatus,
   ForbiddenException,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiOkResponse,
+  ApiCreatedResponse,
+  ApiUnauthorizedResponse,
+  ApiForbiddenResponse,
+  ApiNotFoundResponse,
+  ApiBadRequestResponse,
+} from '@nestjs/swagger';
 
 import { CurrentUser, type CurrentUserPayload } from '../common/decorators/current-user.decorator';
 import { ParseCuidPipe } from '../common/pipes/parse-cuid.pipe';
@@ -43,6 +53,10 @@ export class SuppliersController {
   @UseGuards(PermissionGuard)
   @Permissions(['suppliers.read'])
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'List suppliers for the organization' })
+  @ApiOkResponse({ description: 'Paginated list of suppliers' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
   async findAll(
     @CurrentUser() user: CurrentUserPayload,
     @Query() query: QuerySuppliersDto,
@@ -55,6 +69,11 @@ export class SuppliersController {
   @UseGuards(PermissionGuard)
   @Permissions(['suppliers.read'])
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Get a supplier by ID' })
+  @ApiOkResponse({ description: 'Supplier details' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  @ApiNotFoundResponse({ description: 'Supplier not found' })
   async findById(
     @CurrentUser() user: CurrentUserPayload,
     @Param('id', ParseCuidPipe) id: string,
@@ -68,6 +87,11 @@ export class SuppliersController {
   @Permissions(['suppliers.create'])
   @HttpCode(HttpStatus.CREATED)
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Create a new supplier' })
+  @ApiCreatedResponse({ description: 'Supplier created successfully' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  @ApiBadRequestResponse({ description: 'Validation failed' })
   async create(
     @CurrentUser() user: CurrentUserPayload,
     @Body() dto: CreateSupplierDto,
@@ -80,6 +104,11 @@ export class SuppliersController {
   @UseGuards(PermissionGuard)
   @Permissions(['suppliers.update'])
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Update a supplier' })
+  @ApiOkResponse({ description: 'Supplier updated successfully' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  @ApiNotFoundResponse({ description: 'Supplier not found' })
   async update(
     @CurrentUser() user: CurrentUserPayload,
     @Param('id', ParseCuidPipe) id: string,
@@ -94,6 +123,11 @@ export class SuppliersController {
   @Permissions(['suppliers.delete'])
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Soft delete a supplier' })
+  @ApiOkResponse({ description: 'Supplier deleted successfully' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  @ApiNotFoundResponse({ description: 'Supplier not found' })
   async remove(
     @CurrentUser() user: CurrentUserPayload,
     @Param('id', ParseCuidPipe) id: string,
@@ -106,6 +140,11 @@ export class SuppliersController {
   @UseGuards(PermissionGuard)
   @Permissions(['suppliers.update'])
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Activate or deactivate a supplier' })
+  @ApiOkResponse({ description: 'Supplier status updated successfully' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiForbiddenResponse({ description: 'Insufficient permissions' })
+  @ApiNotFoundResponse({ description: 'Supplier not found' })
   async updateStatus(
     @CurrentUser() user: CurrentUserPayload,
     @Param('id', ParseCuidPipe) id: string,

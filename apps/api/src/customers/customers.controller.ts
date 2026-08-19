@@ -15,6 +15,7 @@ import {
 import {
   ApiTags,
   ApiBearerAuth,
+  ApiOperation,
   ApiOkResponse,
   ApiCreatedResponse,
   ApiUnauthorizedResponse,
@@ -53,6 +54,7 @@ export class CustomersController {
   @UseGuards(PermissionGuard)
   @Permissions(['customers.read'])
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'List customers for the organization' })
   @ApiOkResponse({ description: 'Paginated list of customers' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
@@ -68,6 +70,7 @@ export class CustomersController {
   @UseGuards(PermissionGuard)
   @Permissions(['customers.read'])
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Get a customer by ID' })
   @ApiOkResponse({ description: 'Customer details' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
@@ -85,6 +88,7 @@ export class CustomersController {
   @Permissions(['customers.create'])
   @HttpCode(HttpStatus.CREATED)
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Create a new customer' })
   @ApiCreatedResponse({ description: 'Customer created successfully' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
@@ -101,6 +105,7 @@ export class CustomersController {
   @UseGuards(PermissionGuard)
   @Permissions(['customers.update'])
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Update a customer' })
   @ApiOkResponse({ description: 'Customer updated successfully' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
@@ -119,6 +124,7 @@ export class CustomersController {
   @Permissions(['customers.delete'])
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Soft delete a customer' })
   @ApiOkResponse({ description: 'Customer deleted successfully' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
@@ -135,6 +141,7 @@ export class CustomersController {
   @UseGuards(PermissionGuard)
   @Permissions(['customers.update'])
   @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Activate or deactivate a customer' })
   @ApiOkResponse({ description: 'Customer status updated successfully' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })

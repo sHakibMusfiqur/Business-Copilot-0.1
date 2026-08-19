@@ -13,6 +13,7 @@ import type { Request, Response } from 'express';
 import { REQUEST_ID_HEADER, resolveRequestId } from '../observability/request-id';
 import { redactCookieHeader, redactString, redactUrlForLog } from '../observability/redact';
 import { ConfigService } from '../../config/config.service';
+import { PrismaClientKnownRequestError } from '@prisma/client/runtime/library';
 
 interface ErrorResponse {
   statusCode: number;
@@ -49,6 +50,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
         const resp = exResponse as Record<string, unknown>;
         message = (resp.message as string | string[]) ?? exception.message;
         error = (resp.error as string) ?? exception.name;
+      }
+    } else if (exception instanceof PrismaClientKnownRequestError) {
+      // Prisma errors are implementation details; map the two common classes to
+      // user-meaningful status codes without ever leaking driver internals.
+      if (exception.code === 'P2002') {
+        statusCode = HttpStatus.CONFLICT;
+        message = 'A record with the same unique value already exists';
+        error = 'Conflict';
+      } else if (exception.code === 'P2025') {
+        statusCode = HttpStatus.NOT_FOUND;
+        message = 'Record not found';
+        error = 'Not Found';
       }
     } else if (exception instanceof Error) {
       error = exception.name;

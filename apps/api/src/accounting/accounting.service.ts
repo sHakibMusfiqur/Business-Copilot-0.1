@@ -955,8 +955,8 @@ export class AccountingService {
     });
     if (existing) return existing;
 
-    const purchase = await client.purchaseOrder.findUnique({
-      where: { id: purchaseId },
+    const purchase = await client.purchaseOrder.findFirst({
+      where: { id: purchaseId, organizationId: orgId },
       select: { orderNumber: true, total: true, supplierId: true, orderDate: true },
     });
 
@@ -994,8 +994,8 @@ export class AccountingService {
   ) {
     const client = this.db(tx);
 
-    const purchase = await client.purchaseOrder.findUnique({
-      where: { id: purchaseId },
+    const purchase = await client.purchaseOrder.findFirst({
+      where: { id: purchaseId, organizationId: orgId },
       select: { orderNumber: true, total: true },
     });
 
@@ -1071,8 +1071,8 @@ export class AccountingService {
     });
     if (existing) return existing;
 
-    const sale = await client.salesOrder.findUnique({
-      where: { id: saleId },
+    const sale = await client.salesOrder.findFirst({
+      where: { id: saleId, organizationId: orgId },
       select: { orderNumber: true, total: true, customerId: true, orderDate: true },
     });
 
@@ -1110,8 +1110,8 @@ export class AccountingService {
   ) {
     const client = this.db(tx);
 
-    const sale = await client.salesOrder.findUnique({
-      where: { id: saleId },
+    const sale = await client.salesOrder.findFirst({
+      where: { id: saleId, organizationId: orgId },
       select: { orderNumber: true, total: true, orderDate: true },
     });
 
@@ -1181,8 +1181,8 @@ export class AccountingService {
   ) {
     const client = this.db(tx);
 
-    const sale = await client.salesOrder.findUnique({
-      where: { id: saleId },
+    const sale = await client.salesOrder.findFirst({
+      where: { id: saleId, organizationId: orgId },
       select: { orderNumber: true },
     });
 
