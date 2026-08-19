@@ -2,9 +2,17 @@ node_modules/
 dist/
 .next/
 *.tsbuildinfo
+# Environment files (may contain secrets). .env.example stays tracked as a template.
 .env
+.env.*
+!.env.example
 .env.local
 .env.*.local
+.env.production
+.env.staging
+.env.development
+apps/api/.env
+apps/web/.env
 *.log
 coverage/
 .turbo/
