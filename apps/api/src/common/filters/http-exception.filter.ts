@@ -64,13 +64,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
         error = 'Not Found';
       }
     } else if (exception instanceof Error) {
-      error = exception.name;
-      // Never leak internal error messages to clients in production; the full
-      // message and stack are still recorded by the logger below.
-      message =
-        process.env.NODE_ENV === 'production'
-          ? 'Internal server error'
-          : exception.message;
+ 
+      if (process.env.NODE_ENV === 'production') {
+        message = 'Internal server error';
+        error = 'Internal Server Error';
+      } else {
+        message = exception.message;
+        error = exception.name;
+      }
     }
 
     const errorResponse: ErrorResponse = {
@@ -108,9 +109,24 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const origin = request.headers.origin ?? '(none)';
     const cookies = redactCookieHeader(request.headers.cookie);
     const diagnosticMessage = redactString(JSON.stringify(message), diagnosticSecrets);
+
+    // Capture the raw underlying cause for server-side debugging without ever
+    // exposing it to clients. For non-HTTP errors the client only sees the
+    // generic `message` above, but the log keeps the specific cause text (e.g.
+    // the exact DB constraint) so it can still be diagnosed. HttpExceptions use
+    // their already-meaningful message, so no separate detail is needed.
+    const rawDetail =
+      exception instanceof Error && !(exception instanceof HttpException)
+        ? exception.message
+        : undefined;
+    const diagnosticDetail =
+      rawDetail === undefined
+        ? ''
+        : ` detail=${redactString(JSON.stringify(rawDetail), diagnosticSecrets)}`;
+
     const diagnostic = `id=${requestId} method=${request.method} path=${redactUrlForLog(
       request.url,
-    )} status=${statusCode} origin=${origin} cookies=${cookies} message=${diagnosticMessage}`;
+    )} status=${statusCode} origin=${origin} cookies=${cookies} message=${diagnosticMessage}${diagnosticDetail}`;
 
     if (exception instanceof Error) {
       const redactedStack = redactString(exception.stack ?? '', diagnosticSecrets);

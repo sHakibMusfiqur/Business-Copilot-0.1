@@ -1,4 +1,5 @@
 import { ArgumentsHost, HttpStatus, Logger, NotFoundException } from '@nestjs/common';
+import { PrismaClientValidationError } from '@prisma/client/runtime/library';
 
 import { AllExceptionsFilter } from './http-exception.filter';
 
@@ -64,7 +65,7 @@ describe('AllExceptionsFilter', () => {
     expect((res.json as jest.Mock).mock.calls[0][0]).toEqual(
       expect.objectContaining({
         statusCode: 500,
-        error: 'Error',
+        error: 'Internal Server Error',
         message: 'Internal server error',
       }),
     );
@@ -103,5 +104,67 @@ describe('AllExceptionsFilter', () => {
 
     expect(logged).not.toContain('secretquery123');
     expect(JSON.stringify(res.body)).not.toContain('secretquery123');
+  });
+
+  it('hides driver/internal class names from clients in production but logs the raw cause', () => {
+    process.env.NODE_ENV = 'production';
+    const res = makeResponse();
+    const req = { method: 'POST', url: '/api/orders', headers: {}, requestId: 'req-500' };
+    const loggerSpy = jest.spyOn(Logger.prototype, 'error');
+
+    // A Prisma error that is not a KnownRequestError (e.g. validation) must not
+    // reveal the driver class name or internal constraint details to clients.
+    const internal = new PrismaClientValidationError(
+      'Prisma validation: where is required (idx_orders_org)',
+      { clientVersion: '6.19.3' },
+    );
+    filter.catch(internal, {
+      switchToHttp: () => ({ getRequest: () => req, getResponse: () => res }),
+    } as unknown as ArgumentsHost);
+
+    const logged = loggerSpy.mock.calls.map((c) => String(c[0])).join('\n');
+    const loggedStack = loggerSpy.mock.calls
+      .map((c) => String(c[1] ?? ''))
+      .join('\n');
+    loggerSpy.mockRestore();
+
+    const body = res.body as Record<string, unknown>;
+    expect(body).toMatchObject({
+      statusCode: 500,
+      error: 'Internal Server Error',
+      message: 'Internal server error',
+    });
+    expect(JSON.stringify(body)).not.toContain('PrismaClientValidationError');
+    expect(JSON.stringify(body)).not.toContain('idx_orders_org');
+    expect(body.stack).toBeUndefined();
+    // The raw cause is still written to the server-side log for debugging.
+    expect(logged).toContain('idx_orders_org');
+    expect(loggedStack).toContain('PrismaClientValidationError');
+  });
+
+  it('hides a generic internal error message/name in production while logging the detail', () => {
+    process.env.NODE_ENV = 'production';
+    const res = makeResponse();
+    const req = { method: 'GET', url: '/api/accounts', headers: {}, requestId: 'req-502' };
+    const loggerSpy = jest.spyOn(Logger.prototype, 'error');
+
+    const internal = new Error(
+      'ECONNREFUSED postgres:///mydb?host=10.0.0.7:5432 orders JOIN inventory',
+    );
+    filter.catch(internal, {
+      switchToHttp: () => ({ getRequest: () => req, getResponse: () => res }),
+    } as unknown as ArgumentsHost);
+
+    const logged = loggerSpy.mock.calls.map((c) => String(c[0])).join('\n');
+    loggerSpy.mockRestore();
+
+    const body = res.body as Record<string, unknown>;
+    // Client gets the generic phrase, not the connection internals.
+    expect(body).toMatchObject({ statusCode: 500, message: 'Internal server error' });
+    expect(JSON.stringify(body)).not.toContain('ECONNREFUSED');
+    expect(JSON.stringify(body)).not.toContain('10.0.0.7');
+    expect(body.stack).toBeUndefined();
+    // The raw detail is captured server-side.
+    expect(logged).toContain('ECONNREFUSED');
   });
 });
