@@ -1211,7 +1211,7 @@ export class AccountingService {
     const productIds = items.map((i) => i.productId).filter(Boolean) as string[];
     const products = productIds.length > 0
       ? await client.product.findMany({
-          where: { id: { in: productIds } },
+          where: { id: { in: productIds }, organizationId: orgId },
           select: { id: true, costPrice: true },
         })
       : [];

@@ -159,7 +159,7 @@ describe('PurchaseService receive (atomic status gate + atomic increment)', () =
     await service.receive(ORG_ID, USER_ID, PURCHASE_ID);
 
     expect(inventoryCreate).toHaveBeenCalledWith({
-      data: { productId: PRODUCT_ID, quantity: 5 },
+      data: { organizationId: ORG_ID, productId: PRODUCT_ID, quantity: 5 },
     });
     expect(inventoryTransactionCreate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -181,7 +181,7 @@ describe('PurchaseService receive (atomic status gate + atomic increment)', () =
     } catch { /* left for scope assertion below */ }
 
     expect(inventoryCreate).toHaveBeenCalledWith({
-      data: { productId: PRODUCT_ID, quantity: 5 },
+      data: { organizationId: ORG_ID, productId: PRODUCT_ID, quantity: 5 },
     });
   });
 

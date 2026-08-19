@@ -395,6 +395,7 @@ export class PurchaseService {
         } else {
           await tx.inventory.create({
             data: {
+              organizationId: orgId,
               productId: item.productId,
               quantity: receivedQuantity,
             },

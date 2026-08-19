@@ -239,6 +239,22 @@ export class SslcommerzProvider implements PaymentGateway {
       };
     }
 
+   
+    const gatewayTranId = String(validated.tran_id ?? '');
+    if (tranId && gatewayTranId && gatewayTranId !== tranId) {
+      this.logger.warn(
+        `SSLCommerz IPN transaction mismatch: val_id belongs to ${gatewayTranId}, claimed ${tranId}`,
+      );
+      return {
+        handled: true,
+        eventType: 'ipn.transaction_mismatch',
+        status: 'FAILED',
+        sessionRef: tranId || undefined,
+        metadata: { eventId },
+        raw: { valId, transactionStatus: validated.transaction_status, amount: validated.amount, currency: validated.currency, tranId: gatewayTranId },
+      };
+    }
+
     if (this.isSuccessStatus(validated)) {
       return {
         handled: true,
@@ -261,11 +277,7 @@ export class SslcommerzProvider implements PaymentGateway {
     return { handled: false, eventType: 'ipn.payment_pending', status: 'PENDING', sessionRef: tranId || undefined, metadata: { eventId }, raw: { valId, transactionStatus: validated.transaction_status } };
   }
 
-  /**
-   * Refunds are intentionally not yet wired to the SSLCommerz refund API. The
-   * provider declines (refunded: false) so the orchestrator returns a clean 400
-   * instead of pretending money was returned. Safe by construction.
-   */
+  
   async refundPayment(_input: RefundPaymentInput): Promise<RefundPaymentResult> {
     this.logger.warn('SSLCommerz refund is not yet supported; declining without contacting the gateway');
     return { refunded: false, refundRef: null, raw: { reason: 'refund-not-supported' } };

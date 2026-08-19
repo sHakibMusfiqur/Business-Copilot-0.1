@@ -131,7 +131,7 @@ describe('InventoryService (concurrency-safe stock adjustments)', () => {
 
       expect(inventoryUpdateMany).not.toHaveBeenCalled();
       expect(inventoryCreate).toHaveBeenCalledWith({
-        data: { productId: PRODUCT_ID, quantity: 5 },
+        data: { organizationId: ORG_ID, productId: PRODUCT_ID, quantity: 5 },
       });
       expect(result.previousQuantity).toBe(0);
       expect(result.newQuantity).toBe(5);
@@ -158,7 +158,7 @@ describe('InventoryService (concurrency-safe stock adjustments)', () => {
       const result = await service.adjust(ORG_ID, USER_ID, adjustDto(100));
 
       expect(inventoryCreate).toHaveBeenCalledWith({
-        data: { productId: PRODUCT_ID, quantity: 100 },
+        data: { organizationId: ORG_ID, productId: PRODUCT_ID, quantity: 100 },
       });
       expect(result.previousQuantity).toBe(0);
       expect(result.newQuantity).toBe(100);

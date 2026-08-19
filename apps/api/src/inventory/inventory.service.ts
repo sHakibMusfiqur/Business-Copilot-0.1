@@ -176,7 +176,7 @@ export class InventoryService {
             previousQuantity = 0;
             newQuantity = dto.quantity;
             await tx.inventory.create({
-              data: { productId: product.id, quantity: newQuantity },
+              data: { organizationId: orgId, productId: product.id, quantity: newQuantity },
             });
           }
           break;
@@ -223,7 +223,7 @@ export class InventoryService {
             });
           } else {
             await tx.inventory.create({
-              data: { productId: product.id, quantity: newQuantity },
+              data: { organizationId: orgId, productId: product.id, quantity: newQuantity },
             });
           }
           break;

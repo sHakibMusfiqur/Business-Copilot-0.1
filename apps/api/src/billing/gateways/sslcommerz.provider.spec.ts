@@ -349,6 +349,27 @@ describe('SslcommerzProvider', () => {
       expect(result.handled).toBe(false);
       expect(result.status).toBe('PENDING');
     });
+
+    it('rejects an IPN whose validated transaction belongs to a different session (val_id recycling)', async () => {
+     
+      mockFetch(() => ({
+        status: 'VALID',
+        transaction_status: 'VALID',
+        amount: '100.00',
+        currency: 'BDT',
+        bank_tran_id: 'bank-ref-other',
+        tran_id: 'pay-recycled', // the cheap transaction's real session id
+      }));
+      const result = await makeProvider().handleWebhook({
+        gatewayCode: 'sslcommerz',
+        // IPN claims val_id for the cheap transaction but tran_id = the expensive payment.
+        rawBody: ipn({ amount: '100.00' }),
+        headers: {},
+      });
+      expect(result.handled).toBe(true);
+      expect(result.status).toBe('FAILED');
+      expect(result.eventType).toBe('ipn.transaction_mismatch');
+    });
   });
 
   describe('refundPayment', () => {
