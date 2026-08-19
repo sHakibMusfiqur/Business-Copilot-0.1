@@ -156,6 +156,21 @@ export class BillingController {
     if (body !== undefined) {
       return Buffer.isBuffer(body) ? body.toString('utf8') : body;
     }
+    // No raw-body capture (should not happen with `rawBody: true`). Fall back in a
+    // content-type-aware way: the SSLCommerz webhook always expects a URL-encoded
+    // query string (parsed by URLSearchParams), so reconstruct one from the parsed
+    // body instead of JSON-stringifying it (which URLSearchParams could not parse
+    // and would cause the IPN to be silently dropped).
+    const contentType = String(req.headers['content-type'] ?? '').toLowerCase();
+    if (contentType.includes('application/x-www-form-urlencoded')) {
+      const params = new URLSearchParams();
+      for (const [key, value] of Object.entries((req.body ?? {}) as Record<string, unknown>)) {
+        if (value !== undefined && value !== null) {
+          params.append(key, String(value));
+        }
+      }
+      return params.toString();
+    }
     return JSON.stringify(req.body ?? {});
   }
 }

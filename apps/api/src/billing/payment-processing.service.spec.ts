@@ -558,6 +558,30 @@ describe('PaymentProcessingService', () => {
       expect(mockAuditService.record).not.toHaveBeenCalled();
     });
 
+    it('dedupes a duplicate SSLCommerz IPN (same val_id:status event id)', async () => {
+      // First delivery succeeded, marking the payment with the processed event.
+      mockProvider.handleWebhook.mockResolvedValue({
+        handled: true,
+        eventType: 'ipn.payment_success',
+        status: 'SUCCEEDED',
+        sessionRef: 'pay-1',
+        transactionRef: 'bank-ref-9',
+        metadata: { eventId: 'val-123:VALID' },
+        raw: { valId: 'val-123' },
+      });
+      mockPrisma.subscriptionPayment.findFirst.mockResolvedValue(
+        makePayment({ gatewayData: { processedEvents: ['val-123:VALID'] } }),
+      );
+
+      const result = await service.handleWebhook('sslcommerz', 'status=VALID&val_id=val-123&tran_id=pay-1', {});
+
+      expect(result).toEqual({ received: true, handled: true, eventType: 'ipn.payment_success', duplicate: true });
+      // No duplicate subscription activation, invoice, or audit on re-delivery.
+      expect(mockPrisma.subscription.upsert).not.toHaveBeenCalled();
+      expect(mockPrisma.subscriptionInvoice.create).not.toHaveBeenCalled();
+      expect(mockAuditService.record).not.toHaveBeenCalled();
+    });
+
     it('acknowledges but ignores unhandled events', async () => {
       mockProvider.handleWebhook.mockResolvedValue({
         handled: false,

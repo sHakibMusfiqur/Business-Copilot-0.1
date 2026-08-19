@@ -292,6 +292,43 @@ describe('SslcommerzProvider', () => {
       expect(result.status).toBe('FAILED');
     });
 
+    it('marks an IPN FAILED when validation currency differs', async () => {
+      mockFetch(() => ({ status: 'VALID', transaction_status: 'VALID', amount: '8690.00', currency: 'USD' }));
+      const result = await makeProvider().handleWebhook({
+        gatewayCode: 'sslcommerz',
+        rawBody: ipn(),
+        headers: {},
+      });
+      expect(result.handled).toBe(true);
+      expect(result.status).toBe('FAILED');
+    });
+
+    it('extracts status, val_id, tran_id, amount and currency from the raw IPN', async () => {
+      const calls = mockFetch(() => ({
+        status: 'VALID',
+        transaction_status: 'VALID',
+        amount: '8690.00',
+        currency: 'BDT',
+        bank_tran_id: 'bank-ref-9',
+      }));
+      const provider = makeProvider();
+      const result = await provider.handleWebhook({
+        gatewayCode: 'sslcommerz',
+        // Mirrors the realistic SSLCommerz form-urlencoded IPN body.
+        rawBody: ipn({ amount: '8690.00' }),
+        headers: {},
+      });
+
+      // status + val_id drive the dedupe event id, tran_id becomes the session
+      // reference, and amount/currency are cross-checked against the validation.
+      expect(result.metadata?.eventId).toBe('val-123:VALID');
+      expect(result.sessionRef).toBe('pay-123');
+      expect(result.status).toBe('SUCCEEDED');
+      // Validation API received the extracted val_id.
+      const body = new URLSearchParams(calls[0].body);
+      expect(body.get('val_id')).toBe('val-123');
+    });
+
     it('ignores an IPN missing val_id', async () => {
       mockFetch(() => ({}));
       const result = await makeProvider().handleWebhook({
