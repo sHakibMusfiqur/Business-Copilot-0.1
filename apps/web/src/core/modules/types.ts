@@ -32,6 +32,8 @@ export interface ModuleManifest {
   category: ModuleCategory;
   route: string;
   permissions: string[];
+
+  navDisabled?: boolean;
   capabilities: CapabilityKey[];
   settings?: ModuleSettings;
   status: ModuleStatus;

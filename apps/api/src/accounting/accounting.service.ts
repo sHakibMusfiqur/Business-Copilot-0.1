@@ -919,7 +919,10 @@ export class AccountingService {
     const totalExpenses = Math.round(Number(expenseLines._sum.debit ?? 0) * 100) / 100;
     const cashBalance = cashLines.reduce((acc, l) => acc + Number(l.debit) - Number(l.credit), 0);
 
+    const monthlySeries = await this.getMonthlySeries(orgId);
+
     return {
+      monthlySeries,
       totalAccounts: accounts.length,
       totalAccountsByType: {
         ASSET: accounts.filter((a) => a.type === 'ASSET').length,
@@ -939,6 +942,68 @@ export class AccountingService {
       totalExpenses,
       cashBalance: Math.round(cashBalance * 100) / 100,
     };
+  }
+
+  /**
+   * Real monthly revenue/expense series for the last 12 months, derived from
+   * posted journal entry lines. Used to render the accounting trend chart.
+   */
+  private async getMonthlySeries(orgId: string): Promise<{
+    labels: string[];
+    revenue: number[];
+    expenses: number[];
+  }> {
+    const startAt = new Date();
+    startAt.setDate(1);
+    startAt.setMonth(startAt.getMonth() - 11);
+    startAt.setHours(0, 0, 0, 0);
+
+    try {
+      const rows = await this.prisma.$queryRaw<
+        Array<{ ym: string; revenue: number; expenses: number }>
+      >`
+        SELECT to_char(je."date", 'YYYY-MM') AS ym,
+               COALESCE(SUM(CASE WHEN a.type = 'REVENUE' THEN jel.credit END), 0)::float8 AS revenue,
+               COALESCE(SUM(CASE WHEN a.type = 'EXPENSE' THEN jel.debit END), 0)::float8 AS expenses
+        FROM "JournalEntryLine" jel
+        INNER JOIN "JournalEntry" je ON je.id = jel."journalEntryId"
+        INNER JOIN "Account" a ON a.id = jel."accountId"
+        WHERE je."organizationId" = ${orgId}
+          AND je.status = 'POSTED'
+          AND je."deletedAt" IS NULL
+          AND a.type IN ('REVENUE', 'EXPENSE')
+          AND je."date" >= ${startAt}
+        GROUP BY ym
+        ORDER BY ym
+      `;
+
+      const byMonth = new Map<string, { revenue: number; expenses: number }>();
+      for (const row of rows) {
+        byMonth.set(row.ym, {
+          revenue: Math.round(row.revenue * 100) / 100,
+          expenses: Math.round(row.expenses * 100) / 100,
+        });
+      }
+
+      const labels: string[] = [];
+      const revenue: number[] = [];
+      const expenses: number[] = [];
+      const now = new Date();
+      for (let i = 11; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        labels.push(
+          d.toLocaleDateString('en-US', { month: 'short' }),
+        );
+        revenue.push(byMonth.get(key)?.revenue ?? 0);
+        expenses.push(byMonth.get(key)?.expenses ?? 0);
+      }
+
+      return { labels, revenue, expenses };
+    } catch (error) {
+      this.logger.error(`Monthly series query failed: ${(error as Error).message}`);
+      return { labels: [], revenue: [], expenses: [] };
+    }
   }
 
   // ─── Purchase → Accounting Integration ────────────────────────

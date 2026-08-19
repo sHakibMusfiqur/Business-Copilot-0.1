@@ -185,7 +185,7 @@ export function AppSidebar() {
                 className="absolute bottom-full left-0 right-0 z-50 mb-2 overflow-hidden rounded-xl border border-border bg-card p-1 shadow-xl dark:shadow-black/40"
               >
                 <Link
-                  href="/dashboard/settings"
+                  href="/settings"
                   onClick={() => { setUserMenuOpen(false); closeAll(); }}
                   className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-white/[0.06] dark:hover:text-white"
                 >
@@ -214,7 +214,9 @@ function SidebarLink({ item, collapsed, pathname, onNavigate }: {
   pathname: string;
   onNavigate: () => void;
 }) {
-  const isActive = pathname === item.href;
+  const isActive = item.href === '/dashboard'
+    ? pathname === item.href
+    : pathname === item.href || pathname.startsWith(`${item.href}/`);
   const Icon: LucideIcon = item.icon;
   return (
     <Link
@@ -230,7 +232,7 @@ function SidebarLink({ item, collapsed, pathname, onNavigate }: {
     >
       {isActive && (
         <motion.span
-          layoutId="sidebar-active"
+          layoutId={`sidebar-active-${item.id}`}
           className="absolute left-0 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-primary"
         />
       )}

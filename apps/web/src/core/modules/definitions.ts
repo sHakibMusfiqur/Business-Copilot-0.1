@@ -201,6 +201,7 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     permissions: ['employees.read'],
     capabilities: ['hr'],
     status: 'stable',
+    navDisabled: true,
   },
   {
     id: 'payroll',
@@ -211,6 +212,7 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     permissions: ['payroll.read'],
     capabilities: ['payroll', 'hr'],
     status: 'stable',
+    navDisabled: true,
   },
   {
     id: 'roles',
@@ -261,6 +263,7 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     permissions: ['reports.read'],
     capabilities: ['reports', 'analytics'],
     status: 'stable',
+    navDisabled: true,
   },
   {
     id: 'ai',
@@ -271,6 +274,7 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     permissions: ['ai.read'],
     capabilities: ['ai'],
     status: 'stable',
+    navDisabled: true,
   },
 ];
 

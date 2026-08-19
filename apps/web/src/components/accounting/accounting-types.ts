@@ -12,6 +12,11 @@ export interface AccountSummary {  totalAccounts: number;
   totalRevenue: number;
   totalExpenses: number;
   cashBalance: number;
+  monthlySeries?: {
+    labels: string[];
+    revenue: number[];
+    expenses: number[];
+  };
 }
 
 export interface Account {

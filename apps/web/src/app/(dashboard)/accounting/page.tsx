@@ -57,9 +57,14 @@ export default function AccountingPage() {
   const recentEntries: JournalEntry[] = recentEntriesQuery.data?.data ?? [];
   const recentPayments: Payment[] = recentPaymentsQuery.data?.data ?? [];
 
-  const monthlyData = [
-    { month: 'YTD', revenue: s.totalRevenue, expense: s.totalExpenses },
-  ];
+  const series = s.monthlySeries;
+  const monthlyData = series && series.labels.length > 0
+    ? series.labels.map((month, i) => ({
+        month,
+        revenue: series.revenue[i] ?? 0,
+        expense: series.expenses[i] ?? 0,
+      }))
+    : [{ month: 'YTD', revenue: s.totalRevenue, expense: s.totalExpenses }];
 
   return (
     <div className="space-y-6">

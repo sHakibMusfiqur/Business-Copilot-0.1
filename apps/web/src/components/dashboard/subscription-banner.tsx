@@ -1,10 +1,9 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, CreditCard, Sparkles, Timer, TrendingUp } from 'lucide-react';
+import { ArrowRight, CreditCard, Sparkles, Timer } from 'lucide-react';
 import Link from 'next/link';
 
-import { Sparkline } from '@/components/dashboard/charts';
 import { getSubscription } from '@/lib/api';
 
 export function SubscriptionBanner() {
@@ -92,17 +91,11 @@ export function SubscriptionBanner() {
       <div className="flex shrink-0 items-center gap-4">
         <div className="hidden items-center gap-2 lg:flex">
           <div className="text-right">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">Upgrade savings</p>
-            <p className="flex items-center justify-end gap-1 text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-              <TrendingUp className="h-3.5 w-3.5" />
-              +12% growth
+            <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400 dark:text-slate-500">Trial ends</p>
+            <p className="flex items-center justify-end gap-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
+              {trialOver ? 'Today' : trialDays === 1 ? 'Tomorrow' : `${trialDays} days`}
             </p>
           </div>
-          <Sparkline
-            data={[30, 42, 38, 55, 50, 68, 74, 85, 92]}
-            color={trialOver ? '#F59E0B' : '#2563EB'}
-            className="h-7 w-16"
-          />
         </div>
 
         <Link

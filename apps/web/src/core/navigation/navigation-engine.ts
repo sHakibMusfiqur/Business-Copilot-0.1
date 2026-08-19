@@ -11,6 +11,7 @@ export function buildNavigation(modules: ModuleManifest[], permissions: string[]
   const grouped = new Map<string, ModuleManifest[]>();
   for (const mod of modules) {
     if (mod.id === 'dashboard') continue;
+    if (mod.navDisabled) continue;
     if (!hasAny(permissions, mod.permissions)) continue;
     const list = grouped.get(mod.category) ?? [];
     list.push(mod);
