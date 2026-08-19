@@ -7,9 +7,12 @@ import { Throttle } from '@nestjs/throttler';
 import { Request, Response } from 'express';
 import { Observable, map } from 'rxjs';
 import { Public } from '../common/decorators/public.decorator';
+import { ParseCuidPipe } from '../common/pipes/parse-cuid.pipe';
+import { ParseEmailParamPipe } from '../common/pipes/parse-email-param.pipe';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { THROTTLE } from '../common/throttle/throttle.config';
 import { OnboardingService } from './onboarding.service';
 import { ProvisioningEngineService } from './provisioning/provisioning-engine.service';
 import { ProvisioningProgressService } from './provisioning/provisioning-progress.service';
@@ -20,6 +23,7 @@ import { OnboardingSessionGuard } from './guards/onboarding-session.guard';
 import { Idempotent } from './decorators/idempotent.decorator';
 import { IdempotencyService } from './services/idempotency.service';
 import { CreateSessionDto } from './dto/create-session.dto';
+import { ProvisionSessionDto } from './dto/provision-session.dto';
 import { UpdateSessionDto } from './dto/update-session.dto';
 import { CompleteStepDto } from './dto/complete-step.dto';
 import { SessionResponseDto } from './dto/session-response.dto';
@@ -44,7 +48,7 @@ export class OnboardingController {
   }
 
   @Public()
-  @Throttle({ short: { limit: 5, ttl: 60000 } })
+  @Throttle({ short: THROTTLE.veryStrict })
   @Post('sessions')
   @ApiOperation({ summary: 'Create a new onboarding session' })
   @ApiBody({ type: CreateSessionDto })
@@ -57,17 +61,17 @@ export class OnboardingController {
   @Get('sessions/:id')
   @ApiOperation({ summary: 'Get onboarding session by ID' })
   @ApiOkResponse({ type: SessionResponseDto })
-  async getSession(@Param('id') id: string) {
+  async getSession(@Param('id', ParseCuidPipe) id: string) {
     return this.onboardingService.getSession(id);
   }
 
   @UseGuards(JwtAuthGuard)
-  @Throttle({ short: { limit: 10, ttl: 60000 } })
+  @Throttle({ short: THROTTLE.strict })
   @Get('by-email/:email')
   @ApiOperation({ summary: 'Get the authenticated user\'s active onboarding session' })
   @ApiOkResponse({ type: SessionResponseDto })
   async getSessionByEmail(
-    @Param('email') email: string,
+    @Param('email', ParseEmailParamPipe) email: string,
     @CurrentUser() user: CurrentUserPayload,
   ) {
     if (user.email.toLowerCase() !== email.toLowerCase()) {
@@ -81,7 +85,7 @@ export class OnboardingController {
   @ApiOperation({ summary: 'Update onboarding session' })
   @ApiBody({ type: UpdateSessionDto })
   @ApiOkResponse({ type: SessionResponseDto })
-  async updateSession(@Param('id') id: string, @Body() dto: UpdateSessionDto, @Req() req: Request) {
+  async updateSession(@Param('id', ParseCuidPipe) id: string, @Body() dto: UpdateSessionDto, @Req() req: Request) {
     const caller = (req as Request & { user?: { id?: string } }).user;
     return this.onboardingService.updateSession(id, dto, caller?.id ?? null);
   }
@@ -92,19 +96,19 @@ export class OnboardingController {
   @ApiOperation({ summary: 'Mark a step as completed' })
   @ApiBody({ type: CompleteStepDto })
   @ApiOkResponse({ type: SessionResponseDto })
-  async completeStep(@Param('id') id: string, @Body() dto: CompleteStepDto) {
+  async completeStep(@Param('id', ParseCuidPipe) id: string, @Body() dto: CompleteStepDto) {
     return this.onboardingService.completeStep(id, dto.step);
   }
 
   @UseGuards(OnboardingSessionGuard)
   @Get('sessions/:id/preview')
   @ApiOperation({ summary: 'Preview provisioning configuration' })
-  async getPreview(@Param('id') id: string) {
+  async getPreview(@Param('id', ParseCuidPipe) id: string) {
     return this.onboardingService.getProvisioningPreview(id);
   }
 
   @UseGuards(OnboardingSessionGuard)
-  @Throttle({ long: { limit: 5, ttl: 60000 } })
+  @Throttle({ long: THROTTLE.veryStrict })
   @UseGuards(IdempotencyGuard)
   @Idempotent()
   @Post('sessions/:id/provision')
@@ -112,8 +116,8 @@ export class OnboardingController {
   @ApiOperation({ summary: 'Provision the organization' })
   @ApiOkResponse({ type: SessionResponseDto })
   async provision(
-    @Param('id') id: string,
-    @Body() body: { selectedIndustry?: string | null; orgName?: string | null },
+    @Param('id', ParseCuidPipe) id: string,
+    @Body() body: ProvisionSessionDto,
     @Res({ passthrough: true }) res: Response,
   ) {
     const result = await this.provisioningEngine.provision(id, body);
@@ -127,14 +131,14 @@ export class OnboardingController {
   @UseGuards(OnboardingSessionGuard)
   @Get('sessions/:id/progress')
   @ApiOperation({ summary: 'Get provisioning progress' })
-  async getProgress(@Param('id') id: string) {
+  async getProgress(@Param('id', ParseCuidPipe) id: string) {
     return this.progressService.getProgress(id);
   }
 
   @UseGuards(OnboardingSessionGuard)
   @Get('sessions/:id/sse-token')
   @ApiOperation({ summary: 'Issue a short-lived SSE credential for the provisioning progress stream' })
-  async getSseToken(@Param('id') id: string, @Req() req: Request) {
+  async getSseToken(@Param('id', ParseCuidPipe) id: string, @Req() req: Request) {
     const caller = (req as Request & { user?: { id?: string } }).user;
     return this.onboardingService.issueSseToken(id, caller?.id ?? null);
   }
@@ -143,7 +147,7 @@ export class OnboardingController {
   @Get('sessions/:id/progress/stream')
   @Sse()
   @ApiOperation({ summary: 'SSE stream for provisioning progress' })
-  streamProgress(@Param('id') id: string): Observable<MessageEvent> {
+  streamProgress(@Param('id', ParseCuidPipe) id: string): Observable<MessageEvent> {
     return this.eventBus.getStream(id).pipe(
       map((event: ProvisioningEvent) => ({
         type: 'provisioning',
@@ -155,7 +159,7 @@ export class OnboardingController {
   @UseGuards(OnboardingSessionGuard)
   @Get('sessions/:id/checklist')
   @ApiOperation({ summary: 'Get onboarding checklist' })
-  async getChecklist(@Param('id') id: string) {
+  async getChecklist(@Param('id', ParseCuidPipe) id: string) {
     return this.checklistService.getChecklist(id);
   }
 
@@ -164,8 +168,8 @@ export class OnboardingController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Mark checklist item as complete' })
   async markChecklistComplete(
-    @Param('id') id: string,
-    @Param('itemId') itemId: string,
+    @Param('id', ParseCuidPipe) id: string,
+    @Param('itemId', ParseCuidPipe) itemId: string,
   ) {
     return this.checklistService.markComplete(id, itemId);
   }
@@ -175,8 +179,8 @@ export class OnboardingController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Mark checklist item as incomplete' })
   async markChecklistIncomplete(
-    @Param('id') id: string,
-    @Param('itemId') itemId: string,
+    @Param('id', ParseCuidPipe) id: string,
+    @Param('itemId', ParseCuidPipe) itemId: string,
   ) {
     return this.checklistService.markIncomplete(id, itemId);
   }
@@ -186,8 +190,8 @@ export class OnboardingController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Skip a checklist item' })
   async skipChecklistItem(
-    @Param('id') id: string,
-    @Param('itemId') itemId: string,
+    @Param('id', ParseCuidPipe) id: string,
+    @Param('itemId', ParseCuidPipe) itemId: string,
   ) {
     return this.checklistService.skipItem(id, itemId);
   }
@@ -195,7 +199,7 @@ export class OnboardingController {
   @UseGuards(OnboardingSessionGuard)
   @Get('sessions/:id/checklist/progress')
   @ApiOperation({ summary: 'Get checklist progress' })
-  async getChecklistProgress(@Param('id') id: string) {
+  async getChecklistProgress(@Param('id', ParseCuidPipe) id: string) {
     return this.checklistService.getProgress(id);
   }
 }

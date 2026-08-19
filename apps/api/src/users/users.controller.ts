@@ -25,6 +25,7 @@ import {
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
+import { ParseCuidPipe } from '../common/pipes/parse-cuid.pipe';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PermissionGuard } from '../common/guards/permission.guard';
 import { Permissions } from '../common/decorators/permissions.decorator';
@@ -85,7 +86,7 @@ export class UsersController {
   @ApiNotFoundResponse({ description: 'User not found' })
   async findById(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') userId: string,
+    @Param('id', ParseCuidPipe) userId: string,
   ) {
     const orgId = this.requireOrg(user);
     return this.usersService.findById(orgId, userId);
@@ -118,7 +119,7 @@ export class UsersController {
   @ApiNotFoundResponse({ description: 'User not found' })
   async update(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') userId: string,
+    @Param('id', ParseCuidPipe) userId: string,
     @Body() dto: UpdateUserDto,
   ) {
     const orgId = this.requireOrg(user);
@@ -137,7 +138,7 @@ export class UsersController {
   @ApiBadRequestResponse({ description: 'Cannot delete own account' })
   async remove(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') userId: string,
+    @Param('id', ParseCuidPipe) userId: string,
   ) {
     const orgId = this.requireOrg(user);
     return this.usersService.softDelete(orgId, user.id, userId);
@@ -154,7 +155,7 @@ export class UsersController {
   @ApiBadRequestResponse({ description: 'Cannot deactivate own account' })
   async updateStatus(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') userId: string,
+    @Param('id', ParseCuidPipe) userId: string,
     @Body() dto: UpdateUserStatusDto,
   ) {
     const orgId = this.requireOrg(user);

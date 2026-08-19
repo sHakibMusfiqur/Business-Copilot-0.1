@@ -14,6 +14,7 @@ import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags } from '@nest
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
+import { ParseCuidPipe } from '../common/pipes/parse-cuid.pipe';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PermissionGuard } from '../common/guards/permission.guard';
 import { Permissions } from '../common/decorators/permissions.decorator';
@@ -66,7 +67,7 @@ export class DepartmentsController {
   @ApiOkResponse({ description: 'Department deleted' })
   async remove(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') departmentId: string,
+    @Param('id', ParseCuidPipe) departmentId: string,
   ) {
     const orgId = this.requireOrg(user);
     return this.departmentsService.remove(orgId, user.id, departmentId);

@@ -22,6 +22,7 @@ import {
 import type { Request } from 'express';
 
 import { Public } from '../common/decorators/public.decorator';
+import { ParseCuidPipe } from '../common/pipes/parse-cuid.pipe';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -31,6 +32,7 @@ import { Permissions } from '../common/decorators/permissions.decorator';
 import { InvitationsService } from './invitations.service';
 import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { AcceptInvitationDto } from './dto/accept-invitation.dto';
+import { VerifyInvitationQueryDto } from './dto/verify-invitation-query.dto';
 
 @ApiTags('Invitations')
 @Controller('invitations')
@@ -78,7 +80,7 @@ export class InvitationsController {
   @ApiOkResponse({ description: 'Invitation email resent' })
   async resend(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') invitationId: string,
+    @Param('id', ParseCuidPipe) invitationId: string,
   ) {
     const orgId = this.requireOrg(user);
     return this.invitationsService.resend(orgId, invitationId, user.id);
@@ -92,7 +94,7 @@ export class InvitationsController {
   @ApiOkResponse({ description: 'Invitation revoked' })
   async revoke(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') invitationId: string,
+    @Param('id', ParseCuidPipe) invitationId: string,
   ) {
     const orgId = this.requireOrg(user);
     return this.invitationsService.revoke(orgId, invitationId, user.id);
@@ -102,8 +104,8 @@ export class InvitationsController {
   @Public()
   @ApiOkResponse({ description: 'Invitation token verified' })
   @ApiBadRequestResponse({ description: 'Invalid or expired invitation' })
-  async verify(@Query('token') token: string) {
-    return this.invitationsService.verify(token);
+  async verify(@Query() query: VerifyInvitationQueryDto) {
+    return this.invitationsService.verify(query.token);
   }
 
   @Post('accept')

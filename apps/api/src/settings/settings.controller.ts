@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   ForbiddenException,
@@ -24,6 +23,7 @@ import {
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
+import { ParseSettingsNamespacePipe } from '../common/pipes/parse-settings-namespace.pipe';
 import { Permissions } from '../common/decorators/permissions.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PermissionGuard } from '../common/guards/permission.guard';
@@ -36,15 +36,6 @@ import { PreferencesSettingsDto } from './dto/preferences-settings.dto';
 import { NotificationsSettingsDto } from './dto/notifications-settings.dto';
 import { settingsMulterOptions } from './file-upload.config';
 import { SettingsService, type FileUploadInput } from './settings.service';
-
-const VALID_NAMESPACES = new Set([
-  'branding',
-  'tax',
-  'email',
-  'billing',
-  'preferences',
-  'notifications',
-]);
 
 @ApiTags('Settings')
 @Controller('settings')
@@ -60,21 +51,17 @@ export class SettingsController {
     return user.organizationId;
   }
 
-  private requireNamespace(namespace: string): string {
-    if (!VALID_NAMESPACES.has(namespace)) {
-      throw new BadRequestException(`Unknown settings namespace "${namespace}"`);
-    }
-    return namespace;
-  }
-
   @Get(':namespace')
   @ApiBearerAuth('access-token')
   @ApiOkResponse({ description: 'Settings for the namespace retrieved' })
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
   @ApiForbiddenResponse({ description: 'User does not belong to an organization' })
-  async get(@Param('namespace') namespace: string, @CurrentUser() user: CurrentUserPayload) {
+  async get(
+    @Param('namespace', ParseSettingsNamespacePipe) namespace: string,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
     const orgId = this.requireOrg(user);
-    return this.settingsService.get(orgId, this.requireNamespace(namespace));
+    return this.settingsService.get(orgId, namespace);
   }
 
   @Put('branding')

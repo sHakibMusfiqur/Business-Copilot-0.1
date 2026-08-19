@@ -14,6 +14,7 @@ import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { LeadStatus } from '@prisma/client';
 
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { ParseCuidPipe } from '../common/pipes/parse-cuid.pipe';
 import { PermissionGuard } from '../common/guards/permission.guard';
 import { Permissions } from '../common/decorators/permissions.decorator';
 import { CurrentUser, type CurrentUserPayload } from '../common/decorators/current-user.decorator';
@@ -79,7 +80,7 @@ export class LeadController {
   @ApiOperation({ summary: 'Get lead by ID' })
   async findById(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
   ) {
     const orgId = this.requireOrg(user);
     await this.requireCrmAccess(user);
@@ -105,7 +106,7 @@ export class LeadController {
   @ApiOperation({ summary: 'Update a lead' })
   async update(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body() dto: UpdateLeadDto,
   ) {
     const orgId = this.requireOrg(user);
@@ -119,7 +120,7 @@ export class LeadController {
   @ApiOperation({ summary: 'Update lead status' })
   async updateStatus(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body('status') status: LeadStatus,
   ) {
     const orgId = this.requireOrg(user);
@@ -133,7 +134,7 @@ export class LeadController {
   @ApiOperation({ summary: 'Assign lead to user' })
   async assignUser(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body('assignedToId') assignedToId: string | null,
   ) {
     const orgId = this.requireOrg(user);
@@ -147,7 +148,7 @@ export class LeadController {
   @ApiOperation({ summary: 'Soft delete a lead' })
   async remove(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
   ) {
     const orgId = this.requireOrg(user);
     await this.requireCrmAccess(user);
@@ -160,7 +161,7 @@ export class LeadController {
   @ApiOperation({ summary: 'Get lead timeline' })
   async getTimeline(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
   ) {
     const orgId = this.requireOrg(user);
     await this.requireCrmAccess(user);
@@ -186,7 +187,7 @@ export class LeadController {
   @ApiOperation({ summary: 'Get activity by ID' })
   async findActivityById(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
   ) {
     const orgId = this.requireOrg(user);
     await this.requireCrmAccess(user);
@@ -199,7 +200,7 @@ export class LeadController {
   @ApiOperation({ summary: 'Get lead activities' })
   async getActivities(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Query() query: QueryActivityDto,
   ) {
     const orgId = this.requireOrg(user);
@@ -213,7 +214,7 @@ export class LeadController {
   @ApiOperation({ summary: 'Create activity for lead' })
   async createActivity(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body() dto: CreateActivityDto,
   ) {
     const orgId = this.requireOrg(user);
@@ -227,7 +228,7 @@ export class LeadController {
   @ApiOperation({ summary: 'Toggle activity completion' })
   async toggleActivity(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
   ) {
     const orgId = this.requireOrg(user);
     await this.requireCrmAccess(user);
@@ -240,7 +241,7 @@ export class LeadController {
   @ApiOperation({ summary: 'Update an activity' })
   async updateActivity(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body() dto: UpdateActivityDto,
   ) {
     const orgId = this.requireOrg(user);
@@ -254,7 +255,7 @@ export class LeadController {
   @ApiOperation({ summary: 'Delete an activity' })
   async deleteActivity(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
   ) {
     const orgId = this.requireOrg(user);
     await this.requireCrmAccess(user);

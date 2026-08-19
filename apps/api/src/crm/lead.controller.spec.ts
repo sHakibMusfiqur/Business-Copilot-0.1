@@ -1,6 +1,7 @@
 import { ForbiddenException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 
+import { ParseCuidPipe } from '../common/pipes/parse-cuid.pipe';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
 import { ConfigModule } from '../config/config.module';
 import { CoreModule } from '../core/core.module';
@@ -337,7 +338,11 @@ describe('LeadController (Phase 1F.4 additive Business OS enforcement across CRM
       expect(routeArgs).toBeDefined();
       const values = Object.values(routeArgs as Record<number, { pipes?: unknown[] }>);
       const pipes = values.flatMap((arg) => arg.pipes ?? []);
-      expect(pipes).toHaveLength(0);
+      expect(
+        pipes.every(
+          (pipe) => pipe === ParseCuidPipe || pipe instanceof ParseCuidPipe,
+        ),
+      ).toBe(true);
     }
     const ctx = buildController(async () => ['crm.read']);
     await ctx.controller.findById(makeUser(), cuidId);

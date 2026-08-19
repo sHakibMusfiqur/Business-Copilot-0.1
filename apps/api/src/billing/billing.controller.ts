@@ -5,6 +5,7 @@ import type { Request } from 'express';
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
+import { ParseGatewayPipe } from '../common/pipes/parse-gateway.pipe';
 import { Permissions } from '../common/decorators/permissions.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -146,7 +147,7 @@ export class BillingController {
   @SkipThrottle()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Receive payment gateway webhooks' })
-  async handleWebhook(@Param('gateway') gateway: string, @Req() req: Request) {
+  async handleWebhook(@Param('gateway', ParseGatewayPipe) gateway: string, @Req() req: Request) {
     const rawBody = this.rawBodyOf(req);
     return this.paymentService.handleWebhook(gateway, rawBody, req.headers as Record<string, string>);
   }

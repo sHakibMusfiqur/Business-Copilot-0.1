@@ -15,6 +15,7 @@ import {
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
 import { CurrentUser, type CurrentUserPayload } from '../common/decorators/current-user.decorator';
+import { ParseCuidPipe } from '../common/pipes/parse-cuid.pipe';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PermissionGuard } from '../common/guards/permission.guard';
 import { Permissions } from '../common/decorators/permissions.decorator';
@@ -56,7 +57,7 @@ export class SalesController {
   @ApiBearerAuth('access-token')
   async findById(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
   ) {
     const orgId = this.requireOrg(user);
     return this.salesService.findById(orgId, id);
@@ -81,7 +82,7 @@ export class SalesController {
   @ApiBearerAuth('access-token')
   async update(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body() dto: UpdateSaleDto,
   ) {
     const orgId = this.requireOrg(user);
@@ -95,7 +96,7 @@ export class SalesController {
   @ApiBearerAuth('access-token')
   async submit(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
   ) {
     const orgId = this.requireOrg(user);
     return this.salesService.submit(orgId, user.id, id);
@@ -108,7 +109,7 @@ export class SalesController {
   @ApiBearerAuth('access-token')
   async confirm(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
   ) {
     const orgId = this.requireOrg(user);
     return this.salesService.confirm(orgId, user.id, id);
@@ -121,7 +122,7 @@ export class SalesController {
   @ApiBearerAuth('access-token')
   async deliver(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body() dto: DeliverSaleDto,
   ) {
     const orgId = this.requireOrg(user);
@@ -135,7 +136,7 @@ export class SalesController {
   @ApiBearerAuth('access-token')
   async remove(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
   ) {
     const orgId = this.requireOrg(user);
     return this.salesService.softDelete(orgId, user.id, id);

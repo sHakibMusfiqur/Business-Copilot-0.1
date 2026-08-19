@@ -33,15 +33,12 @@ import { SuppliersModule } from './suppliers/suppliers.module';
 import { UsersModule } from './users/users.module';
 import { AllExceptionsFilter } from './common/filters/http-exception.filter';
 import { TenantScopeModule } from './common/tenant/tenant-scope.module';
+import { THROTTLE_BUCKETS } from './common/throttle/throttle.config';
 
 @Module({
   imports: [
     ScheduleModule.forRoot(),
-    ThrottlerModule.forRoot([
-      { name: 'short', ttl: 1000, limit: 10 },
-      { name: 'medium', ttl: 10000, limit: 50 },
-      { name: 'long', ttl: 60000, limit: 200 },
-    ]),
+    ThrottlerModule.forRoot(THROTTLE_BUCKETS),
     AccountingModule,
     AiModule,
     AuditModule,

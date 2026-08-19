@@ -12,6 +12,7 @@ import {
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { ParseCuidPipe } from '../common/pipes/parse-cuid.pipe';
 import { PermissionGuard } from '../common/guards/permission.guard';
 import { Permissions } from '../common/decorators/permissions.decorator';
 import { CurrentUser, type CurrentUserPayload } from '../common/decorators/current-user.decorator';
@@ -51,7 +52,7 @@ export class PipelineStageController {
   @ApiOperation({ summary: 'List stages for a pipeline' })
   async findByPipeline(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('pipelineId') pipelineId: string,
+    @Param('pipelineId', ParseCuidPipe) pipelineId: string,
   ) {
     const orgId = this.requireOrg(user);
     await this.requireCrmAccess(user);
@@ -62,7 +63,7 @@ export class PipelineStageController {
   @UseGuards(PermissionGuard)
   @Permissions(['crm.read'])
   @ApiOperation({ summary: 'Get stage by ID' })
-  async findById(@CurrentUser() user: CurrentUserPayload, @Param('id') id: string) {
+  async findById(@CurrentUser() user: CurrentUserPayload, @Param('id', ParseCuidPipe) id: string) {
     const orgId = this.requireOrg(user);
     await this.requireCrmAccess(user);
     return this.pipelineStageService.findById(orgId, id);
@@ -74,7 +75,7 @@ export class PipelineStageController {
   @ApiOperation({ summary: 'Create a stage in a pipeline' })
   async create(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('pipelineId') pipelineId: string,
+    @Param('pipelineId', ParseCuidPipe) pipelineId: string,
     @Body() dto: CreatePipelineStageDto,
   ) {
     const orgId = this.requireOrg(user);
@@ -88,7 +89,7 @@ export class PipelineStageController {
   @ApiOperation({ summary: 'Update a stage' })
   async update(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body() dto: UpdatePipelineStageDto,
   ) {
     const orgId = this.requireOrg(user);
@@ -100,7 +101,7 @@ export class PipelineStageController {
   @UseGuards(PermissionGuard)
   @Permissions(['crm.delete'])
   @ApiOperation({ summary: 'Soft delete a stage' })
-  async remove(@CurrentUser() user: CurrentUserPayload, @Param('id') id: string) {
+  async remove(@CurrentUser() user: CurrentUserPayload, @Param('id', ParseCuidPipe) id: string) {
     const orgId = this.requireOrg(user);
     await this.requireCrmAccess(user);
     return this.pipelineStageService.softDelete(orgId, user.id, id);

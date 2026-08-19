@@ -7,42 +7,50 @@ import {
   IsInt,
   Min,
   MinLength,
+  MaxLength,
 } from 'class-validator';
 
 export class CreateProductDto {
   @ApiProperty()
   @IsString()
   @MinLength(1)
+  @MaxLength(200, { message: 'name must not exceed 200 characters' })
   name!: string;
 
   @ApiProperty()
   @IsString()
   @MinLength(1)
+  @MaxLength(100, { message: 'sku must not exceed 100 characters' })
   sku!: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   barcode?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   brand?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(2000)
   description?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(40)
   categoryId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(40)
   supplierId?: string;
 
   @ApiPropertyOptional({ default: 0 })
@@ -60,6 +68,7 @@ export class CreateProductDto {
   @ApiPropertyOptional({ default: 'pcs' })
   @IsOptional()
   @IsString()
+  @MaxLength(20)
   unit?: string = 'pcs';
 
   @ApiPropertyOptional({ default: 0 })
@@ -83,6 +92,7 @@ export class CreateProductDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   imageUrl?: string;
 
   @ApiPropertyOptional({ default: true })

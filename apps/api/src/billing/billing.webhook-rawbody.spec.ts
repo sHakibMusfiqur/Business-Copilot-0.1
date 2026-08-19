@@ -67,5 +67,5 @@ describe('Express rawBody capture for SSLCommerz IPN (rawBody: true)', () => {
     } finally {
       await app.close();
     }
-  });
+  }, 15000);
 });

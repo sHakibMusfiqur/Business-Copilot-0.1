@@ -28,6 +28,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { ParseSlugPipe } from '../common/pipes/parse-slug.pipe';
 
 import { OrganizationService } from './organization.service';
 import { CreateOrganizationDto } from './dto/create-organization.dto';
@@ -83,7 +84,7 @@ export class OrganizationController {
   @Get('by-slug/:slug')
   @ApiOkResponse({ description: 'Organization branding resolved by slug' })
   @ApiNotFoundResponse({ description: 'Organization not found' })
-  async getBySlug(@Param('slug') slug: string) {
+  async getBySlug(@Param('slug', ParseSlugPipe) slug: string) {
     const org = await this.organizationService.findPublicBySlug(slug);
     if (!org) {
       throw new NotFoundException('Organization not found');

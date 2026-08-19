@@ -25,6 +25,7 @@ import {
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
+import { ParseCuidPipe } from '../common/pipes/parse-cuid.pipe';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PermissionGuard } from '../common/guards/permission.guard';
 import { Permissions } from '../common/decorators/permissions.decorator';
@@ -73,7 +74,7 @@ export class CustomersController {
   @ApiNotFoundResponse({ description: 'Customer not found' })
   async findById(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') customerId: string,
+    @Param('id', ParseCuidPipe) customerId: string,
   ) {
     const orgId = this.requireOrg(user);
     return this.customersService.findById(orgId, customerId);
@@ -106,7 +107,7 @@ export class CustomersController {
   @ApiNotFoundResponse({ description: 'Customer not found' })
   async update(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') customerId: string,
+    @Param('id', ParseCuidPipe) customerId: string,
     @Body() dto: UpdateCustomerDto,
   ) {
     const orgId = this.requireOrg(user);
@@ -124,7 +125,7 @@ export class CustomersController {
   @ApiNotFoundResponse({ description: 'Customer not found' })
   async remove(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') customerId: string,
+    @Param('id', ParseCuidPipe) customerId: string,
   ) {
     const orgId = this.requireOrg(user);
     return this.customersService.softDelete(orgId, user.id, customerId);
@@ -141,7 +142,7 @@ export class CustomersController {
   @ApiBadRequestResponse({ description: 'Cannot deactivate' })
   async updateStatus(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') customerId: string,
+    @Param('id', ParseCuidPipe) customerId: string,
     @Body() dto: UpdateCustomerStatusDto,
   ) {
     const orgId = this.requireOrg(user);

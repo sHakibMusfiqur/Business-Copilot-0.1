@@ -11,6 +11,7 @@ import {
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
 import { CurrentUser, type CurrentUserPayload } from '../common/decorators/current-user.decorator';
+import { ParseCuidPipe } from '../common/pipes/parse-cuid.pipe';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PermissionGuard } from '../common/guards/permission.guard';
 import { Permissions } from '../common/decorators/permissions.decorator';
@@ -73,7 +74,7 @@ export class InventoryController {
   @ApiBearerAuth('access-token')
   async getHistory(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('productId') productId: string,
+    @Param('productId', ParseCuidPipe) productId: string,
   ) {
     const orgId = this.requireOrg(user);
     return this.inventoryService.getHistory(orgId, productId);

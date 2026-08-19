@@ -15,6 +15,7 @@ import {
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 
 import { CurrentUser, type CurrentUserPayload } from '../common/decorators/current-user.decorator';
+import { ParseCuidPipe } from '../common/pipes/parse-cuid.pipe';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PermissionGuard } from '../common/guards/permission.guard';
 import { Permissions } from '../common/decorators/permissions.decorator';
@@ -75,7 +76,7 @@ export class AccountingController {
   @ApiBearerAuth('access-token')
   async findAccountById(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
   ) {
     const orgId = this.requireOrg(user);
     return this.accountingService.findAccountById(orgId, id);
@@ -100,7 +101,7 @@ export class AccountingController {
   @ApiBearerAuth('access-token')
   async updateAccount(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body() dto: UpdateAccountDto,
   ) {
     const orgId = this.requireOrg(user);
@@ -114,7 +115,7 @@ export class AccountingController {
   @ApiBearerAuth('access-token')
   async deleteAccount(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
   ) {
     const orgId = this.requireOrg(user);
     return this.accountingService.deleteAccount(orgId, id);
@@ -140,7 +141,7 @@ export class AccountingController {
   @ApiBearerAuth('access-token')
   async findJournalEntryById(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
   ) {
     const orgId = this.requireOrg(user);
     return this.accountingService.findJournalEntryById(orgId, id);
@@ -165,7 +166,7 @@ export class AccountingController {
   @ApiBearerAuth('access-token')
   async updateJournalEntry(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body() dto: UpdateJournalEntryDto,
   ) {
     const orgId = this.requireOrg(user);
@@ -179,7 +180,7 @@ export class AccountingController {
   @ApiBearerAuth('access-token')
   async postJournalEntry(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
   ) {
     const orgId = this.requireOrg(user);
     return this.accountingService.postJournalEntry(orgId, user.id, id);
@@ -192,7 +193,7 @@ export class AccountingController {
   @ApiBearerAuth('access-token')
   async deleteJournalEntry(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
   ) {
     const orgId = this.requireOrg(user);
     return this.accountingService.deleteJournalEntry(orgId, user.id, id);

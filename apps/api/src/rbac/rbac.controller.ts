@@ -16,6 +16,7 @@ import { ApiTags, ApiBearerAuth, ApiOkResponse, ApiCreatedResponse, ApiUnauthori
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
+import { ParseCuidPipe } from '../common/pipes/parse-cuid.pipe';
 import { Permissions } from '../common/decorators/permissions.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PermissionGuard } from '../common/guards/permission.guard';
@@ -107,7 +108,7 @@ export class RbacController {
   @ApiNotFoundResponse({ description: 'Role not found' })
   async updateRole(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') roleId: string,
+    @Param('id', ParseCuidPipe) roleId: string,
     @Body() dto: UpdateRoleDto,
   ) {
     const orgId = this.requireOrg(user);
@@ -123,7 +124,7 @@ export class RbacController {
   @ApiNotFoundResponse({ description: 'Role not found' })
   async deleteRole(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') roleId: string,
+    @Param('id', ParseCuidPipe) roleId: string,
   ) {
     const orgId = this.requireOrg(user);
     await this.rbacService.deleteRole(orgId, roleId);
@@ -139,7 +140,7 @@ export class RbacController {
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
   async duplicateRole(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') roleId: string,
+    @Param('id', ParseCuidPipe) roleId: string,
     @Body() dto: DuplicateRoleDto,
   ) {
     const orgId = this.requireOrg(user);
@@ -156,7 +157,7 @@ export class RbacController {
   @ApiNotFoundResponse({ description: 'Role not found' })
   async getRolePermissions(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') roleId: string,
+    @Param('id', ParseCuidPipe) roleId: string,
   ) {
     const orgId = this.requireOrg(user);
     return this.rbacService.getRolePermissions(orgId, roleId);
@@ -170,7 +171,7 @@ export class RbacController {
   @ApiNotFoundResponse({ description: 'Role not found' })
   async assignPermissions(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') roleId: string,
+    @Param('id', ParseCuidPipe) roleId: string,
     @Body() dto: AssignPermissionsDto,
   ) {
     const orgId = this.requireOrg(user);
@@ -187,7 +188,7 @@ export class RbacController {
   @ApiForbiddenResponse({ description: 'Insufficient permissions' })
   async clonePermissions(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') roleId: string,
+    @Param('id', ParseCuidPipe) roleId: string,
     @Body() dto: ClonePermissionsDto,
   ) {
     const orgId = this.requireOrg(user);
@@ -204,7 +205,7 @@ export class RbacController {
   @ApiNotFoundResponse({ description: 'User not found' })
   async getUserRoles(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') userId: string,
+    @Param('id', ParseCuidPipe) userId: string,
   ) {
     const orgId = this.requireOrg(user);
     return this.rbacService.getUserRoles(orgId, userId);
@@ -218,7 +219,7 @@ export class RbacController {
   @ApiNotFoundResponse({ description: 'User or role not found' })
   async assignUserRoles(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') userId: string,
+    @Param('id', ParseCuidPipe) userId: string,
     @Body() dto: AssignUserRolesDto,
   ) {
     const orgId = this.requireOrg(user);

@@ -13,6 +13,7 @@ import {
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { ParseCuidPipe } from '../common/pipes/parse-cuid.pipe';
 import { PermissionGuard } from '../common/guards/permission.guard';
 import { Permissions } from '../common/decorators/permissions.decorator';
 import { CurrentUser, type CurrentUserPayload } from '../common/decorators/current-user.decorator';
@@ -61,7 +62,7 @@ export class PipelineController {
   @UseGuards(PermissionGuard)
   @Permissions(['crm.read'])
   @ApiOperation({ summary: 'Get pipeline by ID' })
-  async findById(@CurrentUser() user: CurrentUserPayload, @Param('id') id: string) {
+  async findById(@CurrentUser() user: CurrentUserPayload, @Param('id', ParseCuidPipe) id: string) {
     const orgId = this.requireOrg(user);
     await this.requireCrmAccess(user);
     return this.pipelineService.findById(orgId, id);
@@ -83,7 +84,7 @@ export class PipelineController {
   @ApiOperation({ summary: 'Update a pipeline' })
   async update(
     @CurrentUser() user: CurrentUserPayload,
-    @Param('id') id: string,
+    @Param('id', ParseCuidPipe) id: string,
     @Body() dto: UpdatePipelineDto,
   ) {
     const orgId = this.requireOrg(user);
@@ -95,7 +96,7 @@ export class PipelineController {
   @UseGuards(PermissionGuard)
   @Permissions(['crm.delete'])
   @ApiOperation({ summary: 'Soft delete a pipeline' })
-  async remove(@CurrentUser() user: CurrentUserPayload, @Param('id') id: string) {
+  async remove(@CurrentUser() user: CurrentUserPayload, @Param('id', ParseCuidPipe) id: string) {
     const orgId = this.requireOrg(user);
     await this.requireCrmAccess(user);
     return this.pipelineService.softDelete(orgId, user.id, id);
