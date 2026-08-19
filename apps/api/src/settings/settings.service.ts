@@ -5,6 +5,7 @@ import { ConfigService } from '../config/config.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { buildEmailMessage } from '../mail/email-content';
 import { renderEmailTemplate, type BrandEmailContext } from './email-template';
+import { rejectUpload, validateUploadedFile } from './file-validation';
 
 export interface DocumentBrandContext {
   logoUrl: string | null;
@@ -108,11 +109,31 @@ export class SettingsService {
   ): Promise<Record<string, string>> {
     const result: Record<string, string> = {};
 
+    // Collect every file Multer wrote so they can be validated up front and all
+    // cleaned up together if the request is rejected.
+    const pending: Express.Multer.File[] = [];
+    for (const [key] of BRAND_ASSET_MAP) {
+      const list = files[key];
+      if (list && list.length > 0) pending.push(list[0]);
+    }
+
+    // Validate the CONTENT of every uploaded file (magic bytes / SVG structure),
+    // not just its client-declared MIME type or extension. All files are checked
+    // before any is persisted so a request never leaves a partial DB write or an
+    // orphaned file behind.
+    for (const file of pending) {
+      const validation = validateUploadedFile(file);
+      if (!validation.ok) {
+        rejectUpload(pending, validation.reason);
+      }
+    }
+
     for (const [key, urlKey] of BRAND_ASSET_MAP) {
       const list = files[key];
       if (!list || list.length === 0) continue;
 
       const file = list[0];
+
       const record = await this.prisma.file.create({
         data: {
           organizationId: orgId,

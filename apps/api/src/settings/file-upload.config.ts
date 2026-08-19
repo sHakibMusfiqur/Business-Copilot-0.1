@@ -9,7 +9,7 @@ import { diskStorage } from 'multer';
 export const UPLOAD_ROOT = join(process.cwd(), 'uploads');
 export const SETTINGS_UPLOAD_DIR = join(UPLOAD_ROOT, 'settings');
 
-const ALLOWED_MIME = new Set([
+export const ALLOWED_MIME = new Set([
   'image/png',
   'image/jpeg',
   'image/svg+xml',
