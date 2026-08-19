@@ -97,7 +97,7 @@ export class RbacController {
     @Body() dto: CreateRoleDto,
   ) {
     const orgId = this.requireOrg(user);
-    return this.rbacService.createRole(orgId, dto);
+    return this.rbacService.createRole(orgId, dto, user.id);
   }
 
   @Patch('roles/:id')
@@ -112,7 +112,7 @@ export class RbacController {
     @Body() dto: UpdateRoleDto,
   ) {
     const orgId = this.requireOrg(user);
-    return this.rbacService.updateRole(orgId, roleId, dto);
+    return this.rbacService.updateRole(orgId, roleId, dto, user.id);
   }
 
   @Delete('roles/:id')
@@ -127,7 +127,7 @@ export class RbacController {
     @Param('id', ParseCuidPipe) roleId: string,
   ) {
     const orgId = this.requireOrg(user);
-    await this.rbacService.deleteRole(orgId, roleId);
+    await this.rbacService.deleteRole(orgId, roleId, user.id);
   }
 
   @Post('roles/:id/duplicate')
@@ -144,7 +144,7 @@ export class RbacController {
     @Body() dto: DuplicateRoleDto,
   ) {
     const orgId = this.requireOrg(user);
-    return this.rbacService.duplicateRole(orgId, roleId, dto);
+    return this.rbacService.duplicateRole(orgId, roleId, dto, user.id);
   }
 
   // ─── Role Permissions ──────────────────────────────────────────
@@ -175,7 +175,7 @@ export class RbacController {
     @Body() dto: AssignPermissionsDto,
   ) {
     const orgId = this.requireOrg(user);
-    await this.rbacService.assignPermissions(orgId, roleId, dto);
+    await this.rbacService.assignPermissions(orgId, roleId, dto, user.id);
     return { message: 'Permissions updated successfully' };
   }
 
@@ -192,7 +192,7 @@ export class RbacController {
     @Body() dto: ClonePermissionsDto,
   ) {
     const orgId = this.requireOrg(user);
-    return this.rbacService.clonePermissions(orgId, roleId, dto);
+    return this.rbacService.clonePermissions(orgId, roleId, dto, user.id);
   }
 
   // ─── User Roles ────────────────────────────────────────────────
@@ -223,7 +223,7 @@ export class RbacController {
     @Body() dto: AssignUserRolesDto,
   ) {
     const orgId = this.requireOrg(user);
-    await this.rbacService.assignUserRoles(orgId, userId, dto);
+    await this.rbacService.assignUserRoles(orgId, userId, dto, user.id);
     return { message: 'Roles updated successfully' };
   }
 

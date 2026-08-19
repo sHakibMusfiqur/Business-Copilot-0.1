@@ -2,10 +2,11 @@
 
 import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Shield, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 import { DashboardError } from '@/components/dashboard/dashboard-error';
 import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { AssignUserRolesModal } from '@/components/rbac/assign-user-roles-modal';
 import { ClonePermissionsDialog } from '@/components/rbac/clone-permissions-dialog';
 import { CreateRoleDialog } from '@/components/rbac/create-role-dialog';
@@ -110,16 +111,10 @@ export default function RolesPage() {
 
   if (isLoaded && !hasPermission('organization.manage')) {
     return (
-      <div className="flex flex-col items-center justify-center py-24 text-center">
-        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
-          <Shield className="h-7 w-7 text-muted-foreground" />
-        </div>
-        <h1 className="mt-4 text-lg font-semibold">You don&apos;t have access</h1>
-        <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-          Only organization owners can manage roles and permissions. Contact your organization owner to
-          request access.
-        </p>
-      </div>
+      <ForbiddenState
+        title="Access restricted"
+        description="Only organization owners can manage roles and permissions. Contact your organization owner to request access."
+      />
     );
   }
 
