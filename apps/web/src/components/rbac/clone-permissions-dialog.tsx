@@ -49,8 +49,12 @@ export function ClonePermissionsDialog({ open, onClose, targetRole, roles, onClo
       setSourceRoleId('');
       onCloned();
       onClose();
-    } catch {
-      toast({ title: 'Error', description: 'Failed to copy permissions.', variant: 'destructive' });
+    } catch (error) {
+      toast({
+        title: 'Could not copy permissions',
+        description: error instanceof Error ? error.message : 'Failed to copy permissions.',
+        variant: 'destructive',
+      });
     } finally {
       setIsSaving(false);
     }

@@ -563,6 +563,36 @@ export class RbacService {
     });
   }
 
+
+  async getRoleUsers(orgId: string, roleId: string) {
+    const role = await this.prisma.role.findFirst({
+      where: { id: roleId, organizationId: orgId },
+    });
+
+    if (!role) {
+      throw new NotFoundException('Role not found in this organization');
+    }
+
+    return this.prisma.user.findMany({
+      where: {
+        organizationId: orgId,
+        deletedAt: null,
+        roleAssignments: { some: { roleId } },
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        avatar: true,
+        isActive: true,
+        roleAssignments: {
+          select: { role: { select: { id: true, name: true, isSystem: true } } },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   // ─── Permission Resolution ─────────────────────────────────────
 
   async getUserPermissions(userId: string, orgId: string): Promise<string[]> {

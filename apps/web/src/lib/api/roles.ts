@@ -11,6 +11,11 @@ export async function getRoleById(id: string, signal?: AbortSignal) {
   return response.data;
 }
 
+export async function getRoleUsers(roleId: string, signal?: AbortSignal) {
+  const response = await api.get(`${API_ROUTES.ROLES.ROOT}/${roleId}/users`, { signal });
+  return response.data;
+}
+
 export async function createRole(data: { name: string; description?: string }) {
   const response = await api.post(API_ROUTES.ROLES.ROOT, data);
   return response.data;

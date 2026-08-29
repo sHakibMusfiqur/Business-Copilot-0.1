@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Key, X, Check, Loader2, ChevronDown, ChevronRight, Search } from 'lucide-react';
+import { Key, X, Check, Lock, Loader2, ChevronDown, ChevronRight, Search, Info } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/use-toast';
 
 import type { GroupedPermissions } from './rbac-types';
+import { isPermissionGrantable, NON_DELEGABLE_PERMISSIONS } from './permission-gating';
+
+// Frontend delegation gating is UX only — the backend delegation guard
+// (assertCanGrantPermissions) remains the authority.
 
 interface PermissionAssignmentDialogProps {
   open: boolean;
@@ -18,6 +22,7 @@ interface PermissionAssignmentDialogProps {
   roleName: string;
   initialPermissions: string[];
   groupedPermissions: GroupedPermissions | null;
+  actorPermissions: string[];
   isLoadingPermissions: boolean;
   onSave: (permissionNames: string[]) => Promise<void>;
 }
@@ -29,6 +34,7 @@ export function PermissionAssignmentDialog({
   roleName,
   initialPermissions,
   groupedPermissions,
+  actorPermissions,
   isLoadingPermissions,
   onSave,
 }: PermissionAssignmentDialogProps) {
@@ -47,7 +53,13 @@ export function PermissionAssignmentDialog({
     }
   }, [open, initialPermissions, groupedPermissions]);
 
+  /** Whether the current actor may grant/copy this permission. */
+  function isGrantable(permName: string): boolean {
+    return isPermissionGrantable(permName, actorPermissions);
+  }
+
   function togglePermission(name: string) {
+    if (!isGrantable(name)) return;
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(name)) {
@@ -60,10 +72,12 @@ export function PermissionAssignmentDialog({
   }
 
   function toggleModule(module: string, permissions: Array<{ name: string }>) {
-    const allSelected = permissions.every((p) => selected.has(p.name));
+    const grantable = permissions.filter((p) => isGrantable(p.name));
+    if (grantable.length === 0) return;
+    const allSelected = grantable.every((p) => selected.has(p.name));
     setSelected((prev) => {
       const next = new Set(prev);
-      for (const p of permissions) {
+      for (const p of grantable) {
         if (allSelected) {
           next.delete(p.name);
         } else {
@@ -92,8 +106,12 @@ export function PermissionAssignmentDialog({
       await onSave(Array.from(selected));
       toast({ title: 'Permissions updated', description: `Permissions for "${roleName}" have been saved.` });
       onClose();
-    } catch {
-      toast({ title: 'Error', description: 'Failed to save permissions.', variant: 'destructive' });
+    } catch (error) {
+      toast({
+        title: 'Could not save permissions',
+        description: error instanceof Error ? error.message : 'Failed to save permissions.',
+        variant: 'destructive',
+      });
     } finally {
       setIsSaving(false);
     }
@@ -106,6 +124,11 @@ export function PermissionAssignmentDialog({
         perms.some((p) => p.label.toLowerCase().includes(searchQuery.toLowerCase()) || p.name.toLowerCase().includes(searchQuery.toLowerCase()))
       )
     : modules;
+
+  const lockedCount = modules.reduce(
+    (n, [, perms]) => n + perms.filter((p) => !isGrantable(p.name)).length,
+    0,
+  );
 
   return (
     <AnimatePresence>
@@ -124,6 +147,9 @@ export function PermissionAssignmentDialog({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             className="fixed inset-4 z-50 m-auto flex max-w-2xl flex-col rounded-xl border bg-background shadow-xl overflow-hidden"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Edit permissions for ${roleName}`}
           >
             <div className="flex items-center justify-between border-b px-6 py-4">
               <div className="flex items-center gap-3">
@@ -135,12 +161,12 @@ export function PermissionAssignmentDialog({
                   <p className="text-xs text-muted-foreground">{roleName}</p>
                 </div>
               </div>
-              <Button variant="ghost" size="icon" onClick={onClose}>
+              <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close permission editor">
                 <X className="h-4 w-4" />
               </Button>
             </div>
 
-            <div className="px-6 py-3 border-b">
+            <div className="px-6 py-3 border-b space-y-2">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
@@ -149,6 +175,12 @@ export function PermissionAssignmentDialog({
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-9"
                 />
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Info className="h-3.5 w-3.5 shrink-0" />
+                <span>
+                  Locked permissions ({lockedCount}) cannot be granted by your account and will be ignored on save.
+                </span>
               </div>
             </div>
 
@@ -175,7 +207,8 @@ export function PermissionAssignmentDialog({
                 <div className="space-y-3">
                   {filteredModules.map(([module, perms]) => {
                     const isExpanded = expandedModules.has(module);
-                    const allSelected = perms.every((p) => selected.has(p.name));
+                    const grantable = perms.filter((p) => isGrantable(p.name));
+                    const allGrantableSelected = grantable.length > 0 && grantable.every((p) => selected.has(p.name));
                     const someSelected = perms.some((p) => selected.has(p.name));
 
                     return (
@@ -183,6 +216,7 @@ export function PermissionAssignmentDialog({
                         <button
                           onClick={() => toggleExpand(module)}
                           className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm font-medium hover:bg-accent/50 transition-colors"
+                          aria-expanded={isExpanded}
                         >
                           {isExpanded ? (
                             <ChevronDown className="h-4 w-4 text-muted-foreground" />
@@ -198,33 +232,66 @@ export function PermissionAssignmentDialog({
                               e.stopPropagation();
                               toggleModule(module, perms);
                             }}
+                            aria-label={`Select all grantable permissions in ${module}`}
+                            title={
+                              grantable.length === 0
+                                ? 'No permissions in this module can be granted by your account'
+                                : undefined
+                            }
                             className={`rounded p-0.5 transition-colors ${
-                              allSelected ? 'text-emerald-500' : someSelected ? 'text-amber-500' : 'text-muted-foreground'
+                              grantable.length === 0
+                                ? 'cursor-not-allowed text-muted-foreground/40'
+                                : allGrantableSelected
+                                ? 'text-emerald-500'
+                                : someSelected
+                                ? 'text-amber-500'
+                                : 'text-muted-foreground'
                             }`}
                           >
-                            <Check className="h-4 w-4" />
+                            {grantable.length === 0 ? <Lock className="h-4 w-4" /> : <Check className="h-4 w-4" />}
                           </button>
                         </button>
 
                         {isExpanded && (
                           <div className="border-t divide-y">
-                            {perms.map((perm) => (
-                              <label
-                                key={perm.id}
-                                className="flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-accent/30 cursor-pointer transition-colors"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={selected.has(perm.name)}
-                                  onChange={() => togglePermission(perm.name)}
-                                  className="rounded border-muted-foreground/30 h-4 w-4 accent-primary"
-                                />
-                                <div className="flex-1 min-w-0">
-                                  <span>{perm.label}</span>
-                                </div>
-                                <span className="text-xs font-mono text-muted-foreground">{perm.name}</span>
-                              </label>
-                            ))}
+                            {perms.map((perm) => {
+                              const grantable = isGrantable(perm.name);
+                              const checked = selected.has(perm.name);
+                              return (
+                                <label
+                                  key={perm.id}
+                                  className={`flex items-center gap-3 px-4 py-2.5 text-sm ${
+                                    grantable ? 'cursor-pointer hover:bg-accent/30 transition-colors' : 'cursor-not-allowed bg-muted/30 opacity-70'
+                                  }`}
+                                  title={
+                                    grantable
+                                      ? undefined
+                                      : NON_DELEGABLE_PERMISSIONS.has(perm.name)
+                                      ? 'This permission is reserved for organization owners and cannot be delegated.'
+                                      : 'You do not hold this permission, so you cannot grant it to a role.'
+                                  }
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    disabled={!grantable}
+                                    onChange={() => togglePermission(perm.name)}
+                                    aria-label={perm.label}
+                                    className="rounded border-muted-foreground/30 h-4 w-4 accent-primary disabled:cursor-not-allowed"
+                                  />
+                                  <div className="flex-1 min-w-0 flex items-center gap-2">
+                                    <span className={grantable ? undefined : 'text-muted-foreground'}>{perm.label}</span>
+                                    {!grantable && (
+                                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                        <Lock className="h-3 w-3" />
+                                        locked
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="text-xs font-mono text-muted-foreground">{perm.name}</span>
+                                </label>
+                              );
+                            })}
                           </div>
                         )}
                       </div>

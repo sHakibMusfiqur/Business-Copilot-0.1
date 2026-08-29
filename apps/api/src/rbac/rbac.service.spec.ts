@@ -259,6 +259,70 @@ describe('RbacService deletedAt guard on user-role assignment (P3-L3)', () => {
   });
 });
 
+describe('RbacService getRoleUsers (role roster)', () => {
+  let service: RbacService;
+  let roleFindFirst: jest.Mock;
+  let userFindMany: jest.Mock;
+
+  beforeEach(() => {
+    roleFindFirst = jest.fn();
+    userFindMany = jest.fn();
+    service = new RbacService({
+      role: { findFirst: roleFindFirst },
+      user: { findMany: userFindMany },
+    } as unknown as PrismaService);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('returns the users assigned to a role within the organization', async () => {
+    roleFindFirst.mockResolvedValue({ id: 'role-1', name: 'Inventory Viewer' });
+    userFindMany.mockResolvedValue([
+      {
+        id: 'u1',
+        name: 'John',
+        email: 'john@example.com',
+        avatar: null,
+        isActive: true,
+        roleAssignments: [{ role: { id: 'role-1', name: 'Inventory Viewer', isSystem: false } }],
+      },
+    ]);
+
+    const result = await service.getRoleUsers('org-1', 'role-1');
+
+    expect(roleFindFirst).toHaveBeenCalledWith({
+      where: { id: 'role-1', organizationId: 'org-1' },
+    });
+    expect(userFindMany).toHaveBeenCalledWith({
+      where: {
+        organizationId: 'org-1',
+        deletedAt: null,
+        roleAssignments: { some: { roleId: 'role-1' } },
+      },
+      select: expect.any(Object),
+      orderBy: { name: 'asc' },
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({ id: 'u1', name: 'John', isActive: true });
+  });
+
+  it('returns an empty roster when no users are assigned to the role', async () => {
+    roleFindFirst.mockResolvedValue({ id: 'role-1' });
+    userFindMany.mockResolvedValue([]);
+
+    await expect(service.getRoleUsers('org-1', 'role-1')).resolves.toEqual([]);
+  });
+
+  it('rejects a role that belongs to another organization (tenant isolation)', async () => {
+    roleFindFirst.mockResolvedValue(null);
+
+    await expect(service.getRoleUsers('org-1', 'role-from-org-2')).rejects.toThrow(NotFoundException);
+    expect(userFindMany).not.toHaveBeenCalled();
+  });
+});
+
 describe('RbacService assignUserRoles Owner protection (D-4)', () => {
   let service: RbacService;
   let userFindFirst: jest.Mock;

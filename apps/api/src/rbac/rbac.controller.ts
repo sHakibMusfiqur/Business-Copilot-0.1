@@ -147,6 +147,22 @@ export class RbacController {
     return this.rbacService.duplicateRole(orgId, roleId, dto, user.id);
   }
 
+  // ─── Role Assigned Users ───────────────────────────────────────
+
+  @Get('roles/:id/users')
+  @Permissions(['organization.manage'])
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ description: 'Users assigned to the role retrieved' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiNotFoundResponse({ description: 'Role not found' })
+  async getRoleUsers(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id', ParseCuidPipe) roleId: string,
+  ) {
+    const orgId = this.requireOrg(user);
+    return this.rbacService.getRoleUsers(orgId, roleId);
+  }
+
   // ─── Role Permissions ──────────────────────────────────────────
 
   @Get('roles/:id/permissions')

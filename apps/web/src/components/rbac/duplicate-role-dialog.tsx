@@ -58,8 +58,12 @@ export function DuplicateRoleDialog({ open, onClose, role, onDuplicated }: Dupli
       reset();
       onDuplicated();
       onClose();
-    } catch {
-      toast({ title: 'Error', description: 'Failed to duplicate role.', variant: 'destructive' });
+    } catch (error) {
+      toast({
+        title: 'Could not duplicate role',
+        description: error instanceof Error ? error.message : 'Failed to duplicate role.',
+        variant: 'destructive',
+      });
     } finally {
       setIsSaving(false);
     }

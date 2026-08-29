@@ -46,3 +46,15 @@ export interface OrganizationUser {
 export interface GroupedPermissions {
   [module: string]: Permission[];
 }
+
+/** A user assigned to a role, as returned by GET /roles/:id/users. */
+export interface RoleUser {
+  id: string;
+  name: string;
+  email: string;
+  avatar: string | null;
+  isActive: boolean;
+  roleAssignments: Array<{
+    role: { id: string; name: string; isSystem: boolean };
+  }>;
+}

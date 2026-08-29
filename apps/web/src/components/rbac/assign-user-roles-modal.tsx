@@ -71,8 +71,12 @@ export function AssignUserRolesModal({
       toast({ title: 'Roles updated', description: `Roles for "${selectedUser.name}" have been saved.` });
       setSelectedUser(null);
       setSelectedRoleIds(new Set());
-    } catch {
-      toast({ title: 'Error', description: 'Failed to assign roles.', variant: 'destructive' });
+    } catch (error) {
+      toast({
+        title: 'Could not assign roles',
+        description: error instanceof Error ? error.message : 'Failed to assign roles.',
+        variant: 'destructive',
+      });
     } finally {
       setIsSaving(false);
     }

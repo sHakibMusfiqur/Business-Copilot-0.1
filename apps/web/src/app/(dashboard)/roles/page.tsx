@@ -10,6 +10,7 @@ import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { AssignUserRolesModal } from '@/components/rbac/assign-user-roles-modal';
 import { ClonePermissionsDialog } from '@/components/rbac/clone-permissions-dialog';
 import { CreateRoleDialog } from '@/components/rbac/create-role-dialog';
+import { DeleteRoleDialog } from '@/components/rbac/delete-role-dialog';
 import { DuplicateRoleDialog } from '@/components/rbac/duplicate-role-dialog';
 import { PermissionAssignmentDialog } from '@/components/rbac/permission-assignment-dialog';
 import { RequirePermission } from '@/components/rbac/require-permission';
@@ -26,13 +27,12 @@ import {
   assignPermissions,
   getOrganizationUsers,
   assignUserRoles,
-  deleteRole as apiDeleteRole,
 } from '@/lib/api';
 
 export default function RolesPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const { hasPermission, isLoaded } = usePermissions();
+  const { hasPermission, permissions, isLoaded } = usePermissions();
   const canManageRoles = isLoaded ? hasPermission('organization.manage') : true;
 
   const [selectedRole, setSelectedRole] = useState<RoleDetails | null>(null);
@@ -42,6 +42,7 @@ export default function RolesPage() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [duplicateTarget, setDuplicateTarget] = useState<Role | null>(null);
   const [cloneTarget, setCloneTarget] = useState<Role | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Role | null>(null);
 
   const rolesQuery = useQuery<Role[]>({
     queryKey: ['roles'],
@@ -56,17 +57,6 @@ export default function RolesPage() {
   const usersQuery = useQuery<OrganizationUser[]>({
     queryKey: ['users', 'org'],
     queryFn: () => getOrganizationUsers(),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (roleId: string) => apiDeleteRole(roleId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['roles'] });
-      toast({ title: 'Role deleted' });
-    },
-    onError: () => {
-      toast({ title: 'Error', description: 'Failed to delete role.', variant: 'destructive' });
-    },
   });
 
   const assignPermsMutation = useMutation({
@@ -151,7 +141,7 @@ export default function RolesPage() {
       <RoleList
         roles={rolesQuery.data ?? []}
         onSelect={openRoleDrawer}
-        onDelete={canManageRoles ? (role) => deleteMutation.mutate(role.id) : undefined}
+        onDelete={canManageRoles ? (role) => setDeleteTarget(role) : undefined}
         onDuplicate={canManageRoles ? (role) => setDuplicateTarget(role) : undefined}
         onClonePermissions={canManageRoles ? (role) => setCloneTarget(role) : undefined}
       />
@@ -172,6 +162,7 @@ export default function RolesPage() {
           roleName={selectedRole.name}
           initialPermissions={selectedRole.permissions.map((p) => p.name)}
           groupedPermissions={permissionsGroupedQuery.data ?? null}
+          actorPermissions={permissions}
           isLoadingPermissions={permissionsGroupedQuery.isLoading}
           onSave={async (permissionNames) => {
             await assignPermsMutation.mutateAsync({ roleId: selectedRole.id, permissionNames });
@@ -219,6 +210,16 @@ export default function RolesPage() {
           }}
         />
       )}
+
+      <DeleteRoleDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        role={deleteTarget}
+        onDeleted={() => {
+          setSelectedRole(null);
+          queryClient.invalidateQueries({ queryKey: ['roles'] });
+        }}
+      />
     </div>
   );
 }
