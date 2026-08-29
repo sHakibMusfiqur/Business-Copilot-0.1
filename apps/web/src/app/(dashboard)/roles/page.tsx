@@ -76,6 +76,7 @@ export default function RolesPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users', 'org'] });
       queryClient.invalidateQueries({ queryKey: ['roles'] });
+      queryClient.invalidateQueries({ queryKey: ['users', 'effective-permissions'] });
     },
   });
 

@@ -647,25 +647,96 @@ export class RbacService {
     return this.getUserPermissions(userId, orgId);
   }
 
-  /**
-   * Delegation guard (privilege-escalation protection). A role is only allowed
-   * to carry permissions the *actor* is themselves authorized to grant.
-   *
-   * Rule (safest compatible):
-   *   1. The permission must exist (validated by the caller).
-   *   2. Non-delegable "scoping" permissions ({@link NON_DELEGABLE_PERMISSIONS},
-   *      e.g. `organization.manage`) may never be copied onto an arbitrary role
-   *      — ownership is granted via the Owner *role assignment*
-   *      (`assertCanGrantOwnerRole`), never by copying the permission token.
-   *   3. Every other requested permission must already be held by the actor in
-   *      their own effective permission set. This prevents bootstrapping broader
-   *      permissions than the granting user could use, and means *having*
-   *      `organization.manage` does not grant the right to mint any permission.
-   *
-   * Without `actorId` (internal/seed/system paths) the check is skipped so the
-   * Owner/system reconciliation is unaffected, while all external RBAC reads go
-   * through the controller that always supplies the authenticated actor.
-   */
+  async getUserEffectivePermissions(orgId: string, userId: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, organizationId: orgId, deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        avatar: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found in this organization');
+    }
+
+    const assignments = await this.prisma.userRoleAssignment.findMany({
+      where: { userId },
+      include: {
+        role: {
+          select: {
+            id: true,
+            name: true,
+            isSystem: true,
+            rolePermissions: {
+              select: {
+                permission: {
+                  select: {
+                    id: true,
+                    name: true,
+                    module: true,
+                    label: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    const roles = assignments.map((a) => ({
+      id: a.role.id,
+      name: a.role.name,
+      isSystem: a.role.isSystem,
+    }));
+
+    // Build permission → source roles mapping
+    const permissionMap = new Map<
+      string,
+      {
+        id: string;
+        name: string;
+        module: string;
+        label: string;
+        sourceRoles: Array<{ id: string; name: string }>;
+      }
+    >();
+
+    for (const assignment of assignments) {
+      for (const rp of assignment.role.rolePermissions) {
+        const perm = rp.permission;
+        const existing = permissionMap.get(perm.name);
+
+        if (existing) {
+          // Add this role as an additional source
+          existing.sourceRoles.push({ id: assignment.role.id, name: assignment.role.name });
+        } else {
+          permissionMap.set(perm.name, {
+            id: perm.id,
+            name: perm.name,
+            module: perm.module,
+            label: perm.label,
+            sourceRoles: [{ id: assignment.role.id, name: assignment.role.name }],
+          });
+        }
+      }
+    }
+
+    const permissions = Array.from(permissionMap.values()).sort((a, b) =>
+      a.module.localeCompare(b.module) || a.label.localeCompare(b.label),
+    );
+
+    return {
+      user,
+      roles,
+      permissions,
+    };
+  }
+
+
   async assertCanGrantPermissions(
     orgId: string,
     actorId: string | undefined,
@@ -685,10 +756,6 @@ export class RbacService {
     }
   }
 
-  /**
-   * Guards role assignment against removing/demoting the last Owner of an
-   * organization. Reused by both `assignUserRoles` and `UsersService.update`.
-   */
   async ensureNotLastOwnerWithRole(orgId: string, userId: string, targetRoleIds: string[]): Promise<void> {
     const ownerRole = await this.prisma.role.findUnique({
       where: { organizationId_name: { organizationId: orgId, name: 'Owner' } },

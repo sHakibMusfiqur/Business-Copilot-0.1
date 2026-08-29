@@ -243,4 +243,20 @@ export class RbacController {
     return { message: 'Roles updated successfully' };
   }
 
+  // ─── User Effective Permissions ──────────────────────────────────
+
+  @Get('users/:id/effective-permissions')
+  @Permissions(['organization.manage'])
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ description: 'User effective permissions with source roles' })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiNotFoundResponse({ description: 'User not found' })
+  async getUserEffectivePermissions(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id', ParseCuidPipe) userId: string,
+  ) {
+    const orgId = this.requireOrg(user);
+    return this.rbacService.getUserEffectivePermissions(orgId, userId);
+  }
+
 }

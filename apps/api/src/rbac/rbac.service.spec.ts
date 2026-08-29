@@ -440,3 +440,129 @@ describe('RbacService assignUserRoles Owner protection (D-4)', () => {
     expect(transaction).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('RbacService getUserEffectivePermissions', () => {
+  let service: RbacService;
+  let userFindFirst: jest.Mock;
+  let userRoleAssignmentFindMany: jest.Mock;
+
+  beforeEach(() => {
+    userFindFirst = jest.fn();
+    userRoleAssignmentFindMany = jest.fn();
+    service = new RbacService({
+      user: { findFirst: userFindFirst },
+      userRoleAssignment: { findMany: userRoleAssignmentFindMany },
+    } as unknown as PrismaService);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('returns user identity, roles, and deduplicated permissions with source roles', async () => {
+    userFindFirst.mockResolvedValue({
+      id: 'user-1',
+      name: 'Alice',
+      email: 'alice@example.com',
+      avatar: null,
+    });
+    userRoleAssignmentFindMany.mockResolvedValue([
+      {
+        role: {
+          id: 'role-finance',
+          name: 'Finance Manager',
+          isSystem: false,
+          rolePermissions: [
+            { permission: { id: 'p1', name: 'accounting.read', module: 'accounting', label: 'Read Accounting' } },
+            { permission: { id: 'p2', name: 'accounting.create', module: 'accounting', label: 'Create Accounting' } },
+          ],
+        },
+      },
+      {
+        role: {
+          id: 'role-admin',
+          name: 'Admin',
+          isSystem: true,
+          rolePermissions: [
+            { permission: { id: 'p1', name: 'accounting.read', module: 'accounting', label: 'Read Accounting' } },
+            { permission: { id: 'p3', name: 'users.read', module: 'users', label: 'Read Users' } },
+          ],
+        },
+      },
+    ]);
+
+    const result = await service.getUserEffectivePermissions('org-1', 'user-1');
+
+    expect(result.user).toEqual({
+      id: 'user-1',
+      name: 'Alice',
+      email: 'alice@example.com',
+      avatar: null,
+    });
+    expect(result.roles).toEqual([
+      { id: 'role-finance', name: 'Finance Manager', isSystem: false },
+      { id: 'role-admin', name: 'Admin', isSystem: true },
+    ]);
+    expect(result.permissions).toHaveLength(3);
+    // accounting.read appears in both roles
+    const acctRead = result.permissions.find((p) => p.name === 'accounting.read');
+    expect(acctRead?.sourceRoles).toHaveLength(2);
+    expect(acctRead?.sourceRoles.map((r) => r.id)).toEqual(['role-finance', 'role-admin']);
+    // accounting.create only in Finance Manager
+    const acctCreate = result.permissions.find((p) => p.name === 'accounting.create');
+    expect(acctCreate?.sourceRoles).toHaveLength(1);
+    expect(acctCreate?.sourceRoles[0].id).toBe('role-finance');
+  });
+
+  it('returns empty permissions for a user with no roles', async () => {
+    userFindFirst.mockResolvedValue({
+      id: 'user-2',
+      name: 'Bob',
+      email: 'bob@example.com',
+      avatar: null,
+    });
+    userRoleAssignmentFindMany.mockResolvedValue([]);
+
+    const result = await service.getUserEffectivePermissions('org-1', 'user-2');
+
+    expect(result.user.id).toBe('user-2');
+    expect(result.roles).toEqual([]);
+    expect(result.permissions).toEqual([]);
+  });
+
+  it('rejects a user that does not exist in the organization (tenant isolation)', async () => {
+    userFindFirst.mockResolvedValue(null);
+
+    await expect(
+      service.getUserEffectivePermissions('org-1', 'user-from-org-2'),
+    ).rejects.toThrow(NotFoundException);
+    expect(userRoleAssignmentFindMany).not.toHaveBeenCalled();
+  });
+
+  it('includes system role permissions in the effective set', async () => {
+    userFindFirst.mockResolvedValue({
+      id: 'user-3',
+      name: 'Carol',
+      email: 'carol@example.com',
+      avatar: null,
+    });
+    userRoleAssignmentFindMany.mockResolvedValue([
+      {
+        role: {
+          id: 'role-owner',
+          name: 'Owner',
+          isSystem: true,
+          rolePermissions: [
+            { permission: { id: 'p1', name: 'organization.manage', module: 'organization', label: 'Manage Organization' } },
+          ],
+        },
+      },
+    ]);
+
+    const result = await service.getUserEffectivePermissions('org-1', 'user-3');
+
+    expect(result.permissions).toHaveLength(1);
+    expect(result.permissions[0].name).toBe('organization.manage');
+    expect(result.permissions[0].sourceRoles[0].name).toBe('Owner');
+  });
+});

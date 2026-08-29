@@ -13,6 +13,7 @@ import {
   MoreHorizontal,
   Shield,
   ShieldOff,
+  Key,
   User as UserIcon,
 } from 'lucide-react';
 
@@ -46,6 +47,7 @@ interface UserTableProps {
   onEdit: (user: User) => void;
   onDelete: (user: User) => void;
   onToggleStatus: (user: User) => void;
+  onViewPermissions?: (user: User) => void;
 }
 
 function SortIcon({ field, sortBy, sortOrder }: { field: string; sortBy: string; sortOrder: string }) {
@@ -105,6 +107,7 @@ export function UserTable({
   onEdit,
   onDelete,
   onToggleStatus,
+  onViewPermissions,
 }: UserTableProps) {
   const [searchInput, setSearchInput] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -259,6 +262,14 @@ export function UserTable({
                             <DropdownMenuItem onClick={() => onEdit(user)}>
                               Edit user
                             </DropdownMenuItem>
+                            {onViewPermissions && (
+                              <DropdownMenuItem onClick={() => onViewPermissions(user)}>
+                                <span className="flex items-center gap-2">
+                                  <Key className="h-4 w-4" />
+                                  View Permissions
+                                </span>
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem onClick={() => onToggleStatus(user)}>
                               {user.isActive ? (
                                 <span className="flex items-center gap-2">

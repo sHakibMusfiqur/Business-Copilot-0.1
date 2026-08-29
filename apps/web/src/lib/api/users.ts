@@ -1,6 +1,6 @@
 import { api } from './client';
 import { API_ROUTES } from './routes';
-import type { OrganizationUser } from '@/components/rbac/rbac-types';
+import type { OrganizationUser, EffectivePermissionsResponse } from '@/components/rbac/rbac-types';
 
 export interface UserListParams {
   page?: number;
@@ -58,5 +58,10 @@ export async function getOrganizationUsers(signal?: AbortSignal): Promise<Organi
 
 export async function assignUserRoles(userId: string, roleIds: string[]) {
   const response = await api.put(`${API_ROUTES.USERS.ROOT}/${userId}/roles`, { roleIds });
+  return response.data;
+}
+
+export async function getUserEffectivePermissions(userId: string, signal?: AbortSignal): Promise<EffectivePermissionsResponse> {
+  const response = await api.get(`${API_ROUTES.USERS.ROOT}/${userId}/effective-permissions`, { signal });
   return response.data;
 }

@@ -10,6 +10,7 @@ import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 import { UserTable } from '@/components/users/user-table';
 import { InviteEmployeeDialog } from '@/components/users/invite-employee-dialog';
 import { EditUserDialog } from '@/components/users/edit-user-dialog';
+import { EffectivePermissionsDrawer } from '@/components/rbac/effective-permissions-drawer';
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
 import { StatusToggleDialog } from '@/components/ui/status-toggle-dialog';
 import { useToast } from '@/components/ui/use-toast';
@@ -39,6 +40,7 @@ export default function UsersPage() {
   const [editUser, setEditUser] = useState<User | null>(null);
   const [deleteUser, setDeleteUser] = useState<User | null>(null);
   const [statusUser, setStatusUser] = useState<User | null>(null);
+  const [permissionsUser, setPermissionsUser] = useState<User | null>(null);
 
   const usersQuery = useQuery<UsersResponse>({
     queryKey: ['users', 'management', { page, limit, search, sortBy, sortOrder }],
@@ -229,6 +231,7 @@ export default function UsersPage() {
         onEdit={setEditUser}
         onDelete={setDeleteUser}
         onToggleStatus={setStatusUser}
+        onViewPermissions={setPermissionsUser}
       />
 
       <InviteEmployeeDialog
@@ -270,6 +273,12 @@ export default function UsersPage() {
         activateDescription={(name) => `Activate ${name}? They will be able to log in and access the system.`}
         deactivateDescription={(name) => `Deactivate ${name}? They will not be able to log in until reactivated.`}
         errorFallback="Failed to update user status."
+      />
+
+      <EffectivePermissionsDrawer
+        userId={permissionsUser?.id ?? null}
+        open={permissionsUser !== null}
+        onClose={() => setPermissionsUser(null)}
       />
     </div>
   );

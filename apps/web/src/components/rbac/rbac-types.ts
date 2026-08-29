@@ -58,3 +58,24 @@ export interface RoleUser {
     role: { id: string; name: string; isSystem: boolean };
   }>;
 }
+
+/** A single effective permission with its source role(s). */
+export interface EffectivePermission {
+  id: string;
+  name: string;
+  module: string;
+  label: string;
+  sourceRoles: Array<{ id: string; name: string }>;
+}
+
+/** Response shape for GET /users/:id/effective-permissions. */
+export interface EffectivePermissionsResponse {
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    avatar: string | null;
+  };
+  roles: Array<{ id: string; name: string; isSystem: boolean }>;
+  permissions: EffectivePermission[];
+}
