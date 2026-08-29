@@ -47,8 +47,12 @@ export function CreateRoleDialog({ open, onClose, onCreated }: CreateRoleDialogP
       reset();
       onCreated();
       onClose();
-    } catch {
-      toast({ title: 'Error', description: 'Failed to create role.', variant: 'destructive' });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to create role.',
+        variant: 'destructive',
+      });
     } finally {
       setIsSaving(false);
     }
