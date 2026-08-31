@@ -23,7 +23,7 @@ import {
   type WorkspaceWidgetProps,
 } from './widgets';
 
-/** Renderer-slot → component mapping (register-only, no business logic). */
+
 const REGISTRY: Record<WidgetKey, ComponentType<WorkspaceWidgetProps>> = {
   metric: MetricWidget,
   metricCurrency: MetricWidget,
@@ -50,11 +50,7 @@ interface DashboardWidgetSurfaceProps {
   onCommand?: (command: string) => void;
 }
 
-/**
- * Dumb renderer: resolves an engine-supplied {@link DashboardWidget} to its
- * registered component and data payload. Decides nothing — the Dashboard Engine
- * already resolved selection, ordering, layout and visibility.
- */
+
 export function DashboardWidgetSurface({ widget, overview, manifest, onCommand }: DashboardWidgetSurfaceProps) {
   const Component = rendererFor(widget);
   if (!Component) return <FallbackState state={widget.loadState} kind={widget.key} />;
@@ -70,7 +66,7 @@ export function DashboardWidgetSurface({ widget, overview, manifest, onCommand }
   );
 }
 
-/** Presentational fallback/loading/unknown states (data-driven, no logic). */
+
 function FallbackState({ state, kind }: { state: DashboardWidget['loadState']; kind: string }) {
   const isPending = state === 'loading' || state === 'lazy';
   const label = isPending ? 'Loading widget' : state === 'unknown' ? `Unknown widget: ${kind}` : 'Widget unavailable';
@@ -81,7 +77,7 @@ function FallbackState({ state, kind }: { state: DashboardWidget['loadState']; k
   );
 }
 
-/** Map an engine widget to its rendered component (register-first, no switch). */
+
 export function rendererFor(widget: DashboardWidget): ComponentType<WorkspaceWidgetProps> | null {
   if (widget.loadState === 'loading' || widget.loadState === 'lazy') return null;
   if (widget.loadState === 'unknown') return null;

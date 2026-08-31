@@ -3,7 +3,6 @@
 import { motion } from 'framer-motion';
 import {
   AlertTriangle,
-  Check,
   CircleCheck,
   Clock,
   Sparkles,
@@ -86,9 +85,8 @@ export function MetricWidget({ data }: WorkspaceWidgetProps) {
 
 export function TrendWidget({ data }: WorkspaceWidgetProps) {
   const s = data.series;
-  const hasRealData = s && s.data.some((d) => d !== 0);
 
-  if (!hasRealData) {
+  if (!s || !s.available || s.data.length === 0) {
     return (
       <Card>
         <div className="flex items-start justify-between gap-3">
@@ -109,11 +107,11 @@ export function TrendWidget({ data }: WorkspaceWidgetProps) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">{data.title}</p>
-          <p className="mt-1 text-[22px] font-bold tracking-tight tabular-nums">{s?.value ?? '—'}</p>
+          <p className="mt-1 text-[22px] font-bold tracking-tight tabular-nums">{s.value}</p>
         </div>
       </div>
       <div className="mt-3">
-        <TrendChart height={120} series={[{ data: s?.data ?? [], color: data.accent, label: s?.label }]} />
+        <TrendChart height={120} series={[{ data: s.data, color: s.color, label: s.label }]} />
       </div>
     </Card>
   );
@@ -121,10 +119,8 @@ export function TrendWidget({ data }: WorkspaceWidgetProps) {
 
 export function ForecastWidget({ data }: WorkspaceWidgetProps) {
   const s = data.series;
-  const past = s?.data ?? [];
-  const hasRealData = past.some((d) => d !== 0);
 
-  if (!hasRealData) {
+  if (!s || !s.available || s.data.length === 0) {
     return (
       <Card>
         <div className="flex items-start justify-between gap-3">
@@ -137,7 +133,7 @@ export function ForecastWidget({ data }: WorkspaceWidgetProps) {
           </span>
         </div>
         <div className="mt-3 flex h-[120px] items-center justify-center">
-          <span className="text-[13px] text-muted-foreground italic">No historical data for forecast</span>
+          <span className="text-[13px] text-muted-foreground italic">No forecast data available</span>
         </div>
       </Card>
     );
@@ -148,7 +144,7 @@ export function ForecastWidget({ data }: WorkspaceWidgetProps) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">{data.title}</p>
-          <p className="mt-1 text-[20px] font-bold tracking-tight tabular-nums">{s?.value ?? '—'}</p>
+          <p className="mt-1 text-[20px] font-bold tracking-tight tabular-nums">{s.value}</p>
         </div>
         <span className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/5 px-2 py-0.5 text-[11px] font-semibold text-primary">
           Forecast
@@ -158,7 +154,7 @@ export function ForecastWidget({ data }: WorkspaceWidgetProps) {
         <TrendChart
           height={120}
           series={[
-            { data: past, color: data.accent, label: 'Actual' },
+            { data: s.data, color: s.color, label: s.label },
           ]}
         />
       </div>
@@ -168,6 +164,18 @@ export function ForecastWidget({ data }: WorkspaceWidgetProps) {
 
 export function DonutWidget({ data }: WorkspaceWidgetProps) {
   const parts = data.distribution ?? [];
+
+  if (parts.length === 0) {
+    return (
+      <Card>
+        <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">{data.title}</p>
+        <div className="mt-3 flex h-[88px] items-center justify-center">
+          <span className="text-[13px] text-muted-foreground italic">No category data available</span>
+        </div>
+      </Card>
+    );
+  }
+
   const total = parts.reduce((a, b) => a + b.value, 0) || 1;
   const R = 34;
   const C = 2 * Math.PI * R;
@@ -221,6 +229,18 @@ export function DonutWidget({ data }: WorkspaceWidgetProps) {
 
 export function ListWidget({ data }: WorkspaceWidgetProps) {
   const rows = data.rows ?? [];
+
+  if (rows.length === 0) {
+    return (
+      <Card>
+        <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">{data.title}</p>
+        <div className="mt-3 flex h-[60px] items-center justify-center">
+          <span className="text-[13px] text-muted-foreground italic">No data available</span>
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">{data.title}</p>
@@ -273,15 +293,16 @@ export function HealthScoreWidget({ data }: WorkspaceWidgetProps) {
   const health = data.health;
   const score = health?.score ?? 0;
   const label = health?.label ?? '—';
+  const description = health?.description ?? '';
   const R = 34;
   const C = 2 * Math.PI * R;
 
   if (!health) {
     return (
       <Card>
-        <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">{data.title}</p>
+        <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">{data.title ?? 'Operational Signals'}</p>
         <div className="mt-3 flex h-[92px] items-center justify-center">
-          <span className="text-[13px] text-muted-foreground italic">No data to compute health score</span>
+          <span className="text-[13px] text-muted-foreground italic">No operational data available</span>
         </div>
       </Card>
     );
@@ -289,7 +310,7 @@ export function HealthScoreWidget({ data }: WorkspaceWidgetProps) {
 
   return (
     <Card>
-      <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">{data.title}</p>
+      <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">{data.title ?? 'Operational Signals'}</p>
       <div className="mt-3 flex items-center gap-5">
         <div className="relative h-[92px] w-[92px] shrink-0">
           <svg viewBox="0 0 92 92" className="h-full w-full -rotate-90">
@@ -312,7 +333,7 @@ export function HealthScoreWidget({ data }: WorkspaceWidgetProps) {
         <div>
           <p className="text-[15px] font-semibold tracking-tight">{label}</p>
           <p className="mt-1 max-w-[140px] text-[12px] leading-relaxed text-muted-foreground">
-            Derived from real inventory, leave and financial data.
+            {description}
           </p>
         </div>
       </div>
@@ -320,8 +341,20 @@ export function HealthScoreWidget({ data }: WorkspaceWidgetProps) {
   );
 }
 
-export function ApprovalsWidget({ data, onCommand }: WorkspaceWidgetProps) {
+export function ApprovalsWidget({ data }: WorkspaceWidgetProps) {
   const rows = data.approvals ?? [];
+
+  if (rows.length === 0) {
+    return (
+      <Card>
+        <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">{data.title}</p>
+        <div className="mt-3 flex h-[60px] items-center justify-center">
+          <span className="text-[13px] text-muted-foreground italic">No pending approvals</span>
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">{data.title}</p>
@@ -333,12 +366,9 @@ export function ApprovalsWidget({ data, onCommand }: WorkspaceWidgetProps) {
                 <p className="truncate text-[13px] font-medium text-slate-700 dark:text-slate-200">{r.title}</p>
                 <p className="truncate text-[11px] text-muted-foreground">{r.subtitle}</p>
               </div>
-              <button
-                onClick={() => onCommand?.('approvals.list')}
-                className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-primary/10 px-2.5 py-1.5 text-[11px] font-semibold text-primary transition-colors hover:bg-primary hover:text-primary-foreground"
-              >
-                <Check className="h-3 w-3" /> Approve
-              </button>
+              <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+                {r.meta}
+              </span>
             </div>
           </li>
         ))}

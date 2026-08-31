@@ -10,11 +10,11 @@ export interface WidgetMetric {
   value: number;
   currency?: boolean;
   label: string;
-  /** null when trend data is unavailable (no backend source). */
+ 
   trend: number | null;
-  /** null when trend data is unavailable. */
+  
   trendPositive: boolean | null;
-  /** false when this metric has no real backend data source. */
+  /** false when this metric has no real backend data source with matching semantics. */
   available: boolean;
 }
 
@@ -23,6 +23,8 @@ export interface WidgetSeries {
   value: string;
   data: number[];
   color: string;
+  
+  available: boolean;
 }
 
 export interface WidgetDistribution {
@@ -46,12 +48,13 @@ export interface WidgetData {
   series?: WidgetSeries;
   distribution?: WidgetDistribution[];
   rows?: WidgetListRow[];
-  health?: { score: number; label: string } | null;
+  
+  health?: { score: number; label: string; description: string } | null;
   ai?: string[];
   approvals?: WidgetListRow[];
   calendar?: { day: number; items: string[] }[];
   title?: string;
-  /** false when no real backend data is available for this widget. */
+  
   available?: boolean;
 }
 
@@ -220,144 +223,72 @@ export const METRIC_LABELS: Record<string, string> = {
   aiTokens: 'AI Tokens',
 };
 
-const TREND_SERIES: Record<string, string[]> = {
-  revenue: ['revenue'],
-  sales: ['sales'],
-  dailySales: ['dailySales'],
-  appointments: ['appointments'],
-  production: ['production'],
-  enrollment: ['enrollment'],
-  recurringRevenue: ['recurringRevenue'],
-  orders: ['orders'],
-  stockMovement: ['stockMovement'],
-  platformGrowth: ['platformGrowth'],
-  monthlyRevenue: ['revenue'],
-};
+/** Only sources backed by real backend trend time-series. */
+const VALID_TREND_SOURCES = new Set(['revenue', 'sales', 'cashFlow']);
 
 const TREND_TITLES: Record<string, string> = {
   revenue: 'Revenue Trend',
   sales: 'Sales Trend',
-  dailySales: 'Sales Trend',
-  appointments: 'Appointments Trend',
-  production: 'Production Trend',
-  enrollment: 'Enrollment Trend',
-  recurringRevenue: 'Recurring Revenue',
-  orders: 'Orders Trend',
-  stockMovement: 'Stock Movement',
-  platformGrowth: 'Platform Growth',
-  monthlyRevenue: 'Revenue Trend',
-  cashFlow: 'Cash Flow',
   revenueTrend: 'Revenue Trend',
   salesTrend: 'Sales Trend',
-  forecast: 'Revenue Forecast',
+  cashFlow: 'Cash Flow',
 };
 
 function seriesLabel(source: string): string {
   return METRIC_LABELS[source] ?? 'Trend';
 }
 
-/**
- * Maps a widget source key to a real backend statistics field.
- * Only returns data when a genuine backend field exists.
- * Sources without a real backend mapping return `available: false`.
- */
+
 function metricOf(stats: DashboardStatistics, source: string): WidgetMetric {
   const revenue = stats.monthlyRevenue;
   const expense = stats.monthlyExpense;
   const netProfit = revenue - expense;
 
-  // Only real fields from the backend DashboardStatistics interface.
-  // No arbitrary formulas, no multipliers, no modulo hacks.
   const CURRENCY_SOURCES = new Set([
     'monthlyRevenue',
-    'feesCollected',
     'expenditure',
-    'stockValue',
-    'monthlyRecurringRevenue',
-    'dailyRevenue',
-    'monthlyRetainer',
     'netProfit',
-    'cashBalance',
     'teamCost',
     'monthlyPayroll',
-    'costPerUnit',
-    'avgOrderValue',
-    'averageTicket',
-    'platformRevenue',
   ]);
 
-  // Sources that map 1:1 to a real backend field
-  const realMap: Record<string, { value: number; available: boolean }> = {
-    todaySales: { value: revenue, available: true },
-    openOrders: { value: stats.totalSalesOrders, available: true },
-    appointmentsToday: { value: stats.totalCustomers, available: true },
-    productionOutput: { value: stats.totalProducts, available: true },
-    workOrders: { value: stats.totalPurchaseOrders, available: true },
-    enrolled: { value: stats.totalCustomers, available: true },
-    feesCollected: { value: revenue, available: true },
-    expenditure: { value: expense, available: true },
-    monthlyRecurringRevenue: { value: revenue, available: true },
-    posSalesToday: { value: revenue, available: true },
-    transactions: { value: stats.totalSalesOrders, available: true },
-    productsInStock: { value: stats.totalProducts, available: true },
-    prescriptionsToday: { value: stats.totalCustomers, available: true },
-    stockValue: { value: expense, available: true },
-    dailyRevenue: { value: revenue, available: true },
-    orderBook: { value: stats.totalSalesOrders, available: true },
-    fabricStock: { value: stats.totalProducts, available: true },
-    monthlyRetainer: { value: revenue, available: true },
-    monthlyRevenue: { value: revenue, available: true },
-    totalCustomers: { value: stats.totalCustomers, available: true },
-    employees: { value: stats.totalEmployees, available: true },
-    lowStock: { value: stats.lowStockProducts, available: true },
-    netProfit: { value: netProfit, available: true },
-    cashBalance: { value: netProfit, available: true },
-    outstanding: { value: stats.totalInvoices, available: true },
-    teamSize: { value: stats.totalUsers, available: true },
-    teamCost: { value: stats.monthlyPayroll, available: true },
-    totalEmployees: { value: stats.totalEmployees, available: true },
-    pendingLeaves: { value: stats.pendingLeaves, available: true },
-    monthlyPayroll: { value: stats.monthlyPayroll, available: true },
-    salesToday: { value: revenue, available: true },
-    pipeline: { value: stats.totalSalesOrders, available: true },
-    organizations: { value: 1, available: true },
-    activeOrgs: { value: 1, available: true },
-    platformRevenue: { value: revenue, available: true },
-    users: { value: stats.totalUsers, available: true },
-    aiTokens: { value: 0, available: true },
-    growth: { value: revenue > 0 ? Math.round((netProfit / revenue) * 100) : 0, available: revenue > 0 },
-    pendingApprovals: { value: stats.pendingLeaves, available: true },
+  // ─── REAL_CONFIRMED: 1:1 mapping to a semantically matching backend field ───
+  const confirmed: Record<string, { value: number; currency?: boolean }> = {
+    // Revenue / Finance
+    monthlyRevenue: { value: revenue, currency: true },
+    expenditure: { value: expense, currency: true },
+    netProfit: { value: netProfit, currency: true },
+
+    // Entity counts — label matches the entity
+    totalCustomers: { value: stats.totalCustomers },
+    employees: { value: stats.totalEmployees },
+    totalEmployees: { value: stats.totalEmployees },
+    lowStock: { value: stats.lowStockProducts },
+    pendingLeaves: { value: stats.pendingLeaves },
+
+    // Payroll
+    monthlyPayroll: { value: stats.monthlyPayroll, currency: true },
+    teamCost: { value: stats.monthlyPayroll, currency: true },
+
+    // Users
+    teamSize: { value: stats.totalUsers },
+    users: { value: stats.totalUsers },
   };
 
-  // Sources that need derived real math on existing fields (sound derivations)
-  const derivedMap: Record<string, { value: number; available: boolean }> = {
-    averageTicket: {
-      value: stats.totalSalesOrders > 0 ? Math.round(revenue / stats.totalSalesOrders) : 0,
-      available: stats.totalSalesOrders > 0,
-    },
-    avgOrderValue: {
-      value: stats.totalSalesOrders > 0 ? Math.round(revenue / stats.totalSalesOrders) : 0,
-      available: stats.totalSalesOrders > 0,
-    },
-    costPerUnit: {
-      value: stats.totalProducts > 0 ? Math.round(expense / stats.totalProducts) : 0,
-      available: stats.totalProducts > 0 && expense > 0,
-    },
-  };
-
-  const real = realMap[source] ?? derivedMap[source];
-  if (real) {
+  const c = confirmed[source];
+  if (c) {
     return {
-      value: real.value,
-      currency: CURRENCY_SOURCES.has(source),
+      value: c.value,
+      currency: c.currency ?? CURRENCY_SOURCES.has(source),
       label: METRIC_LABELS[source] ?? 'Value',
       trend: null,
       trendPositive: null,
-      available: real.available,
+      available: true,
     };
   }
 
-  // Synthetic sources — no real backend data. Return unavailable.
+  
+
   return {
     value: 0,
     currency: CURRENCY_SOURCES.has(source),
@@ -368,131 +299,76 @@ function metricOf(stats: DashboardStatistics, source: string): WidgetMetric {
   };
 }
 
+
 function seriesOf(_stats: DashboardStatistics, source: string, trends?: DashboardTrends): WidgetSeries {
-  const real = trends ? realSeriesOf(trends, source) : undefined;
-  if (real) return real;
+  if (trends && VALID_TREND_SOURCES.has(source)) {
+    const seriesMap: Record<string, number[] | undefined> = {
+      revenue: trends.revenue,
+      sales: trends.sales,
+      cashFlow: trends.cashFlow,
+    };
+    const data = seriesMap[source];
+    if (data && data.length > 0 && data.some((d) => d !== 0)) {
+      const total = data.reduce((a, b) => a + b, 0);
+      return {
+        label: seriesLabel(source),
+        value: `$${Math.round(total / data.length).toLocaleString('en-US')}`,
+        data,
+        color: '#3B82F6',
+        available: true,
+      };
+    }
+  }
 
-  // No backend time-series for this source (e.g. empty org, or trend data not
-  // available). Render a flat, zero series rather than fabricating trend data.
-  const data = Array.from({ length: 12 }, () => 0);
+  
   return {
     label: seriesLabel(source),
-    value: '$0',
-    data,
+    value: '—',
+    data: [],
     color: '#3B82F6',
-  };
-}
-
-/** Resolves a trend series from real backend time-series when it is available. */
-function realSeriesOf(trends: DashboardTrends, source: string): WidgetSeries | undefined {
-  const series: Record<string, number[] | undefined> = {
-    revenue: trends.revenue,
-    expenses: trends.expenses,
-    sales: trends.sales,
-    cashFlow: trends.cashFlow,
-  };
-  const data = series[source];
-  if (!data || data.length === 0) return undefined;
-  const total = data.reduce((a, b) => a + b, 0);
-  return {
-    label: seriesLabel(source),
-    value: `$${Math.round(total / data.length).toLocaleString('en-US')}`,
-    data,
-    color: '#3B82F6',
+    available: false,
   };
 }
 
 const DISTRIBUTION_COLORS = ['#3B82F6', '#8B5CF6', '#06B6D4', '#F59E0B', '#22C55E', '#F43F5E'];
 
+
 function distributionOf(stats: DashboardStatistics, source: string): WidgetDistribution[] {
-  // Only present real, countable data. The backend does not expose per-category
-  // breakdowns for these chart types, so fabricating split ratios would present
-  // fake business data. Show a single truthful segment when a real count exists,
-  // otherwise return an empty distribution.
   const segments: { label: string; value: number }[] = [];
+
   if (source === 'customers' && stats.totalCustomers > 0) {
     segments.push({ label: 'Customers', value: stats.totalCustomers });
-  } else if ((source === 'departments' || source === 'departmentLoad') && stats.totalEmployees > 0) {
-    segments.push({ label: 'Employees', value: stats.totalEmployees });
-  } else if (source === 'categorySales' && stats.totalProducts > 0) {
-    segments.push({ label: 'Products', value: stats.totalProducts });
   }
+ 
+
   return segments.map((s, i) => ({
     ...s,
     color: DISTRIBUTION_COLORS[i % DISTRIBUTION_COLORS.length],
   }));
 }
 
+
 function rowsOf(_stats: DashboardStatistics, overview: DashboardOverview, source: string): WidgetListRow[] {
   const activities = overview.recentActivities ?? [];
-  const fromActivity = (offset: number, index: number): WidgetListRow | null => {
-    const a = activities[index + offset];
-    if (!a) return null;
-    return {
+
+  if (source === 'recentOrders' || source === 'activity') {
+    if (activities.length === 0) return [];
+    return activities.slice(0, 5).map((a) => ({
       id: a.id,
       title: a.action,
-      subtitle: a.entity,
+      subtitle: a.entity ?? 'Unknown',
       meta: a.user?.name ?? 'System',
-      status: a.entity.toLowerCase().includes('invoice') ? 'Paid' : 'Pending',
-      tone: a.entity.toLowerCase().includes('invoice') ? 'success' : 'warning',
-    };
-  };
+      status: 'Info',
+      tone: 'neutral' as StatusTone,
+    }));
+  }
 
-  const rows: Record<string, WidgetListRow[]> = {
-    // No backend list data exists for these sources; avoid fabricating SKUs,
-    // employees, tables, machines or PRs. Render as empty (real data only).
-    lowStock: [],
-    recentOrders: activities.slice(0, 5).map((a) => ({
-      id: a.id,
-      title: a.action,
-      subtitle: a.entity,
-      meta: a.user?.name ?? 'System',
-      status: 'Pending',
-      tone: 'warning' as StatusTone,
-    })),
-    leaveRequests: [],
-    ordersQueue: [
-      fromActivity(0, 0),
-      fromActivity(1, 1),
-      fromActivity(2, 2),
-    ].filter(Boolean) as WidgetListRow[],
-    supportQueue: [
-      fromActivity(0, 0),
-      fromActivity(1, 1),
-      fromActivity(2, 2),
-    ].filter(Boolean) as WidgetListRow[],
-    openTickets: [
-      fromActivity(0, 0),
-      fromActivity(1, 1),
-    ].filter(Boolean) as WidgetListRow[],
-    kitchenQueue: [],
-    medicineStock: [],
-    machineStatus: [],
-    academicCalendar: [],
-    pullRequests: [],
-    productionLines: [],
-  };
-
-  const fallback = activities.length > 0
-    ? activities.slice(0, 5).map((a) => ({
-        id: a.id,
-        title: a.action,
-        subtitle: a.entity,
-        meta: a.user?.name ?? 'System',
-        status: 'Info',
-        tone: 'neutral' as StatusTone,
-      }))
-    : [fromActivity(0, 0)].filter(Boolean) as WidgetListRow[];
-
-  return rows[source] ?? fallback;
+  
+  return [];
 }
 
-/**
- * Health score derived from real backend signals only.
- * Returns null when no meaningful signals exist (empty org).
- * No arbitrary baseline — only real deductions from real data.
- */
-function healthOf(stats: DashboardStatistics): { score: number; label: string } | null {
+
+function healthOf(stats: DashboardStatistics): { score: number; label: string; description: string } | null {
   const hasData =
     stats.totalCustomers > 0 ||
     stats.totalProducts > 0 ||
@@ -501,53 +377,50 @@ function healthOf(stats: DashboardStatistics): { score: number; label: string } 
 
   if (!hasData) return null;
 
-  // Start at 100, deduct only for real issues
+  const signals: string[] = [];
   let score = 100;
-  if (stats.lowStockProducts > 0) score -= Math.min(20, stats.lowStockProducts * 2);
-  if (stats.pendingLeaves > 0) score -= Math.min(10, stats.pendingLeaves * 2);
-  if (stats.monthlyRevenue > 0 && stats.monthlyRevenue < stats.monthlyExpense) score -= 15;
+
+  if (stats.lowStockProducts > 0) {
+    const deduction = Math.min(20, stats.lowStockProducts * 2);
+    score -= deduction;
+    signals.push(`${stats.lowStockProducts} low-stock items`);
+  }
+  if (stats.pendingLeaves > 0) {
+    const deduction = Math.min(10, stats.pendingLeaves * 2);
+    score -= deduction;
+    signals.push(`${stats.pendingLeaves} pending leaves`);
+  }
+  if (stats.monthlyRevenue > 0 && stats.monthlyRevenue < stats.monthlyExpense) {
+    score -= 15;
+    signals.push('Expenses exceed revenue');
+  }
   score = Math.max(0, Math.min(100, score));
 
-  return {
-    score,
-    label: score >= 85 ? 'Excellent' : score >= 65 ? 'Good' : score >= 45 ? 'Fair' : 'Needs attention',
-  };
+  const label = score >= 85 ? 'Strong' : score >= 65 ? 'Good' : score >= 45 ? 'Fair' : 'Needs attention';
+  const description = signals.length > 0
+    ? `Signals: ${signals.join(', ')}.`
+    : 'No operational issues detected.';
+
+  return { score, label, description };
 }
+
 
 function approvalsOf(stats: DashboardStatistics): WidgetListRow[] {
   const rows: WidgetListRow[] = [];
-  // Only surface pending counts that exist; do not invent specific employees,
-  // purchase orders or invoice references that are not backed by real data.
+
   if (stats.pendingLeaves > 0) {
     rows.push({
       id: 'ap-leave',
       title: 'Leave request',
       subtitle: 'Awaiting approval',
       meta: `${stats.pendingLeaves} pending`,
-      status: 'Approve',
+      status: 'Review',
       tone: 'warning',
     });
   }
-  if (stats.totalPurchaseOrders > 0) {
-    rows.push({
-      id: 'ap-po',
-      title: 'Purchase order',
-      subtitle: 'Awaiting sign-off',
-      meta: `${stats.totalPurchaseOrders} open`,
-      status: 'Approve',
-      tone: 'warning',
-    });
-  }
-  if (stats.totalInvoices > 0) {
-    rows.push({
-      id: 'ap-inv',
-      title: 'Invoice approval',
-      subtitle: 'Awaiting sign-off',
-      meta: `${stats.totalInvoices} open`,
-      status: 'Approve',
-      tone: 'warning',
-    });
-  }
+
+
+
   return rows;
 }
 
@@ -557,15 +430,10 @@ function aiOf(overview: DashboardOverview): string[] {
 }
 
 function calendarOf(): { day: number; items: string[] }[] {
-  // No backend scheduling data; an empty calendar is honest rather than
-  // presenting invented payroll/vendor/payment events.
   return [];
 }
 
-/**
- * Resolves a widget `source` against the live dashboard overview into a typed
- * payload the widget components can render without domain knowledge.
- */
+
 export function resolveWidgetData(
   source: string | undefined,
   overview: DashboardOverview | null,
@@ -577,13 +445,13 @@ export function resolveWidgetData(
 
   if (key === 'healthScore') {
     const health = healthOf(stats);
-    return { ...base, health, title: 'Business Health', available: health !== null };
+    return { ...base, health, title: 'Operational Signals', available: health !== null };
   }
   if (key === 'aiInsights') {
     return { ...base, ai: overview ? aiOf(overview) : [], title: "Today's AI Insights" };
   }
   if (key === 'activity') {
-    return { ...base, rows: rowsOf(stats, overview ?? emptyOverview(), 'recentOrders'), title: 'Activity' };
+    return { ...base, rows: rowsOf(stats, overview ?? emptyOverview(), 'activity'), title: 'Recent Activity' };
   }
   if (key === 'approvals') {
     return { ...base, approvals: approvalsOf(stats), title: 'Awaiting Approval' };
@@ -594,30 +462,45 @@ export function resolveWidgetData(
   if (key === 'quickActions') {
     return { ...base, title: 'Quick Actions' };
   }
-  if (TREND_SERIES[key] || key === 'forecast' || key === 'revenueTrend' || key === 'salesTrend' || key === 'cashFlow') {
+  
+  if (key === 'revenueTrend' || key === 'salesTrend' || key === 'cashFlow' || VALID_TREND_SOURCES.has(key)) {
     const seriesSource =
       key === 'revenueTrend' ? 'revenue' : key === 'salesTrend' ? 'sales' : key === 'cashFlow' ? 'cashFlow' : key;
+    const s = seriesOf(stats, seriesSource, overview?.trends);
     return {
       ...base,
-      series: seriesOf(stats, seriesSource, overview?.trends),
+      series: s,
       title: TREND_TITLES[key] ?? `${seriesLabel(key)} Trend`,
+      available: s.available,
+    };
+  }
+  if (key === 'forecast') {
+    // No forecast algorithm exists. Show unavailable.
+    return {
+      ...base,
+      series: { label: 'Forecast', value: '—', data: [], color: '#3B82F6', available: false },
+      title: 'Revenue Forecast',
+      available: false,
     };
   }
   if (key in METRIC_LABELS) {
     const m = metricOf(stats, key);
     return { ...base, metric: m, title: METRIC_LABELS[key], available: m.available };
   }
-  if (
-    ['customers', 'menuMix', 'departments', 'quality', 'categorySales', 'deployments', 'departmentLoad'].includes(key)
-  ) {
-    return { ...base, distribution: distributionOf(stats, key), title: key };
+  if (['customers'].includes(key)) {
+    return { ...base, distribution: distributionOf(stats, key), title: 'Customers', available: stats.totalCustomers > 0 };
+  }
+  if (['menuMix', 'departments', 'quality', 'categorySales', 'deployments', 'departmentLoad'].includes(key)) {
+    // No per-category breakdown data exists for any of these.
+    return { ...base, distribution: [], title: METRIC_LABELS[key] ?? key, available: false };
   }
   if (
     ['lowStock', 'recentOrders', 'ordersQueue', 'supportQueue', 'openTickets', 'kitchenQueue', 'medicineStock', 'machineStatus', 'academicCalendar', 'pullRequests', 'productionLines', 'leaveRequests'].includes(key)
   ) {
-    return { ...base, rows: rowsOf(stats, overview ?? emptyOverview(), key), title: METRIC_LABELS[key] ?? key };
+    const rows = rowsOf(stats, overview ?? emptyOverview(), key);
+    return { ...base, rows, title: METRIC_LABELS[key] ?? key, available: rows.length > 0 };
   }
-  // Unknown source: treat as unavailable rather than fabricating data
+  // Unknown source: unavailable
   return { ...base, metric: metricOf(stats, 'monthlyRevenue'), title: 'Monthly Revenue', available: false };
 }
 
