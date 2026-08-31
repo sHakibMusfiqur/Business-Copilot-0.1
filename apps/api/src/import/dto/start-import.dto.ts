@@ -1,4 +1,4 @@
-import { IsString, IsBoolean, IsNumber, IsIn, Min, Max } from 'class-validator';
+import { IsString, IsBoolean, IsIn } from 'class-validator';
 
 const VALID_IMPORT_TYPES = ['customers', 'products', 'suppliers', 'inventory', 'chart-of-accounts'] as const;
 const VALID_FILE_FORMATS = ['CSV', 'XLSX', 'XLS'] as const;
@@ -23,11 +23,7 @@ export class StartImportDto {
   @IsBoolean()
   updateExisting!: boolean;
 
-  @IsString()
+  // These are set by the controller from the multer file
   fileName!: string;
-
-  @IsNumber()
-  @Min(1)
-  @Max(50 * 1024 * 1024, { message: 'File size must not exceed 50MB' })
   fileSize!: number;
 }

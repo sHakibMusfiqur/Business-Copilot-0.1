@@ -1336,10 +1336,14 @@ model ImportJob {
   updateExisting Boolean  @default(false)
   fileName       String
   fileSize       Int
+  filePath       String
   status         String   @default("PENDING")
+  totalRows      Int      @default(0)
   importedCount  Int      @default(0)
   errorCount     Int      @default(0)
   errors         Json?
+  startedAt      DateTime?
+  completedAt    DateTime?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
