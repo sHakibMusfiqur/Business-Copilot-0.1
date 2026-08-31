@@ -61,7 +61,7 @@ export function MetricWidget({ data }: WorkspaceWidgetProps) {
     );
   }
 
-  const value = m ? (m.currency ? formatCurrency(m.value) : formatNumber(Math.round(m.value))) : '—';
+  const value = m ? (m.value !== null ? (m.currency ? formatCurrency(m.value) : formatNumber(Math.round(m.value))) : '—') : '—';
   return (
     <Card>
       <div className="flex items-start justify-between gap-2">
@@ -230,12 +230,23 @@ export function DonutWidget({ data }: WorkspaceWidgetProps) {
 export function ListWidget({ data }: WorkspaceWidgetProps) {
   const rows = data.rows ?? [];
 
+  if (!data.available && rows.length === 0) {
+    return (
+      <Card>
+        <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">{data.title}</p>
+        <div className="mt-3 flex h-[60px] items-center justify-center">
+          <span className="text-[13px] text-muted-foreground italic">No data source available</span>
+        </div>
+      </Card>
+    );
+  }
+
   if (rows.length === 0) {
     return (
       <Card>
         <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">{data.title}</p>
         <div className="mt-3 flex h-[60px] items-center justify-center">
-          <span className="text-[13px] text-muted-foreground italic">No data available</span>
+          <span className="text-[13px] text-muted-foreground italic">No records</span>
         </div>
       </Card>
     );
@@ -290,19 +301,14 @@ export function AiInsightsWidget({ data }: WorkspaceWidgetProps) {
 }
 
 export function HealthScoreWidget({ data }: WorkspaceWidgetProps) {
-  const health = data.health;
-  const score = health?.score ?? 0;
-  const label = health?.label ?? '—';
-  const description = health?.description ?? '';
-  const R = 34;
-  const C = 2 * Math.PI * R;
+  const signals = data.signals ?? [];
 
-  if (!health) {
+  if (!data.available || signals.length === 0) {
     return (
       <Card>
         <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">{data.title ?? 'Operational Signals'}</p>
         <div className="mt-3 flex h-[92px] items-center justify-center">
-          <span className="text-[13px] text-muted-foreground italic">No operational data available</span>
+          <span className="text-[13px] text-muted-foreground italic">No operational signals</span>
         </div>
       </Card>
     );
@@ -311,32 +317,14 @@ export function HealthScoreWidget({ data }: WorkspaceWidgetProps) {
   return (
     <Card>
       <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">{data.title ?? 'Operational Signals'}</p>
-      <div className="mt-3 flex items-center gap-5">
-        <div className="relative h-[92px] w-[92px] shrink-0">
-          <svg viewBox="0 0 92 92" className="h-full w-full -rotate-90">
-            <circle cx="46" cy="46" r={R} fill="none" stroke="rgba(100,116,139,0.15)" strokeWidth="8" />
-            <circle
-              cx="46"
-              cy="46"
-              r={R}
-              fill="none"
-              stroke={score >= 65 ? '#22C55E' : score >= 45 ? '#F59E0B' : '#EF4444'}
-              strokeWidth="8"
-              strokeLinecap="round"
-              strokeDasharray={`${(score / 100) * C} ${C}`}
-            />
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-[20px] font-bold tabular-nums">{score}</span>
-          </div>
-        </div>
-        <div>
-          <p className="text-[15px] font-semibold tracking-tight">{label}</p>
-          <p className="mt-1 max-w-[140px] text-[12px] leading-relaxed text-muted-foreground">
-            {description}
-          </p>
-        </div>
-      </div>
+      <ul className="mt-3 space-y-2">
+        {signals.map((s) => (
+          <li key={s.key} className="flex items-center justify-between rounded-lg border border-border/60 bg-card/60 px-3 py-2">
+            <span className="text-[13px] text-slate-600 dark:text-slate-300">{s.label}</span>
+            <span className="text-[13px] font-semibold tabular-nums">{s.value}</span>
+          </li>
+        ))}
+      </ul>
     </Card>
   );
 }
@@ -379,6 +367,20 @@ export function ApprovalsWidget({ data }: WorkspaceWidgetProps) {
 
 export function CalendarWidget({ data }: WorkspaceWidgetProps) {
   const items = data.calendar ?? [];
+
+  if (!data.available) {
+    return (
+      <Card>
+        <div className="flex items-center justify-between">
+          <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">{data.title ?? 'Upcoming'}</p>
+        </div>
+        <div className="mt-3 flex h-[120px] items-center justify-center">
+          <span className="text-[13px] text-muted-foreground italic">No calendar data available</span>
+        </div>
+      </Card>
+    );
+  }
+
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth();
@@ -386,14 +388,13 @@ export function CalendarWidget({ data }: WorkspaceWidgetProps) {
   const firstWeekday = new Date(year, month, 1).getDay();
   const itemDays = new Set(items.map((i) => i.day));
   const today = now.getDate();
-  const cells: (number | null)[] = [
-    ...Array.from({ length: firstWeekday }, () => null),
-    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-  ];
+  const cells: (number | null)[] = [];
+  for (let i = 0; i < firstWeekday; i++) cells.push(null);
+  for (let i = 1; i <= daysInMonth; i++) cells.push(i);
   return (
     <Card>
       <div className="flex items-center justify-between">
-        <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">{data.title}</p>
+        <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">{data.title ?? 'Upcoming'}</p>
         <span className="text-[11px] font-semibold capitalize text-slate-500 dark:text-slate-400">
           {now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
         </span>

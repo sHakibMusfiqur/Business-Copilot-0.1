@@ -250,11 +250,11 @@ describe('Semantic dashboard correctness', () => {
       expect(data.metric?.available).toBe(true);
     });
 
-    it('unavailable metric returns 0 value with available=false', () => {
+    it('unavailable metric returns null value with available=false', () => {
       const stats = makeStats({ totalCustomers: 50 });
       const data = resolveWidgetData('todaySales', makeOverview(stats), '#3B82F6');
       expect(data.available).toBe(false);
-      expect(data.metric?.value).toBe(0);
+      expect(data.metric?.value).toBeNull();
     });
   });
 
@@ -316,12 +316,11 @@ describe('Semantic dashboard correctness', () => {
   });
 
   describe('Distribution integrity', () => {
-    it('customers distribution is available with real data', () => {
+    it('customers distribution is unavailable (single segment not meaningful)', () => {
       const stats = makeStats({ totalCustomers: 42 });
       const data = resolveWidgetData('customers', makeOverview(stats), '#3B82F6');
-      expect(data.available).toBe(true);
-      expect(data.distribution).toHaveLength(1);
-      expect(data.distribution?.[0].value).toBe(42);
+      expect(data.available).toBe(false);
+      expect(data.distribution).toEqual([]);
     });
 
     it('menuMix distribution is unavailable (no category data)', () => {
@@ -386,16 +385,15 @@ describe('Semantic dashboard correctness', () => {
   });
 
   describe('List widget integrity', () => {
-    it('recentOrders shows audit activities with truthful labels', () => {
+    it('recentOrders is unavailable (only activity may use audit data)', () => {
       const stats = makeStats();
       const overview = makeOverview(stats);
       overview.recentActivities = [
         { id: '1', action: 'Created invoice', entity: 'Invoice', entityId: null, user: { id: 'u1', name: 'John', email: 'j@t.com' }, createdAt: '2026-01-01T00:00:00Z' },
       ];
       const data = resolveWidgetData('recentOrders', overview, '#3B82F6');
-      expect(data.rows).toHaveLength(1);
-      expect(data.rows?.[0].title).toBe('Created invoice');
-      expect(data.rows?.[0].subtitle).toBe('Invoice');
+      expect(data.rows).toEqual([]);
+      expect(data.available).toBe(false);
     });
 
     it('kitchenQueue is empty (no backend source)', () => {
@@ -418,10 +416,10 @@ describe('Semantic dashboard correctness', () => {
       expect(data.rows).toEqual([]);
     });
 
-    it('openTickets is unavailable (audit entries are not tickets)', () => {
+    it('openTickets is unavailable (no backend source)', () => {
       const data = resolveWidgetData('openTickets', makeOverview(makeStats()), '#3B82F6');
-      expect(data.rows).toBeUndefined();
-      expect(data.available).toBeFalsy();
+      expect(data.rows).toEqual([]);
+      expect(data.available).toBe(false);
     });
 
     it('ordersQueue is empty (audit entries are not queue items)', () => {
@@ -430,26 +428,29 @@ describe('Semantic dashboard correctness', () => {
     });
   });
 
-  describe('Health score integrity', () => {
-    it('health is null for empty org', () => {
+  describe('Operational signals', () => {
+    it('signals is undefined for empty org', () => {
       const stats = makeStats();
       const data = resolveWidgetData('healthScore', makeOverview(stats), '#3B82F6');
-      expect(data.health).toBeNull();
+      expect(data.signals).toBeUndefined();
       expect(data.available).toBe(false);
     });
 
-    it('health returns operational signals for org with data', () => {
+    it('signals contains operational signals for org with data', () => {
       const stats = makeStats({ totalCustomers: 10, lowStockProducts: 2, pendingLeaves: 1 });
       const data = resolveWidgetData('healthScore', makeOverview(stats), '#3B82F6');
-      expect(data.health).not.toBeNull();
-      expect(data.health?.description).toContain('low-stock');
+      expect(data.signals).toBeDefined();
+      expect(data.signals?.some(s => s.key === 'lowStock')).toBe(true);
+      expect(data.signals?.some(s => s.key === 'pendingLeaves')).toBe(true);
       expect(data.available).toBe(true);
     });
 
-    it('health description mentions signals, not authoritative score', () => {
+    it('signals array has no arbitrary score', () => {
       const stats = makeStats({ totalCustomers: 10, lowStockProducts: 5 });
       const data = resolveWidgetData('healthScore', makeOverview(stats), '#3B82F6');
-      expect(data.health?.description).toMatch(/^Signals:/);
+      expect(data.signals).toBeDefined();
+      expect(data.signals?.every(s => typeof s.value === 'number')).toBe(true);
+      expect(data.signals?.every(s => s.key && s.label)).toBe(true);
     });
   });
 
@@ -500,10 +501,11 @@ describe('Semantic dashboard correctness', () => {
   });
 
   describe('Tenant isolation', () => {
-    it('empty statistics when overview is null', () => {
+    it('null overview returns unavailable (not zero)', () => {
       const data = resolveWidgetData('monthlyRevenue', null, '#3B82F6');
-      expect(data.metric?.value).toBe(0);
-      expect(data.metric?.available).toBe(true);
+      expect(data.metric?.value).toBeNull();
+      expect(data.metric?.available).toBe(false);
+      expect(data.available).toBe(false);
     });
   });
 });
