@@ -333,34 +333,34 @@ function aiOf(overview: DashboardOverview): string[] {
   return (overview.aiInsights ?? []).map((i) => i.text);
 }
 
-function unavailableMetric(title: string): WidgetData {
+function unavailableMetric(accent: string, title: string): WidgetData {
   return {
-    accent: '',
+    accent,
     metric: { ...UNAVAILABLE_METRIC_BASE, label: title },
     available: false,
   };
 }
 
-function unavailableSeries(title: string): WidgetData {
+function unavailableSeries(accent: string, title: string): WidgetData {
   return {
-    accent: '',
+    accent,
     series: { label: title, value: '—', data: [], color: '#3B82F6', available: false },
     available: false,
   };
 }
 
-function unavailableDistribution(title: string): WidgetData {
+function unavailableDistribution(accent: string, title: string): WidgetData {
   return {
-    accent: '',
+    accent,
     distribution: [],
     title,
     available: false,
   };
 }
 
-function unavailableList(title: string): WidgetData {
+function unavailableList(accent: string, title: string): WidgetData {
   return {
-    accent: '',
+    accent,
     rows: [],
     title,
     available: false,
@@ -379,9 +379,9 @@ export function resolveWidgetData(
   // Null/missing overview → everything unavailable (never real zero)
   if (!overview) {
     if (key in METRIC_LABELS) {
-      return { ...base, metric: { ...UNAVAILABLE_METRIC_BASE, label: METRIC_LABELS[key] }, available: false };
+      return { accent, metric: { ...UNAVAILABLE_METRIC_BASE, label: METRIC_LABELS[key] }, available: false };
     }
-    return unavailableMetric(key);
+    return unavailableMetric(accent, key);
   }
 
   const stats = overview.statistics;
@@ -430,7 +430,7 @@ export function resolveWidgetData(
 
   // ─── Forecast (no algorithm exists) ───
   if (key === 'forecast') {
-    return unavailableSeries('Revenue Forecast');
+    return unavailableSeries(accent, 'Revenue Forecast');
   }
 
   // ─── Metric sources ───
@@ -441,18 +441,18 @@ export function resolveWidgetData(
 
   // ─── Distribution sources (no category data exists) ───
   if (['customers', 'menuMix', 'departments', 'quality', 'categorySales', 'deployments', 'departmentLoad'].includes(key)) {
-    return unavailableDistribution(METRIC_LABELS[key] ?? key);
+    return unavailableDistribution(accent, METRIC_LABELS[key] ?? key);
   }
 
   // ─── List sources (only activity uses audit data; all others unavailable) ───
   if (
     ['lowStock', 'recentOrders', 'ordersQueue', 'supportQueue', 'openTickets', 'kitchenQueue', 'medicineStock', 'machineStatus', 'academicCalendar', 'pullRequests', 'productionLines', 'leaveRequests'].includes(key)
   ) {
-    return unavailableList(METRIC_LABELS[key] ?? key);
+    return unavailableList(accent, METRIC_LABELS[key] ?? key);
   }
 
   // ─── Unknown source ───
-  return unavailableMetric(key);
+  return unavailableMetric(accent, key);
 }
 
 export function emptyStatistics(): DashboardStatistics {

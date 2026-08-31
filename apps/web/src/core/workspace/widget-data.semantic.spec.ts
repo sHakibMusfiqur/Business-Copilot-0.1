@@ -358,6 +358,12 @@ describe('Semantic dashboard correctness', () => {
   });
 
   describe('Approval integrity', () => {
+    it('approvals title is "Pending Leave Reviews"', () => {
+      const stats = makeStats({ pendingLeaves: 3 });
+      const data = resolveWidgetData('approvals', makeOverview(stats), '#3B82F6');
+      expect(data.title).toBe('Pending Leave Reviews');
+    });
+
     it('approvals only includes pending leaves (actual approval items)', () => {
       const stats = makeStats({ pendingLeaves: 3, totalPurchaseOrders: 10, totalInvoices: 20 });
       const data = resolveWidgetData('approvals', makeOverview(stats), '#3B82F6');
@@ -381,6 +387,7 @@ describe('Semantic dashboard correctness', () => {
       const stats = makeStats({ pendingLeaves: 0 });
       const data = resolveWidgetData('approvals', makeOverview(stats), '#3B82F6');
       expect(data.approvals).toHaveLength(0);
+      expect(data.available).toBe(false);
     });
   });
 
@@ -506,6 +513,153 @@ describe('Semantic dashboard correctness', () => {
       expect(data.metric?.value).toBeNull();
       expect(data.metric?.available).toBe(false);
       expect(data.available).toBe(false);
+    });
+  });
+
+  describe('Calendar', () => {
+    it('calendar is unavailable (no backend source)', () => {
+      const data = resolveWidgetData('calendar', makeOverview(makeStats()), '#3B82F6');
+      expect(data.available).toBe(false);
+      expect(data.calendar).toEqual([]);
+    });
+  });
+
+  describe('Activity semantics', () => {
+    it('activity uses audit data with truthful labels', () => {
+      const stats = makeStats();
+      const overview = makeOverview(stats);
+      overview.recentActivities = [
+        { id: '1', action: 'Created invoice', entity: 'Invoice', entityId: null, user: { id: 'u1', name: 'John', email: 'j@t.com' }, createdAt: '2026-01-01T00:00:00Z' },
+      ];
+      const data = resolveWidgetData('activity', overview, '#3B82F6');
+      expect(data.rows).toHaveLength(1);
+      expect(data.rows?.[0].title).toBe('Created invoice');
+      expect(data.rows?.[0].subtitle).toBe('Invoice');
+      expect(data.available).toBe(true);
+    });
+
+    it('activity is available even with empty recentActivities', () => {
+      const data = resolveWidgetData('activity', makeOverview(makeStats()), '#3B82F6');
+      expect(data.available).toBe(true);
+      expect(data.rows).toEqual([]);
+    });
+  });
+
+  describe('AI insights', () => {
+    it('ai insights come from backend only', () => {
+      const stats = makeStats();
+      const overview = makeOverview(stats);
+      overview.aiInsights = [
+        { id: '1', icon: 'sparkles', text: 'Revenue is trending up' },
+      ];
+      const data = resolveWidgetData('aiInsights', overview, '#3B82F6');
+      expect(data.ai).toEqual(['Revenue is trending up']);
+      expect(data.available).toBe(true);
+    });
+
+    it('ai insights is available with empty backend array', () => {
+      const data = resolveWidgetData('aiInsights', makeOverview(makeStats()), '#3B82F6');
+      expect(data.ai).toEqual([]);
+      expect(data.available).toBe(true);
+    });
+  });
+
+  describe('Trend zero values', () => {
+    it('real zero-valued trend is available', () => {
+      const stats = makeStats();
+      const overview = makeOverview(stats);
+      overview.trends = {
+        labels: ['Jan', 'Feb'],
+        revenue: [0, 0],
+        expenses: [0, 0],
+        sales: [0, 0],
+        cashFlow: [0, 0],
+      };
+      const data = resolveWidgetData('revenueTrend', overview, '#3B82F6');
+      expect(data.series?.available).toBe(true);
+      expect(data.series?.data).toEqual([0, 0]);
+    });
+
+    it('missing trend data is unavailable', () => {
+      const stats = makeStats();
+      const overview = makeOverview(stats);
+      overview.trends = { labels: [], revenue: [], expenses: [], sales: [], cashFlow: [] };
+      const data = resolveWidgetData('revenueTrend', overview, '#3B82F6');
+      expect(data.series?.available).toBe(false);
+      expect(data.series?.data).toEqual([]);
+    });
+  });
+
+  describe('List empty vs unavailable', () => {
+    it('activity with empty list is available (backend source exists)', () => {
+      const data = resolveWidgetData('activity', makeOverview(makeStats()), '#3B82F6');
+      expect(data.available).toBe(true);
+      expect(data.rows).toEqual([]);
+    });
+
+    it('recentOrders is unavailable (no backend source)', () => {
+      const data = resolveWidgetData('recentOrders', makeOverview(makeStats()), '#3B82F6');
+      expect(data.available).toBe(false);
+      expect(data.rows).toEqual([]);
+    });
+  });
+
+  describe('Accent propagation', () => {
+    it('unavailable metric preserves accent', () => {
+      const data = resolveWidgetData('todaySales', makeOverview(makeStats()), '#FF5500');
+      expect(data.accent).toBe('#FF5500');
+    });
+
+    it('unavailable series preserves accent', () => {
+      const data = resolveWidgetData('forecast', makeOverview(makeStats()), '#00FF55');
+      expect(data.accent).toBe('#00FF55');
+    });
+
+    it('unavailable distribution preserves accent', () => {
+      const data = resolveWidgetData('customers', makeOverview(makeStats()), '#5500FF');
+      expect(data.accent).toBe('#5500FF');
+    });
+
+    it('unavailable list preserves accent', () => {
+      const data = resolveWidgetData('recentOrders', makeOverview(makeStats()), '#FF0055');
+      expect(data.accent).toBe('#FF0055');
+    });
+
+    it('null overview preserves accent', () => {
+      const data = resolveWidgetData('monthlyRevenue', null, '#AABBCC');
+      expect(data.accent).toBe('#AABBCC');
+    });
+  });
+
+  describe('Metric label precision', () => {
+    it('monthlyRevenue label is "Monthly Revenue"', () => {
+      const data = resolveWidgetData('monthlyRevenue', makeOverview(makeStats()), '#3B82F6');
+      expect(data.metric?.label).toBe('Monthly Revenue');
+    });
+
+    it('expenditure label is "Monthly Expenditure"', () => {
+      const data = resolveWidgetData('expenditure', makeOverview(makeStats()), '#3B82F6');
+      expect(data.metric?.label).toBe('Monthly Expenditure');
+    });
+
+    it('netProfit label is "Monthly Net Profit"', () => {
+      const data = resolveWidgetData('netProfit', makeOverview(makeStats()), '#3B82F6');
+      expect(data.metric?.label).toBe('Monthly Net Profit');
+    });
+
+    it('pendingLeaves label is "Pending Leave Requests"', () => {
+      const data = resolveWidgetData('pendingLeaves', makeOverview(makeStats()), '#3B82F6');
+      expect(data.metric?.label).toBe('Pending Leave Requests');
+    });
+
+    it('monthlyPayroll label is "Monthly Payroll"', () => {
+      const data = resolveWidgetData('monthlyPayroll', makeOverview(makeStats()), '#3B82F6');
+      expect(data.metric?.label).toBe('Monthly Payroll');
+    });
+
+    it('teamCost label is "Monthly Payroll"', () => {
+      const data = resolveWidgetData('teamCost', makeOverview(makeStats()), '#3B82F6');
+      expect(data.metric?.label).toBe('Monthly Payroll');
     });
   });
 });
