@@ -12,11 +12,18 @@ import { CreateSupplierDialog } from '@/components/suppliers/create-supplier-dia
 import { EditSupplierDialog } from '@/components/suppliers/edit-supplier-dialog';
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
 import { StatusToggleDialog } from '@/components/ui/status-toggle-dialog';
+import { RequirePermission } from '@/components/rbac/require-permission';
+import { usePermissions } from '@/hooks/use-permissions';
+import { SUPPLIERS_CREATE, SUPPLIERS_UPDATE, SUPPLIERS_DELETE } from '@/lib/permissions';
 import { deleteSupplier as deleteSupplierRequest, getSuppliers, updateSupplierStatus } from '@/lib/api';
 import type { Supplier, SuppliersResponse, SupplierMeta } from '@/components/suppliers/supplier-types';
 
 export default function SuppliersPage() {
   const queryClient = useQueryClient();
+  const { hasPermission, isLoaded } = usePermissions();
+
+  const canUpdate = isLoaded && hasPermission(SUPPLIERS_UPDATE);
+  const canDelete = isLoaded && hasPermission(SUPPLIERS_DELETE);
 
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -80,10 +87,12 @@ export default function SuppliersPage() {
             Manage supplier accounts and information
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Create Supplier
-        </Button>
+        <RequirePermission permission={SUPPLIERS_CREATE}>
+          <Button onClick={() => setCreateOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Create Supplier
+          </Button>
+        </RequirePermission>
       </div>
 
       <SupplierTable
@@ -96,9 +105,9 @@ export default function SuppliersPage() {
         onSearchChange={handleSearch}
         onPageChange={setPage}
         onSort={handleSort}
-        onEdit={setEditSupplier}
-        onDelete={setDeleteSupplier}
-        onToggleStatus={setStatusSupplier}
+        onEdit={canUpdate ? setEditSupplier : undefined}
+        onDelete={canDelete ? setDeleteSupplier : undefined}
+        onToggleStatus={canUpdate ? setStatusSupplier : undefined}
       />
 
       <CreateSupplierDialog

@@ -17,6 +17,9 @@ import { FileUpload } from '@/components/settings/branding/file-upload';
 import { ColorField } from '@/components/settings/branding/color-field';
 import { SectionCard } from '@/components/setup/section-card';
 import { BrandPreview, type BrandValues } from '@/components/settings/branding/brand-preview';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
+import { usePermissions } from '@/hooks/use-permissions';
+import { SETTINGS_MANAGE } from '@/lib/permissions';
 import { getSettings, updateSettings, uploadSettingsFiles } from '@/lib/api';
 import { DEFAULT_BRANDING, normalizeBranding, type BrandingTheme } from '@/lib/branding';
 import { markChecklistComplete } from '@/lib/onboarding-api';
@@ -85,6 +88,16 @@ const THEME_OPTIONS = [
 export default function BrandingPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { hasPermission, isLoaded } = usePermissions();
+
+  if (isLoaded && !hasPermission(SETTINGS_MANAGE)) {
+    return (
+      <ForbiddenState
+        title="Access restricted"
+        description="You don't have permission to manage branding settings. Contact your organization owner to request access."
+      />
+    );
+  }
 
   const [values, setValues] = useState<FormValues>(INITIAL);
   const [pendingFiles, setPendingFiles] = useState<Record<AssetKey, PendingFile | null>>(EMPTY_ASSETS);

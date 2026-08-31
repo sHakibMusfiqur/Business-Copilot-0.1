@@ -18,6 +18,9 @@ import { CreateAccountDialog } from '@/components/accounting/create-account-dial
 import { EditAccountDialog } from '@/components/accounting/edit-account-dialog';
 import { AccountDetailsDialog } from '@/components/accounting/account-details-dialog';
 import { DeleteAccountDialog } from '@/components/accounting/delete-account-dialog';
+import { RequirePermission } from '@/components/rbac/require-permission';
+import { usePermissions } from '@/hooks/use-permissions';
+import { ACCOUNTING_ACCOUNTS_CREATE, ACCOUNTING_ACCOUNTS_UPDATE, ACCOUNTING_ACCOUNTS_DELETE } from '@/lib/permissions';
 import { getAccounts } from '@/lib/api';
 import type { Account, Meta } from '@/components/accounting/accounting-types';
 
@@ -31,6 +34,11 @@ const typeColors: Record<string, string> = {
 
 export default function AccountsPage() {
   const queryClient = useQueryClient();
+  const { hasPermission, isLoaded } = usePermissions();
+
+  const canUpdate = isLoaded && hasPermission(ACCOUNTING_ACCOUNTS_UPDATE);
+  const canDelete = isLoaded && hasPermission(ACCOUNTING_ACCOUNTS_DELETE);
+
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState('code');
@@ -101,7 +109,9 @@ export default function AccountsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Chart of Accounts</h1>
           <p className="text-sm text-muted-foreground mt-1">Manage your organization's chart of accounts</p>
         </div>
-        <Button onClick={() => setCreateOpen(true)} className="gap-2"><Plus className="h-4 w-4" /> Create Account</Button>
+        <RequirePermission permission={ACCOUNTING_ACCOUNTS_CREATE}>
+          <Button onClick={() => setCreateOpen(true)} className="gap-2"><Plus className="h-4 w-4" /> Create Account</Button>
+        </RequirePermission>
       </div>
 
       <DataTable
@@ -126,8 +136,12 @@ export default function AccountsPage() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-44">
               <DropdownMenuItem onClick={() => setViewAccount(account)}>View details</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setEditAccount(account)}>Edit account</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setDeleteAccount(account)} className="text-destructive focus:text-destructive">Delete account</DropdownMenuItem>
+              {canUpdate && (
+                <DropdownMenuItem onClick={() => setEditAccount(account)}>Edit account</DropdownMenuItem>
+              )}
+              {canDelete && (
+                <DropdownMenuItem onClick={() => setDeleteAccount(account)} className="text-destructive focus:text-destructive">Delete account</DropdownMenuItem>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         )}

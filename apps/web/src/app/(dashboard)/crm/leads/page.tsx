@@ -15,11 +15,20 @@ import { DeleteLeadDialog } from '@/components/crm/delete-lead-dialog';
 import { ChangeStatusDialog } from '@/components/crm/change-status-dialog';
 import { AssignUserDialog } from '@/components/crm/assign-user-dialog';
 import { CreateActivityDialog } from '@/components/crm/create-activity-dialog';
+import { RequirePermission } from '@/components/rbac/require-permission';
+import { usePermissions } from '@/hooks/use-permissions';
+import { CRM_CREATE, CRM_UPDATE, CRM_DELETE } from '@/lib/permissions';
 import { getLeads } from '@/lib/api';
 import type { LeadListItem, LeadListResponse, Meta } from '@/components/crm/crm-types';
 
 export default function CrmLeadsPage() {
   const queryClient = useQueryClient();
+  const { hasPermission, isLoaded } = usePermissions();
+
+  const canCreate = isLoaded && hasPermission(CRM_CREATE);
+  const canUpdate = isLoaded && hasPermission(CRM_UPDATE);
+  const canDelete = isLoaded && hasPermission(CRM_DELETE);
+
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState('createdAt');
@@ -86,10 +95,12 @@ export default function CrmLeadsPage() {
             Manage your sales leads and track their progress
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Create Lead
-        </Button>
+        <RequirePermission permission={CRM_CREATE}>
+          <Button onClick={() => setCreateOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Create Lead
+          </Button>
+        </RequirePermission>
       </div>
 
       <LeadTable
@@ -103,11 +114,11 @@ export default function CrmLeadsPage() {
         onPageChange={setPage}
         onSort={handleSort}
         onView={setViewLead}
-        onEdit={setEditLead}
-        onDelete={setDeleteLead}
-        onStatusChange={setStatusLead}
-        onAssign={setAssignLead}
-        onActivity={setActivityLead}
+        onEdit={canUpdate ? setEditLead : undefined}
+        onDelete={canDelete ? setDeleteLead : undefined}
+        onStatusChange={canUpdate ? setStatusLead : undefined}
+        onAssign={canUpdate ? setAssignLead : undefined}
+        onActivity={canCreate ? setActivityLead : undefined}
       />
 
       <CreateLeadDialog open={createOpen} onClose={() => setCreateOpen(false)} onCreated={invalidate} />

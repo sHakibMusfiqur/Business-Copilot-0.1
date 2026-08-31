@@ -14,12 +14,21 @@ import { EditSaleDialog } from '@/components/sales/edit-sale-dialog';
 import { SaleDetailsDialog } from '@/components/sales/sale-details-dialog';
 import { DeliverSaleDialog } from '@/components/sales/deliver-sale-dialog';
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
+import { RequirePermission } from '@/components/rbac/require-permission';
+import { usePermissions } from '@/hooks/use-permissions';
+import { SALES_CREATE, SALES_UPDATE, SALES_DELETE, SALES_APPROVE, SALES_DELIVER } from '@/lib/permissions';
 import { deleteSale as deleteSaleRequest, getSales, confirmSale } from '@/lib/api';
 import type { Sale, SaleMeta, SaleListResponse } from '@/components/sales/sales-types';
 
 export default function SalesPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { hasPermission, isLoaded } = usePermissions();
+
+  const canUpdate = isLoaded && hasPermission(SALES_UPDATE);
+  const canDelete = isLoaded && hasPermission(SALES_DELETE);
+  const canApprove = isLoaded && hasPermission(SALES_APPROVE);
+  const canDeliver = isLoaded && hasPermission(SALES_DELIVER);
 
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -104,10 +113,12 @@ export default function SalesPage() {
             Manage sales orders and customer deliveries
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Create Order
-        </Button>
+        <RequirePermission permission={SALES_CREATE}>
+          <Button onClick={() => setCreateOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Create Order
+          </Button>
+        </RequirePermission>
       </div>
 
       <SaleTable
@@ -121,10 +132,10 @@ export default function SalesPage() {
         onPageChange={setPage}
         onSort={handleSort}
         onView={setViewSale}
-        onEdit={setEditSale}
-        onDelete={setDeleteSale}
-        onConfirm={handleConfirm}
-        onDeliver={setDeliverSale}
+        onEdit={canUpdate ? setEditSale : undefined}
+        onDelete={canDelete ? setDeleteSale : undefined}
+        onConfirm={canApprove ? handleConfirm : undefined}
+        onDeliver={canDeliver ? setDeliverSale : undefined}
       />
 
       <CreateSaleDialog

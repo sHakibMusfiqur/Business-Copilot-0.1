@@ -19,6 +19,8 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DashboardError } from '@/components/dashboard/dashboard-error';
 import { useToast } from '@/components/ui/use-toast';
+import { usePermissions } from '@/hooks/use-permissions';
+import { CRM_CREATE, CRM_UPDATE, CRM_DELETE } from '@/lib/permissions';
 import { getLeadById, getLeadTimeline, getLeadActivities, toggleActivity, deleteActivity } from '@/lib/api';
 import { formatDate, formatCurrency, formatDateTime, generateInitials } from '@/lib/utils';
 import type {
@@ -65,7 +67,12 @@ export default function LeadDetailPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { hasPermission, isLoaded } = usePermissions();
   const leadId = params.id as string;
+
+  const canCreate = isLoaded && hasPermission(CRM_CREATE);
+  const canUpdate = isLoaded && hasPermission(CRM_UPDATE);
+  const canDelete = isLoaded && hasPermission(CRM_DELETE);
 
   const [activityOpen, setActivityOpen] = useState(false);
 
@@ -158,10 +165,12 @@ export default function LeadDetailPage() {
                 <ClipboardList className="h-4 w-4 text-muted-foreground" />
                 Activities
               </h2>
-              <Button variant="outline" size="sm" className="gap-1" onClick={() => setActivityOpen(true)}>
-                <Plus className="h-3 w-3" />
-                Add Activity
-              </Button>
+              {canCreate && (
+                <Button variant="outline" size="sm" className="gap-1" onClick={() => setActivityOpen(true)}>
+                  <Plus className="h-3 w-3" />
+                  Add Activity
+                </Button>
+              )}
             </div>
 
             {activities.length === 0 ? (
@@ -205,24 +214,28 @@ export default function LeadDetailPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => toggleMutation.mutate(activity.id)}
-                          className={`rounded p-1 transition-colors ${
-                            activity.completed
-                              ? 'text-emerald-500 hover:text-emerald-600'
-                              : 'text-muted-foreground hover:text-foreground'
-                          }`}
-                          title={activity.completed ? 'Mark incomplete' : 'Mark complete'}
-                        >
-                          <CheckCircle2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => deleteActivityMutation.mutate(activity.id)}
-                          className="rounded p-1 text-muted-foreground hover:text-destructive transition-colors"
-                          title="Delete activity"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        {canUpdate && (
+                          <button
+                            onClick={() => toggleMutation.mutate(activity.id)}
+                            className={`rounded p-1 transition-colors ${
+                              activity.completed
+                                ? 'text-emerald-500 hover:text-emerald-600'
+                                : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                            title={activity.completed ? 'Mark incomplete' : 'Mark complete'}
+                          >
+                            <CheckCircle2 className="h-4 w-4" />
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            onClick={() => deleteActivityMutation.mutate(activity.id)}
+                            className="rounded p-1 text-muted-foreground hover:text-destructive transition-colors"
+                            title="Delete activity"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   );

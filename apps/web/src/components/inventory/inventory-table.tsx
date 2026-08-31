@@ -38,7 +38,7 @@ interface InventoryTableProps {
   onSearchChange: (search: string) => void;
   onPageChange: (page: number) => void;
   onSort: (field: string) => void;
-  onAdjust: (product: InventoryProduct) => void;
+  onAdjust?: (product: InventoryProduct) => void;
   onHistory: (product: InventoryProduct) => void;
 }
 
@@ -277,9 +277,11 @@ export function InventoryTable({
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-44">
-                            <DropdownMenuItem onClick={() => onAdjust(product)}>
-                              Adjust stock
-                            </DropdownMenuItem>
+                            {onAdjust && (
+                              <DropdownMenuItem onClick={() => onAdjust(product)}>
+                                Adjust stock
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem onClick={() => onHistory(product)}>
                               View history
                             </DropdownMenuItem>

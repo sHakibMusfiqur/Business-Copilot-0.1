@@ -10,6 +10,8 @@ import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { DataTable, type Column } from '@/components/accounting/data-table';
 import { CreatePaymentDialog } from '@/components/accounting/create-payment-dialog';
+import { RequirePermission } from '@/components/rbac/require-permission';
+import { PAYMENTS_CREATE } from '@/lib/permissions';
 import { getPayments } from '@/lib/api';
 import type { Payment, Meta } from '@/components/accounting/accounting-types';
 
@@ -17,6 +19,7 @@ const noopSearch = () => {};
 
 export default function PaymentsPage() {
   const queryClient = useQueryClient();
+
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -65,7 +68,9 @@ export default function PaymentsPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Payments</h1>
           <p className="text-sm text-muted-foreground mt-1">Record and view customer and supplier payments</p>
         </div>
-        <Button onClick={() => setCreateOpen(true)} className="gap-2"><Plus className="h-4 w-4" /> Record Payment</Button>
+        <RequirePermission permission={PAYMENTS_CREATE}>
+          <Button onClick={() => setCreateOpen(true)} className="gap-2"><Plus className="h-4 w-4" /> Record Payment</Button>
+        </RequirePermission>
       </div>
 
       <DataTable

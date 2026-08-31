@@ -41,9 +41,9 @@ interface CustomerTableProps {
   onSearchChange: (search: string) => void;
   onPageChange: (page: number) => void;
   onSort: (field: string) => void;
-  onEdit: (customer: Customer) => void;
-  onDelete: (customer: Customer) => void;
-  onToggleStatus: (customer: Customer) => void;
+  onEdit?: (customer: Customer) => void;
+  onDelete?: (customer: Customer) => void;
+  onToggleStatus?: (customer: Customer) => void;
 }
 
 function SortIcon({ field, sortBy, sortOrder }: { field: string; sortBy: string; sortOrder: string }) {
@@ -263,29 +263,37 @@ export function CustomerTable({
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-44">
-                            <DropdownMenuItem onClick={() => onEdit(customer)}>
-                              Edit customer
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onToggleStatus(customer)}>
-                              {customer.isActive ? (
-                                <span className="flex items-center gap-2">
-                                  <ShieldOff className="h-4 w-4" />
-                                  Deactivate
-                                </span>
-                              ) : (
-                                <span className="flex items-center gap-2">
-                                  <Shield className="h-4 w-4" />
-                                  Activate
-                                </span>
-                              )}
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => onDelete(customer)}
-                              className="text-destructive focus:text-destructive"
-                            >
-                              Delete customer
-                            </DropdownMenuItem>
+                            {onEdit && (
+                              <DropdownMenuItem onClick={() => onEdit(customer)}>
+                                Edit customer
+                              </DropdownMenuItem>
+                            )}
+                            {onToggleStatus && (
+                              <DropdownMenuItem onClick={() => onToggleStatus(customer)}>
+                                {customer.isActive ? (
+                                  <span className="flex items-center gap-2">
+                                    <ShieldOff className="h-4 w-4" />
+                                    Deactivate
+                                  </span>
+                                ) : (
+                                  <span className="flex items-center gap-2">
+                                    <Shield className="h-4 w-4" />
+                                    Activate
+                                  </span>
+                                )}
+                              </DropdownMenuItem>
+                            )}
+                            {onDelete && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => onDelete(customer)}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  Delete customer
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>

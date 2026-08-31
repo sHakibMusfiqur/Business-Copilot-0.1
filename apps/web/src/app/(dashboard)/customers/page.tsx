@@ -12,11 +12,18 @@ import { CreateCustomerDialog } from '@/components/customers/create-customer-dia
 import { EditCustomerDialog } from '@/components/customers/edit-customer-dialog';
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
 import { StatusToggleDialog } from '@/components/ui/status-toggle-dialog';
+import { RequirePermission } from '@/components/rbac/require-permission';
+import { usePermissions } from '@/hooks/use-permissions';
+import { CUSTOMERS_CREATE, CUSTOMERS_UPDATE, CUSTOMERS_DELETE } from '@/lib/permissions';
 import { deleteCustomer as deleteCustomerRequest, getCustomers, updateCustomerStatus } from '@/lib/api';
 import type { Customer, CustomersResponse, CustomerMeta } from '@/components/customers/customer-types';
 
 export default function CustomersPage() {
   const queryClient = useQueryClient();
+  const { hasPermission, isLoaded } = usePermissions();
+
+  const canUpdate = isLoaded && hasPermission(CUSTOMERS_UPDATE);
+  const canDelete = isLoaded && hasPermission(CUSTOMERS_DELETE);
 
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -80,10 +87,12 @@ export default function CustomersPage() {
             Manage customer accounts and information
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Create Customer
-        </Button>
+        <RequirePermission permission={CUSTOMERS_CREATE}>
+          <Button onClick={() => setCreateOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Create Customer
+          </Button>
+        </RequirePermission>
       </div>
 
       <CustomerTable
@@ -96,9 +105,9 @@ export default function CustomersPage() {
         onSearchChange={handleSearch}
         onPageChange={setPage}
         onSort={handleSort}
-        onEdit={setEditCustomer}
-        onDelete={setDeleteCustomer}
-        onToggleStatus={setStatusCustomer}
+        onEdit={canUpdate ? setEditCustomer : undefined}
+        onDelete={canDelete ? setDeleteCustomer : undefined}
+        onToggleStatus={canUpdate ? setStatusCustomer : undefined}
       />
 
       <CreateCustomerDialog

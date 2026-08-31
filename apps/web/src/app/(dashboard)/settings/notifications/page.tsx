@@ -8,6 +8,9 @@ import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/components/ui/use-toast';
 import { SectionCard } from '@/components/setup/section-card';
 import { SetupPageShell } from '@/components/setup/setup-page-shell';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
+import { usePermissions } from '@/hooks/use-permissions';
+import { SETTINGS_MANAGE } from '@/lib/permissions';
 import { markChecklistComplete } from '@/lib/onboarding-api';
 import { getOnboardingSession } from '@/lib/session-storage';
 import { queryClient } from '@/lib/query-client';
@@ -43,6 +46,17 @@ const DEFAULTS: NotificationsValues = {
 export default function NotificationsPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { hasPermission, isLoaded } = usePermissions();
+
+  if (isLoaded && !hasPermission(SETTINGS_MANAGE)) {
+    return (
+      <ForbiddenState
+        title="Access restricted"
+        description="You don't have permission to manage notification settings. Contact your organization owner to request access."
+      />
+    );
+  }
+
   const { values, loading, loadError, reload, dirty, update, save, saving, saved } =
     useSettings('notifications', {
       defaults: DEFAULTS,

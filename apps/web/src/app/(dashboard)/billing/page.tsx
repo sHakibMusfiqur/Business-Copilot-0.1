@@ -11,6 +11,9 @@ import { useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useToast } from '@/components/ui/use-toast';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
+import { usePermissions } from '@/hooks/use-permissions';
+import { BILLING_READ, BILLING_MANAGE } from '@/lib/permissions';
 import {
   changeSubscriptionPlan, getBillingInvoices, getBillingPlans, getPaymentHistory, getPaymentGateways,
   getSubscription, type BillingInterval, type SubscriptionPlanResponse,
@@ -59,7 +62,7 @@ function statusLabel(status: string): string {
 }
 
 function PlanCard({
-  plan, current, interval, currentPrice, onSelect, changing,
+  plan, current, interval, currentPrice, onSelect, changing, canChange,
 }: {
   plan: SubscriptionPlanResponse;
   current: boolean;
@@ -67,6 +70,7 @@ function PlanCard({
   currentPrice: number;
   onSelect: () => void;
   changing: boolean;
+  canChange: boolean;
 }) {
   const isCurrent = current && plan.interval === interval;
   const planPrice = interval === 'YEARLY' ? (plan.yearlyPrice ?? plan.price * 10) : plan.price;
@@ -102,7 +106,7 @@ function PlanCard({
       </ul>
       <button
         onClick={onSelect}
-        disabled={isCurrent || changing}
+        disabled={isCurrent || changing || !canChange}
         className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold transition-all disabled:cursor-default ${
           isCurrent
             ? 'bg-muted text-muted-foreground'
@@ -118,6 +122,19 @@ function PlanCard({
 export default function BillingPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { hasPermission, isLoaded } = usePermissions();
+
+  if (isLoaded && !hasPermission(BILLING_READ)) {
+    return (
+      <ForbiddenState
+        title="Access restricted"
+        description="You don't have permission to view billing information. Contact your organization owner to request access."
+      />
+    );
+  }
+
+  const canManageBilling = isLoaded && hasPermission(BILLING_MANAGE);
+
   const [interval, setInterval] = useState<BillingInterval>('MONTHLY');
   const [compareOpen, setCompareOpen] = useState(false);
   const [changingId, setChangingId] = useState<string | null>(null);
@@ -269,6 +286,7 @@ export default function BillingPage() {
                 currentPrice={currentPrice}
                 onSelect={() => handleChange(plan.id)}
                 changing={changingId === plan.id}
+                canChange={canManageBilling}
               />
             ))}
           </div>

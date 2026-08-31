@@ -6,9 +6,23 @@ import { History } from 'lucide-react';
 
 import { getAuditLogs } from '@/lib/api';
 import { AuditTable } from '@/components/audit/audit-table';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
+import { usePermissions } from '@/hooks/use-permissions';
+import { AUDIT_READ } from '@/lib/permissions';
 import type { AuditListResponse } from '@/components/audit/audit-types';
 
 export default function AuditLogPage() {
+  const { hasPermission, isLoaded } = usePermissions();
+
+  if (isLoaded && !hasPermission(AUDIT_READ)) {
+    return (
+      <ForbiddenState
+        title="Access restricted"
+        description="You don't have permission to view audit logs. Contact your organization owner to request access."
+      />
+    );
+  }
+
   const [search, setSearch] = useState('');
   const [actionFilter, setActionFilter] = useState('');
   const [page, setPage] = useState(1);

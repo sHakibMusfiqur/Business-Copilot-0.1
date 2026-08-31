@@ -10,11 +10,16 @@ import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 import { InventoryTable } from '@/components/inventory/inventory-table';
 import { StockAdjustmentDialog } from '@/components/inventory/stock-adjustment-dialog';
 import { InventoryHistoryDialog } from '@/components/inventory/inventory-history-dialog';
+import { usePermissions } from '@/hooks/use-permissions';
+import { INVENTORY_ADJUST } from '@/lib/permissions';
 import { getInventory, getInventorySummary } from '@/lib/api';
 import type { InventoryProduct, InventoryResponse, InventoryMeta, InventorySummary } from '@/components/inventory/inventory-types';
 
 export default function InventoryPage() {
   const queryClient = useQueryClient();
+  const { hasPermission, isLoaded } = usePermissions();
+
+  const canAdjust = isLoaded && hasPermission(INVENTORY_ADJUST);
 
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -145,7 +150,7 @@ export default function InventoryPage() {
         onSearchChange={handleSearch}
         onPageChange={setPage}
         onSort={handleSort}
-        onAdjust={setAdjustProduct}
+        onAdjust={canAdjust ? setAdjustProduct : undefined}
         onHistory={setHistoryProduct}
       />
 

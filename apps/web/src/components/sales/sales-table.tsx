@@ -39,10 +39,10 @@ interface SaleTableProps {
   onPageChange: (page: number) => void;
   onSort: (field: string) => void;
   onView: (sale: Sale) => void;
-  onEdit: (sale: Sale) => void;
-  onDelete: (sale: Sale) => void;
-  onConfirm: (sale: Sale) => void;
-  onDeliver: (sale: Sale) => void;
+  onEdit?: (sale: Sale) => void;
+  onDelete?: (sale: Sale) => void;
+  onConfirm?: (sale: Sale) => void;
+  onDeliver?: (sale: Sale) => void;
 }
 
 const statusStyle: Record<SalesStatus, string> = {
@@ -217,22 +217,22 @@ export function SaleTable({
                             <DropdownMenuItem onClick={() => onView(sale)}>
                               View details
                             </DropdownMenuItem>
-                            {(sale.status === 'DRAFT' || sale.status === 'PENDING') && (
+                            {onEdit && (sale.status === 'DRAFT' || sale.status === 'PENDING') && (
                               <DropdownMenuItem onClick={() => onEdit(sale)}>
                                 Edit order
                               </DropdownMenuItem>
                             )}
-                            {sale.status === 'PENDING' && (
+                            {onConfirm && sale.status === 'PENDING' && (
                               <DropdownMenuItem onClick={() => onConfirm(sale)}>
                                 Confirm
                               </DropdownMenuItem>
                             )}
-                            {sale.status === 'CONFIRMED' && (
+                            {onDeliver && sale.status === 'CONFIRMED' && (
                               <DropdownMenuItem onClick={() => onDeliver(sale)}>
                                 Deliver
                               </DropdownMenuItem>
                             )}
-                            {sale.status === 'DRAFT' && (
+                            {onDelete && sale.status === 'DRAFT' && (
                               <>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem

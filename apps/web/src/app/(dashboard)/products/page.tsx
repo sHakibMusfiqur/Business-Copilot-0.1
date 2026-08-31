@@ -12,11 +12,18 @@ import { CreateProductDialog } from '@/components/products/create-product-dialog
 import { EditProductDialog } from '@/components/products/edit-product-dialog';
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
 import { StatusToggleDialog } from '@/components/ui/status-toggle-dialog';
+import { RequirePermission } from '@/components/rbac/require-permission';
+import { usePermissions } from '@/hooks/use-permissions';
+import { PRODUCTS_CREATE, PRODUCTS_UPDATE, PRODUCTS_DELETE } from '@/lib/permissions';
 import { deleteProduct as deleteProductRequest, getProducts, updateProductStatus } from '@/lib/api';
 import type { Product, ProductsResponse, ProductMeta } from '@/components/products/product-types';
 
 export default function ProductsPage() {
   const queryClient = useQueryClient();
+  const { hasPermission, isLoaded } = usePermissions();
+
+  const canUpdate = isLoaded && hasPermission(PRODUCTS_UPDATE);
+  const canDelete = isLoaded && hasPermission(PRODUCTS_DELETE);
 
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -80,10 +87,12 @@ export default function ProductsPage() {
             Manage product catalog and inventory
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Create Product
-        </Button>
+        <RequirePermission permission={PRODUCTS_CREATE}>
+          <Button onClick={() => setCreateOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Create Product
+          </Button>
+        </RequirePermission>
       </div>
 
       <ProductTable
@@ -96,9 +105,9 @@ export default function ProductsPage() {
         onSearchChange={handleSearch}
         onPageChange={setPage}
         onSort={handleSort}
-        onEdit={setEditProduct}
-        onDelete={setDeleteProduct}
-        onToggleStatus={setStatusProduct}
+        onEdit={canUpdate ? setEditProduct : undefined}
+        onDelete={canDelete ? setDeleteProduct : undefined}
+        onToggleStatus={canUpdate ? setStatusProduct : undefined}
       />
 
       <CreateProductDialog

@@ -15,6 +15,9 @@ import { DataTable, type Column } from '@/components/accounting/data-table';
 import { CreateJournalDialog } from '@/components/accounting/create-journal-dialog';
 import { JournalDetailsDialog } from '@/components/accounting/journal-details-dialog';
 import { DeleteJournalDialog } from '@/components/accounting/delete-journal-dialog';
+import { RequirePermission } from '@/components/rbac/require-permission';
+import { usePermissions } from '@/hooks/use-permissions';
+import { ACCOUNTING_JOURNAL_CREATE, ACCOUNTING_JOURNAL_POST, ACCOUNTING_JOURNAL_DELETE } from '@/lib/permissions';
 import { getJournalEntries, postJournalEntry } from '@/lib/api';
 import type { JournalEntry, Meta } from '@/components/accounting/accounting-types';
 import { useToast } from '@/components/ui/use-toast';
@@ -27,6 +30,11 @@ const statusStyle: Record<string, string> = {
 export default function JournalPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { hasPermission, isLoaded } = usePermissions();
+
+  const canPost = isLoaded && hasPermission(ACCOUNTING_JOURNAL_POST);
+  const canDelete = isLoaded && hasPermission(ACCOUNTING_JOURNAL_DELETE);
+
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState('date');
@@ -115,7 +123,9 @@ export default function JournalPage() {
           <h1 className="text-2xl font-semibold tracking-tight">Journal Entries</h1>
           <p className="text-sm text-muted-foreground mt-1">Double-entry bookkeeping journal</p>
         </div>
-        <Button onClick={() => setCreateOpen(true)} className="gap-2"><Plus className="h-4 w-4" /> Create Entry</Button>
+        <RequirePermission permission={ACCOUNTING_JOURNAL_CREATE}>
+          <Button onClick={() => setCreateOpen(true)} className="gap-2"><Plus className="h-4 w-4" /> Create Entry</Button>
+        </RequirePermission>
       </div>
 
       <DataTable
@@ -142,9 +152,15 @@ export default function JournalPage() {
               <DropdownMenuItem onClick={() => setViewEntry(entry)}>View details</DropdownMenuItem>
               {entry.status === 'DRAFT' && (
                 <>
-                  <DropdownMenuItem onClick={() => handlePost(entry)}>Post entry</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => setDeleteEntry(entry)} className="text-destructive focus:text-destructive">Delete entry</DropdownMenuItem>
+                  {canPost && (
+                    <DropdownMenuItem onClick={() => handlePost(entry)}>Post entry</DropdownMenuItem>
+                  )}
+                  {canDelete && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => setDeleteEntry(entry)} className="text-destructive focus:text-destructive">Delete entry</DropdownMenuItem>
+                    </>
+                  )}
                 </>
               )}
             </DropdownMenuContent>

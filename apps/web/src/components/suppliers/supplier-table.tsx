@@ -41,9 +41,9 @@ interface SupplierTableProps {
   onSearchChange: (search: string) => void;
   onPageChange: (page: number) => void;
   onSort: (field: string) => void;
-  onEdit: (supplier: Supplier) => void;
-  onDelete: (supplier: Supplier) => void;
-  onToggleStatus: (supplier: Supplier) => void;
+  onEdit?: (supplier: Supplier) => void;
+  onDelete?: (supplier: Supplier) => void;
+  onToggleStatus?: (supplier: Supplier) => void;
 }
 
 function SortIcon({ field, sortBy, sortOrder }: { field: string; sortBy: string; sortOrder: string }) {
@@ -247,29 +247,37 @@ export function SupplierTable({
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-44">
-                            <DropdownMenuItem onClick={() => onEdit(supplier)}>
-                              Edit supplier
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onToggleStatus(supplier)}>
-                              {supplier.isActive ? (
-                                <span className="flex items-center gap-2">
-                                  <ShieldOff className="h-4 w-4" />
-                                  Deactivate
-                                </span>
-                              ) : (
-                                <span className="flex items-center gap-2">
-                                  <Shield className="h-4 w-4" />
-                                  Activate
-                                </span>
-                              )}
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => onDelete(supplier)}
-                              className="text-destructive focus:text-destructive"
-                            >
-                              Delete supplier
-                            </DropdownMenuItem>
+                            {onEdit && (
+                              <DropdownMenuItem onClick={() => onEdit(supplier)}>
+                                Edit supplier
+                              </DropdownMenuItem>
+                            )}
+                            {onToggleStatus && (
+                              <DropdownMenuItem onClick={() => onToggleStatus(supplier)}>
+                                {supplier.isActive ? (
+                                  <span className="flex items-center gap-2">
+                                    <ShieldOff className="h-4 w-4" />
+                                    Deactivate
+                                  </span>
+                                ) : (
+                                  <span className="flex items-center gap-2">
+                                    <Shield className="h-4 w-4" />
+                                    Activate
+                                  </span>
+                                )}
+                              </DropdownMenuItem>
+                            )}
+                            {onDelete && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => onDelete(supplier)}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  Delete supplier
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>

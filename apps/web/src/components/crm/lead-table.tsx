@@ -40,11 +40,11 @@ interface LeadTableProps {
   onPageChange: (page: number) => void;
   onSort: (field: string) => void;
   onView: (lead: LeadListItem) => void;
-  onEdit: (lead: LeadListItem) => void;
-  onDelete: (lead: LeadListItem) => void;
-  onStatusChange: (lead: LeadListItem) => void;
-  onAssign: (lead: LeadListItem) => void;
-  onActivity: (lead: LeadListItem) => void;
+  onEdit?: (lead: LeadListItem) => void;
+  onDelete?: (lead: LeadListItem) => void;
+  onStatusChange?: (lead: LeadListItem) => void;
+  onAssign?: (lead: LeadListItem) => void;
+  onActivity?: (lead: LeadListItem) => void;
 }
 
 function SortIcon({ field, sortBy, sortOrder }: { field: string; sortBy: string; sortOrder: string }) {
@@ -233,25 +233,37 @@ export function LeadTable({
                             <DropdownMenuItem onClick={() => onView(lead)}>
                               View details
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onEdit(lead)}>
-                              Edit lead
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onStatusChange(lead)}>
-                              Change status
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onAssign(lead)}>
-                              Assign user
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onActivity(lead)}>
-                              Add activity
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => onDelete(lead)}
-                              className="text-destructive focus:text-destructive"
-                            >
-                              Delete lead
-                            </DropdownMenuItem>
+                            {onEdit && (
+                              <DropdownMenuItem onClick={() => onEdit(lead)}>
+                                Edit lead
+                              </DropdownMenuItem>
+                            )}
+                            {onStatusChange && (
+                              <DropdownMenuItem onClick={() => onStatusChange(lead)}>
+                                Change status
+                              </DropdownMenuItem>
+                            )}
+                            {onAssign && (
+                              <DropdownMenuItem onClick={() => onAssign(lead)}>
+                                Assign user
+                              </DropdownMenuItem>
+                            )}
+                            {onActivity && (
+                              <DropdownMenuItem onClick={() => onActivity(lead)}>
+                                Add activity
+                              </DropdownMenuItem>
+                            )}
+                            {onDelete && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => onDelete(lead)}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  Delete lead
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>

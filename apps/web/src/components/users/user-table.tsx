@@ -44,9 +44,9 @@ interface UserTableProps {
   onSearchChange: (search: string) => void;
   onPageChange: (page: number) => void;
   onSort: (field: string) => void;
-  onEdit: (user: User) => void;
-  onDelete: (user: User) => void;
-  onToggleStatus: (user: User) => void;
+  onEdit?: (user: User) => void;
+  onDelete?: (user: User) => void;
+  onToggleStatus?: (user: User) => void;
   onViewPermissions?: (user: User) => void;
 }
 
@@ -259,9 +259,11 @@ export function UserTable({
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end" className="w-44">
-                            <DropdownMenuItem onClick={() => onEdit(user)}>
-                              Edit user
-                            </DropdownMenuItem>
+                            {onEdit && (
+                              <DropdownMenuItem onClick={() => onEdit(user)}>
+                                Edit user
+                              </DropdownMenuItem>
+                            )}
                             {onViewPermissions && (
                               <DropdownMenuItem onClick={() => onViewPermissions(user)}>
                                 <span className="flex items-center gap-2">
@@ -270,26 +272,32 @@ export function UserTable({
                                 </span>
                               </DropdownMenuItem>
                             )}
-                            <DropdownMenuItem onClick={() => onToggleStatus(user)}>
-                              {user.isActive ? (
-                                <span className="flex items-center gap-2">
-                                  <ShieldOff className="h-4 w-4" />
-                                  Deactivate
-                                </span>
-                              ) : (
-                                <span className="flex items-center gap-2">
-                                  <Shield className="h-4 w-4" />
-                                  Activate
-                                </span>
-                              )}
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => onDelete(user)}
-                              className="text-destructive focus:text-destructive"
-                            >
-                              Delete user
-                            </DropdownMenuItem>
+                            {onToggleStatus && (
+                              <DropdownMenuItem onClick={() => onToggleStatus(user)}>
+                                {user.isActive ? (
+                                  <span className="flex items-center gap-2">
+                                    <ShieldOff className="h-4 w-4" />
+                                    Deactivate
+                                  </span>
+                                ) : (
+                                  <span className="flex items-center gap-2">
+                                    <Shield className="h-4 w-4" />
+                                    Activate
+                                  </span>
+                                )}
+                              </DropdownMenuItem>
+                            )}
+                            {onDelete && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => onDelete(user)}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  Delete user
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>

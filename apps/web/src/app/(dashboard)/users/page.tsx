@@ -13,6 +13,9 @@ import { EditUserDialog } from '@/components/users/edit-user-dialog';
 import { EffectivePermissionsDrawer } from '@/components/rbac/effective-permissions-drawer';
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
 import { StatusToggleDialog } from '@/components/ui/status-toggle-dialog';
+import { RequirePermission } from '@/components/rbac/require-permission';
+import { usePermissions } from '@/hooks/use-permissions';
+import { USERS_CREATE, USERS_UPDATE, USERS_DELETE, ORGANIZATION_MANAGE } from '@/lib/permissions';
 import { useToast } from '@/components/ui/use-toast';
 import {
   deleteUser as deleteUserRequest,
@@ -29,6 +32,11 @@ import type { User, UsersResponse, UserMeta } from '@/components/users/user-type
 export default function UsersPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { hasPermission, isLoaded } = usePermissions();
+
+  const canUpdate = isLoaded && hasPermission(USERS_UPDATE);
+  const canDelete = isLoaded && hasPermission(USERS_DELETE);
+  const canManageOrg = isLoaded && hasPermission(ORGANIZATION_MANAGE);
 
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -140,10 +148,12 @@ export default function UsersPage() {
             Invite employees by email and manage access
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Invite Employee
-        </Button>
+        <RequirePermission permission={USERS_CREATE}>
+          <Button onClick={() => setCreateOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Invite Employee
+          </Button>
+        </RequirePermission>
       </div>
 
       {pending.length > 0 && (
@@ -228,10 +238,10 @@ export default function UsersPage() {
         onSearchChange={handleSearch}
         onPageChange={setPage}
         onSort={handleSort}
-        onEdit={setEditUser}
-        onDelete={setDeleteUser}
-        onToggleStatus={setStatusUser}
-        onViewPermissions={setPermissionsUser}
+        onEdit={canUpdate ? setEditUser : undefined}
+        onDelete={canDelete ? setDeleteUser : undefined}
+        onToggleStatus={canUpdate ? setStatusUser : undefined}
+        onViewPermissions={canManageOrg ? setPermissionsUser : undefined}
       />
 
       <InviteEmployeeDialog

@@ -13,6 +13,9 @@ import { EditPurchaseDialog } from '@/components/purchase/edit-purchase-dialog';
 import { PurchaseDetailsDialog } from '@/components/purchase/purchase-details-dialog';
 import { ReceivePurchaseDialog } from '@/components/purchase/receive-purchase-dialog';
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
+import { RequirePermission } from '@/components/rbac/require-permission';
+import { usePermissions } from '@/hooks/use-permissions';
+import { PURCHASE_CREATE, PURCHASE_UPDATE, PURCHASE_DELETE, PURCHASE_APPROVE, PURCHASE_RECEIVE } from '@/lib/permissions';
 import { deletePurchase as deletePurchaseRequest, getPurchases, approvePurchase } from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
 import { useMutation } from '@tanstack/react-query';
@@ -21,6 +24,12 @@ import type { Purchase, PurchaseMeta, PurchaseListResponse } from '@/components/
 export default function PurchasesPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { hasPermission, isLoaded } = usePermissions();
+
+  const canUpdate = isLoaded && hasPermission(PURCHASE_UPDATE);
+  const canDelete = isLoaded && hasPermission(PURCHASE_DELETE);
+  const canApprove = isLoaded && hasPermission(PURCHASE_APPROVE);
+  const canReceive = isLoaded && hasPermission(PURCHASE_RECEIVE);
 
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -105,10 +114,12 @@ export default function PurchasesPage() {
             Manage purchase orders and supplier deliveries
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Create Order
-        </Button>
+        <RequirePermission permission={PURCHASE_CREATE}>
+          <Button onClick={() => setCreateOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Create Order
+          </Button>
+        </RequirePermission>
       </div>
 
       <PurchaseTable
@@ -122,10 +133,10 @@ export default function PurchasesPage() {
         onPageChange={setPage}
         onSort={handleSort}
         onView={setViewPurchase}
-        onEdit={setEditPurchase}
-        onDelete={setDeletePurchase}
-        onApprove={handleApprove}
-        onReceive={setReceivePurchase}
+        onEdit={canUpdate ? setEditPurchase : undefined}
+        onDelete={canDelete ? setDeletePurchase : undefined}
+        onApprove={canApprove ? handleApprove : undefined}
+        onReceive={canReceive ? setReceivePurchase : undefined}
       />
 
       <CreatePurchaseDialog

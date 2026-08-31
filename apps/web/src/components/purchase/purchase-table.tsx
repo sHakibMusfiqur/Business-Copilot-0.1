@@ -39,10 +39,10 @@ interface PurchaseTableProps {
   onPageChange: (page: number) => void;
   onSort: (field: string) => void;
   onView: (purchase: Purchase) => void;
-  onEdit: (purchase: Purchase) => void;
-  onDelete: (purchase: Purchase) => void;
-  onApprove: (purchase: Purchase) => void;
-  onReceive: (purchase: Purchase) => void;
+  onEdit?: (purchase: Purchase) => void;
+  onDelete?: (purchase: Purchase) => void;
+  onApprove?: (purchase: Purchase) => void;
+  onReceive?: (purchase: Purchase) => void;
 }
 
 const statusStyle: Record<string, string> = {
@@ -217,22 +217,22 @@ export function PurchaseTable({
                             <DropdownMenuItem onClick={() => onView(purchase)}>
                               View details
                             </DropdownMenuItem>
-                            {(purchase.status === 'DRAFT' || purchase.status === 'PENDING') && (
+                            {onEdit && (purchase.status === 'DRAFT' || purchase.status === 'PENDING') && (
                               <DropdownMenuItem onClick={() => onEdit(purchase)}>
                                 Edit order
                               </DropdownMenuItem>
                             )}
-                            {purchase.status === 'PENDING' && (
+                            {onApprove && purchase.status === 'PENDING' && (
                               <DropdownMenuItem onClick={() => onApprove(purchase)}>
                                 Approve
                               </DropdownMenuItem>
                             )}
-                            {purchase.status === 'APPROVED' && (
+                            {onReceive && purchase.status === 'APPROVED' && (
                               <DropdownMenuItem onClick={() => onReceive(purchase)}>
                                 Receive
                               </DropdownMenuItem>
                             )}
-                            {purchase.status === 'DRAFT' && (
+                            {onDelete && purchase.status === 'DRAFT' && (
                               <>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
