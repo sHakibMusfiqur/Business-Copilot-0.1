@@ -177,6 +177,7 @@ model Organization {
   contacts              Contact[]
   pipelines             Pipeline[]
   deals                 Deal[]
+  importJobs            ImportJob[]
 }
 
 model OrganizationMember {
@@ -236,6 +237,7 @@ model User {
   inviteeInvitations    Invitation[]           @relation("InvitedReportingManager")
   ownedDeals            Deal[]                 @relation("DealOwner")
   acceptedInvitation    Invitation?            @relation("AcceptedInvitation")
+  importJobs            ImportJob[]
 }
 
 // A registration whose email ownership has not yet been proven. No real User
@@ -1319,6 +1321,31 @@ model IdempotencyRecord {
   createdAt DateTime @default(now())
 
   @@index([expiresAt])
+}
+
+model ImportJob {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  importType     String
+  fileFormat     String
+  delimiter      String   @default("Comma")
+  skipFirstRow   Boolean  @default(true)
+  updateExisting Boolean  @default(false)
+  fileName       String
+  fileSize       Int
+  status         String   @default("PENDING")
+  importedCount  Int      @default(0)
+  errorCount     Int      @default(0)
+  errors         Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([userId])
+  @@index([status])
 }
 
 model ChecklistItem {

@@ -113,4 +113,8 @@ export const API_ROUTES = {
     ROOT: '/settings',
     FILES: '/settings/files',
   },
+  IMPORT: {
+    START: '/import/start',
+    ROOT: '/import',
+  },
 } as const;

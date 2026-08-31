@@ -10,6 +10,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { SectionCard } from '@/components/setup/section-card';
 import { SetupPageShell } from '@/components/setup/setup-page-shell';
 import { api } from '@/lib/api';
+import { API_ROUTES } from '@/lib/api/routes';
 import { cn } from '@/lib/utils';
 import { markChecklistComplete } from '@/lib/onboarding-api';
 import { getOnboardingSession } from '@/lib/session-storage';
@@ -92,7 +93,7 @@ export default function ImportPage() {
 
     setSaving(true);
     try {
-      await api.post('/import/start', {
+      await api.post(API_ROUTES.IMPORT.START, {
         importType: selectedType,
         fileFormat,
         delimiter,

@@ -17,6 +17,7 @@ import { CustomersModule } from './customers/customers.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DepartmentsModule } from './departments/departments.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { ImportModule } from './import/import.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { MailModule } from './mail/mail.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
@@ -60,6 +61,7 @@ import { THROTTLE_BUCKETS } from './common/throttle/throttle.config';
     PlatformAdminModule,
     DashboardModule,
     InventoryModule,
+    ImportModule,
     ProductsModule,
     PurchaseModule,
     RbacModule,
