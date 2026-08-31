@@ -12,7 +12,7 @@ import {
 import { useMemo } from 'react';
 
 import { ActivityTimeline } from '@/components/dashboard/activity-timeline';
-import { Sparkline, TrendChart } from '@/components/dashboard/charts';
+import { TrendChart } from '@/components/dashboard/charts';
 import type { DashboardOverview } from '@/components/dashboard/types';
 import { TrendBadge } from '@/components/ui/trend-badge';
 import { formatCurrency, formatNumber } from '@/lib/utils';
@@ -46,20 +46,39 @@ function Card({ children, className = '' }: { children: React.ReactNode; classNa
 
 export function MetricWidget({ data }: WorkspaceWidgetProps) {
   const m = data.metric;
+  const isUnavailable = data.available === false || (m && !m.available);
+
+  if (isUnavailable) {
+    return (
+      <Card>
+        <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">{m?.label ?? data.title}</p>
+        <div className="mt-2 flex h-[40px] items-center">
+          <span className="text-[13px] text-muted-foreground italic">Data not available</span>
+        </div>
+        <div className="mt-3 border-t border-border/50 pt-2">
+          <span className="text-[11px] text-muted-foreground">Connect module to view</span>
+        </div>
+      </Card>
+    );
+  }
+
   const value = m ? (m.currency ? formatCurrency(m.value) : formatNumber(Math.round(m.value))) : '—';
   return (
     <Card>
       <div className="flex items-start justify-between gap-2">
         <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">{m?.label ?? data.title}</p>
-        {m && <TrendBadge value={`${m.trend >= 0 ? '+' : ''}${m.trend}%`} positive={m.trendPositive} />}
+        {m && m.trend !== null && <TrendBadge value={`${m.trend >= 0 ? '+' : ''}${m.trend}%`} positive={m.trendPositive ?? true} />}
       </div>
       <p className="mt-2 text-[28px] font-bold leading-8 tracking-tight tabular-nums sm:text-[32px]">{value}</p>
       <div className="mt-3 flex items-end justify-between gap-2">
-        <span className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-500 dark:text-emerald-400">
-          <span className="h-1.5 w-1.5 rounded-full bg-current" />
-          vs last month
-        </span>
-        <Sparkline data={[1, 2, 2, 3, 2, 4, 3, 4, 5]} color={data.accent} className="h-7 w-20" />
+        {m && m.trend !== null ? (
+          <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${m.trendPositive ? 'text-emerald-500 dark:text-emerald-400' : 'text-red-500 dark:text-red-400'}`}>
+            <span className="h-1.5 w-1.5 rounded-full bg-current" />
+            vs last month
+          </span>
+        ) : (
+          <span className="text-[11px] text-muted-foreground">No trend data</span>
+        )}
       </div>
     </Card>
   );
@@ -67,6 +86,24 @@ export function MetricWidget({ data }: WorkspaceWidgetProps) {
 
 export function TrendWidget({ data }: WorkspaceWidgetProps) {
   const s = data.series;
+  const hasRealData = s && s.data.some((d) => d !== 0);
+
+  if (!hasRealData) {
+    return (
+      <Card>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">{data.title}</p>
+            <p className="mt-1 text-[22px] font-bold tracking-tight tabular-nums text-muted-foreground">—</p>
+          </div>
+        </div>
+        <div className="mt-3 flex h-[120px] items-center justify-center">
+          <span className="text-[13px] text-muted-foreground italic">No trend data available</span>
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <div className="flex items-start justify-between gap-3">
@@ -85,9 +122,27 @@ export function TrendWidget({ data }: WorkspaceWidgetProps) {
 export function ForecastWidget({ data }: WorkspaceWidgetProps) {
   const s = data.series;
   const past = s?.data ?? [];
-  const forecast = past.slice(-6).concat(
-    past.slice(-6).map((v) => Math.round(v * 1.06)),
-  );
+  const hasRealData = past.some((d) => d !== 0);
+
+  if (!hasRealData) {
+    return (
+      <Card>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">{data.title}</p>
+            <p className="mt-1 text-[20px] font-bold tracking-tight tabular-nums text-muted-foreground">—</p>
+          </div>
+          <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+            Forecast
+          </span>
+        </div>
+        <div className="mt-3 flex h-[120px] items-center justify-center">
+          <span className="text-[13px] text-muted-foreground italic">No historical data for forecast</span>
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <div className="flex items-start justify-between gap-3">
@@ -104,7 +159,6 @@ export function ForecastWidget({ data }: WorkspaceWidgetProps) {
           height={120}
           series={[
             { data: past, color: data.accent, label: 'Actual' },
-            { data: forecast, color: '#8B5CF6', label: 'Projected' },
           ]}
         />
       </div>
@@ -216,10 +270,23 @@ export function AiInsightsWidget({ data }: WorkspaceWidgetProps) {
 }
 
 export function HealthScoreWidget({ data }: WorkspaceWidgetProps) {
-  const score = data.health?.score ?? 0;
-  const label = data.health?.label ?? '—';
+  const health = data.health;
+  const score = health?.score ?? 0;
+  const label = health?.label ?? '—';
   const R = 34;
   const C = 2 * Math.PI * R;
+
+  if (!health) {
+    return (
+      <Card>
+        <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">{data.title}</p>
+        <div className="mt-3 flex h-[92px] items-center justify-center">
+          <span className="text-[13px] text-muted-foreground italic">No data to compute health score</span>
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <p className="text-[12px] font-medium text-slate-500 dark:text-slate-400">{data.title}</p>
@@ -245,7 +312,7 @@ export function HealthScoreWidget({ data }: WorkspaceWidgetProps) {
         <div>
           <p className="text-[15px] font-semibold tracking-tight">{label}</p>
           <p className="mt-1 max-w-[140px] text-[12px] leading-relaxed text-muted-foreground">
-            Composite of revenue, stock and workflow signals.
+            Derived from real inventory, leave and financial data.
           </p>
         </div>
       </div>

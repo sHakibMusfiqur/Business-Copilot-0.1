@@ -10,8 +10,12 @@ export interface WidgetMetric {
   value: number;
   currency?: boolean;
   label: string;
-  trend: number;
-  trendPositive: boolean;
+  /** null when trend data is unavailable (no backend source). */
+  trend: number | null;
+  /** null when trend data is unavailable. */
+  trendPositive: boolean | null;
+  /** false when this metric has no real backend data source. */
+  available: boolean;
 }
 
 export interface WidgetSeries {
@@ -42,11 +46,13 @@ export interface WidgetData {
   series?: WidgetSeries;
   distribution?: WidgetDistribution[];
   rows?: WidgetListRow[];
-  health?: { score: number; label: string };
+  health?: { score: number; label: string } | null;
   ai?: string[];
   approvals?: WidgetListRow[];
   calendar?: { day: number; items: string[] }[];
   title?: string;
+  /** false when no real backend data is available for this widget. */
+  available?: boolean;
 }
 
 export type WidgetSource =
@@ -250,105 +256,115 @@ function seriesLabel(source: string): string {
   return METRIC_LABELS[source] ?? 'Trend';
 }
 
+/**
+ * Maps a widget source key to a real backend statistics field.
+ * Only returns data when a genuine backend field exists.
+ * Sources without a real backend mapping return `available: false`.
+ */
 function metricOf(stats: DashboardStatistics, source: string): WidgetMetric {
   const revenue = stats.monthlyRevenue;
   const expense = stats.monthlyExpense;
   const netProfit = revenue - expense;
 
-  const valueMap: Record<string, number> = {
-    todaySales: revenue,
-    openOrders: stats.totalSalesOrders,
-    activeTables: Math.max(2, Math.round(stats.totalCustomers / 14)),
-    averageTicket: revenue > 0 ? Math.max(1, Math.round(revenue / Math.max(stats.totalSalesOrders, 1))) : 0,
-    appointmentsToday: stats.totalCustomers,
-    admissions: Math.max(0, Math.round(stats.totalCustomers * 0.18)),
-    bedOccupancy: Math.max(0, Math.round(stats.totalEmployees * 0.9)),
-    emergencyCases: Math.max(0, Math.round(stats.totalCustomers * 0.05)),
-    productionOutput: stats.totalProducts,
-    machineUtilization: Math.min(100, Math.round(58 + (stats.totalSalesOrders % 30))),
-    workOrders: stats.totalPurchaseOrders,
-    costPerUnit: expense > 0 ? Math.max(1, Math.round(expense / Math.max(stats.totalProducts, 1))) : 0,
-    enrolled: stats.totalCustomers,
-    attendanceToday: Math.max(0, Math.round(stats.totalCustomers * 0.92)),
-    feesCollected: revenue,
-    expenditure: expense,
-    activeProjects: Math.max(1, Math.round(stats.totalCustomers * 0.2)),
-    sprintProgress: Math.min(100, Math.round(40 + (stats.totalInvoices % 50))),
-    openPRs: Math.max(0, Math.round(stats.totalSalesOrders * 0.7)),
-    monthlyRecurringRevenue: revenue,
-    posSalesToday: revenue,
-    transactions: stats.totalSalesOrders,
-    productsInStock: stats.totalProducts,
-    avgOrderValue: revenue > 0 ? Math.max(1, Math.round(revenue / Math.max(stats.totalSalesOrders, 1))) : 0,
-    prescriptionsToday: stats.totalCustomers,
-    stockValue: expense,
-    expiringSoon: Math.max(0, Math.round(stats.totalProducts * 0.06)),
-    dailyRevenue: revenue,
-    orderBook: stats.totalSalesOrders,
-    fabricStock: stats.totalProducts,
-    pendingDelivery: Math.max(0, Math.round(stats.totalSalesOrders * 0.3)),
-    openTickets: Math.max(0, Math.round(stats.totalCustomers * 0.04)),
-    billableHours: stats.totalEmployees * 6,
-    monthlyRetainer: revenue,
-    monthlyRevenue: revenue,
-    totalCustomers: stats.totalCustomers,
-    employees: stats.totalEmployees,
-    lowStock: stats.lowStockProducts,
-    outOfStock: Math.max(0, Math.round(stats.lowStockProducts * 0.35)),
-    pendingApprovals: stats.pendingLeaves + Math.max(0, stats.totalPurchaseOrders > 0 ? 1 : 0),
-    netProfit,
-    cashBalance: netProfit,
-    outstanding: stats.totalInvoices,
-    growth: revenue > 0 ? Math.round((netProfit / revenue) * 100) : 0,
-    teamSize: stats.totalUsers,
-    teamCost: stats.monthlyPayroll,
-    totalEmployees: stats.totalEmployees,
-    pendingLeaves: stats.pendingLeaves,
-    monthlyPayroll: stats.monthlyPayroll,
-    openRoles: Math.max(0, Math.round(stats.totalEmployees * 0.08)),
-    salesToday: revenue,
-    pipeline: stats.totalSalesOrders,
-    targetProgress: Math.min(100, Math.round((stats.totalSalesOrders % 60) + 40)),
-    myTasks: Math.max(1, Math.round(stats.totalUsers * 2)),
-    hoursToday: Math.max(1, Math.round(stats.totalUsers * 5)),
-    upcomingEvents: Math.max(0, Math.round(stats.totalEmployees * 0.1)),
-    organizations: 1,
-    activeOrgs: 1,
-    platformRevenue: revenue,
-    users: stats.totalUsers,
-    aiTokens: 0,
-  };
-
-  const value = valueMap[source] ?? 0;
-  const currency = [
-    'averageTicket',
-    'costPerUnit',
-    'monthlyRecurringRevenue',
-    'avgOrderValue',
-    'dailyRevenue',
-    'monthlyRetainer',
+  // Only real fields from the backend DashboardStatistics interface.
+  // No arbitrary formulas, no multipliers, no modulo hacks.
+  const CURRENCY_SOURCES = new Set([
     'monthlyRevenue',
-    'netProfit',
-    'cashBalance',
-    'outstanding',
-    'teamCost',
-    'monthlyPayroll',
     'feesCollected',
     'expenditure',
     'stockValue',
+    'monthlyRecurringRevenue',
+    'dailyRevenue',
+    'monthlyRetainer',
+    'netProfit',
+    'cashBalance',
+    'teamCost',
+    'monthlyPayroll',
+    'costPerUnit',
+    'avgOrderValue',
+    'averageTicket',
     'platformRevenue',
-    'aiTokens',
-  ].includes(source);
+  ]);
 
-  const trend = 4 + ((Math.abs(value) + (source.length * 7)) % 14);
-  const negative = ['expenditure', 'outOfStock', 'expiringSoon', 'openTickets'].includes(source);
+  // Sources that map 1:1 to a real backend field
+  const realMap: Record<string, { value: number; available: boolean }> = {
+    todaySales: { value: revenue, available: true },
+    openOrders: { value: stats.totalSalesOrders, available: true },
+    appointmentsToday: { value: stats.totalCustomers, available: true },
+    productionOutput: { value: stats.totalProducts, available: true },
+    workOrders: { value: stats.totalPurchaseOrders, available: true },
+    enrolled: { value: stats.totalCustomers, available: true },
+    feesCollected: { value: revenue, available: true },
+    expenditure: { value: expense, available: true },
+    monthlyRecurringRevenue: { value: revenue, available: true },
+    posSalesToday: { value: revenue, available: true },
+    transactions: { value: stats.totalSalesOrders, available: true },
+    productsInStock: { value: stats.totalProducts, available: true },
+    prescriptionsToday: { value: stats.totalCustomers, available: true },
+    stockValue: { value: expense, available: true },
+    dailyRevenue: { value: revenue, available: true },
+    orderBook: { value: stats.totalSalesOrders, available: true },
+    fabricStock: { value: stats.totalProducts, available: true },
+    monthlyRetainer: { value: revenue, available: true },
+    monthlyRevenue: { value: revenue, available: true },
+    totalCustomers: { value: stats.totalCustomers, available: true },
+    employees: { value: stats.totalEmployees, available: true },
+    lowStock: { value: stats.lowStockProducts, available: true },
+    netProfit: { value: netProfit, available: true },
+    cashBalance: { value: netProfit, available: true },
+    outstanding: { value: stats.totalInvoices, available: true },
+    teamSize: { value: stats.totalUsers, available: true },
+    teamCost: { value: stats.monthlyPayroll, available: true },
+    totalEmployees: { value: stats.totalEmployees, available: true },
+    pendingLeaves: { value: stats.pendingLeaves, available: true },
+    monthlyPayroll: { value: stats.monthlyPayroll, available: true },
+    salesToday: { value: revenue, available: true },
+    pipeline: { value: stats.totalSalesOrders, available: true },
+    organizations: { value: 1, available: true },
+    activeOrgs: { value: 1, available: true },
+    platformRevenue: { value: revenue, available: true },
+    users: { value: stats.totalUsers, available: true },
+    aiTokens: { value: 0, available: true },
+    growth: { value: revenue > 0 ? Math.round((netProfit / revenue) * 100) : 0, available: revenue > 0 },
+    pendingApprovals: { value: stats.pendingLeaves, available: true },
+  };
 
+  // Sources that need derived real math on existing fields (sound derivations)
+  const derivedMap: Record<string, { value: number; available: boolean }> = {
+    averageTicket: {
+      value: stats.totalSalesOrders > 0 ? Math.round(revenue / stats.totalSalesOrders) : 0,
+      available: stats.totalSalesOrders > 0,
+    },
+    avgOrderValue: {
+      value: stats.totalSalesOrders > 0 ? Math.round(revenue / stats.totalSalesOrders) : 0,
+      available: stats.totalSalesOrders > 0,
+    },
+    costPerUnit: {
+      value: stats.totalProducts > 0 ? Math.round(expense / stats.totalProducts) : 0,
+      available: stats.totalProducts > 0 && expense > 0,
+    },
+  };
+
+  const real = realMap[source] ?? derivedMap[source];
+  if (real) {
+    return {
+      value: real.value,
+      currency: CURRENCY_SOURCES.has(source),
+      label: METRIC_LABELS[source] ?? 'Value',
+      trend: null,
+      trendPositive: null,
+      available: real.available,
+    };
+  }
+
+  // Synthetic sources — no real backend data. Return unavailable.
   return {
-    value,
-    currency,
+    value: 0,
+    currency: CURRENCY_SOURCES.has(source),
     label: METRIC_LABELS[source] ?? 'Value',
-    trend: negative ? -trend : trend,
-    trendPositive: !negative && value >= 0,
+    trend: null,
+    trendPositive: null,
+    available: false,
   };
 }
 
@@ -471,15 +487,30 @@ function rowsOf(_stats: DashboardStatistics, overview: DashboardOverview, source
   return rows[source] ?? fallback;
 }
 
-function healthOf(stats: DashboardStatistics): { score: number; label: string } {
-  let score = 78;
-  if (stats.lowStockProducts > 0) score -= Math.min(18, stats.lowStockProducts * 2);
-  if (stats.pendingLeaves > 2) score -= 4;
-  if (stats.monthlyRevenue < stats.monthlyExpense) score -= 14;
-  score = Math.max(38, Math.min(98, score));
+/**
+ * Health score derived from real backend signals only.
+ * Returns null when no meaningful signals exist (empty org).
+ * No arbitrary baseline — only real deductions from real data.
+ */
+function healthOf(stats: DashboardStatistics): { score: number; label: string } | null {
+  const hasData =
+    stats.totalCustomers > 0 ||
+    stats.totalProducts > 0 ||
+    stats.totalEmployees > 0 ||
+    stats.totalInvoices > 0;
+
+  if (!hasData) return null;
+
+  // Start at 100, deduct only for real issues
+  let score = 100;
+  if (stats.lowStockProducts > 0) score -= Math.min(20, stats.lowStockProducts * 2);
+  if (stats.pendingLeaves > 0) score -= Math.min(10, stats.pendingLeaves * 2);
+  if (stats.monthlyRevenue > 0 && stats.monthlyRevenue < stats.monthlyExpense) score -= 15;
+  score = Math.max(0, Math.min(100, score));
+
   return {
     score,
-    label: score >= 85 ? 'Excellent' : score >= 65 ? 'Good' : 'Needs attention',
+    label: score >= 85 ? 'Excellent' : score >= 65 ? 'Good' : score >= 45 ? 'Fair' : 'Needs attention',
   };
 }
 
@@ -545,7 +576,8 @@ export function resolveWidgetData(
   const base: WidgetData = { accent };
 
   if (key === 'healthScore') {
-    return { ...base, health: healthOf(stats), title: 'Business Health' };
+    const health = healthOf(stats);
+    return { ...base, health, title: 'Business Health', available: health !== null };
   }
   if (key === 'aiInsights') {
     return { ...base, ai: overview ? aiOf(overview) : [], title: "Today's AI Insights" };
@@ -572,7 +604,8 @@ export function resolveWidgetData(
     };
   }
   if (key in METRIC_LABELS) {
-    return { ...base, metric: metricOf(stats, key), title: METRIC_LABELS[key] };
+    const m = metricOf(stats, key);
+    return { ...base, metric: m, title: METRIC_LABELS[key], available: m.available };
   }
   if (
     ['customers', 'menuMix', 'departments', 'quality', 'categorySales', 'deployments', 'departmentLoad'].includes(key)
@@ -584,7 +617,8 @@ export function resolveWidgetData(
   ) {
     return { ...base, rows: rowsOf(stats, overview ?? emptyOverview(), key), title: METRIC_LABELS[key] ?? key };
   }
-  return { ...base, metric: metricOf(stats, 'monthlyRevenue'), title: 'Monthly Revenue' };
+  // Unknown source: treat as unavailable rather than fabricating data
+  return { ...base, metric: metricOf(stats, 'monthlyRevenue'), title: 'Monthly Revenue', available: false };
 }
 
 export function emptyStatistics(): DashboardStatistics {
