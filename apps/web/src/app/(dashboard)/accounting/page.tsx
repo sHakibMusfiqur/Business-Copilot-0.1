@@ -166,10 +166,10 @@ export default function AccountingPage() {
           ) : (
             <div className="divide-y">
               {recentEntries.map((entry) => (
-                <div key={entry.id} className="px-4 py-3 flex items-center justify-between">
-                  <div>
+                <div key={entry.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium">{entry.entryNumber}</p>
-                    <p className="text-xs text-muted-foreground">{entry.description}</p>
+                    <p className="text-xs text-muted-foreground truncate">{entry.description}</p>
                   </div>
                   <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${
                     entry.status === 'POSTED' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'

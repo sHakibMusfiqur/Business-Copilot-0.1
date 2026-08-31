@@ -18,7 +18,7 @@ export function SubscriptionBanner() {
 
   if (subscription && subscription.status === 'ACTIVE') {
     return (
-      <div className="panel-card flex items-center justify-between gap-4 p-4">
+      <div className="panel-card flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-slate-100 text-slate-500 dark:bg-white/[0.08] dark:text-slate-400">
             <CreditCard className="h-4 w-4" />
@@ -44,7 +44,7 @@ export function SubscriptionBanner() {
 
   if (!subscription) {
     return (
-      <div className="panel-card flex items-center justify-between gap-4 p-4">
+      <div className="panel-card flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-slate-100 text-slate-500 dark:bg-white/[0.08] dark:text-slate-400">
             <Sparkles className="h-4 w-4" />
