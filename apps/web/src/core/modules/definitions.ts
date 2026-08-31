@@ -20,8 +20,25 @@ import {
   Wallet,
   Warehouse,
 } from 'lucide-react';
+import type { IndustryKey } from '@bc/core';
 
 import type { ModuleManifest } from './types';
+
+const ALL_INDUSTRIES: IndustryKey[] = [
+  'restaurant', 'hospital', 'manufacturing', 'school',
+  'software', 'retail', 'pharmacy', 'garments',
+  'it-services', 'general',
+];
+
+const INVENTORY_INDUSTRIES: IndustryKey[] = [
+  'restaurant', 'hospital', 'manufacturing', 'school',
+  'retail', 'pharmacy', 'garments', 'general',
+];
+
+const SALES_INDUSTRIES: IndustryKey[] = [
+  'restaurant', 'manufacturing', 'software', 'retail',
+  'pharmacy', 'garments', 'it-services', 'general',
+];
 
 export const MODULE_MANIFESTS: ModuleManifest[] = [
   {
@@ -45,6 +62,7 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     permissions: ['customers.read'],
     capabilities: ['crm'],
     status: 'stable',
+    industries: ALL_INDUSTRIES,
   },
   {
     id: 'suppliers',
@@ -55,6 +73,7 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     permissions: ['suppliers.read'],
     capabilities: ['procurement'],
     status: 'stable',
+    industries: INVENTORY_INDUSTRIES,
   },
   {
     id: 'crm',
@@ -65,6 +84,7 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     permissions: ['crm.read'],
     capabilities: ['crm'],
     status: 'stable',
+    industries: ALL_INDUSTRIES,
   },
   {
     id: 'products',
@@ -75,6 +95,7 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     permissions: ['products.read'],
     capabilities: ['inventory'],
     status: 'stable',
+    industries: INVENTORY_INDUSTRIES,
   },
   {
     id: 'inventory',
@@ -85,6 +106,7 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     permissions: ['inventory.read'],
     capabilities: ['inventory'],
     status: 'stable',
+    industries: INVENTORY_INDUSTRIES,
   },
   {
     id: 'sales',
@@ -95,6 +117,7 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     permissions: ['sales.read'],
     capabilities: ['pos', 'ecommerce', 'analytics'],
     status: 'stable',
+    industries: SALES_INDUSTRIES,
   },
   {
     id: 'purchases',
@@ -105,6 +128,7 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     permissions: ['purchase.read'],
     capabilities: ['procurement'],
     status: 'stable',
+    industries: INVENTORY_INDUSTRIES,
   },
   {
     id: 'accounting',

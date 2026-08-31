@@ -1,4 +1,5 @@
 import { Download, Upload } from 'lucide-react';
+import type { IndustryKey } from '@bc/core';
 
 import { INDUSTRY_LABELS, INDUSTRY_PROFILES } from '@/core/workspace/industries';
 import { moduleRegistry } from '@/core/modules/registry';
@@ -61,6 +62,16 @@ function defaultQuickActions(): QuickActionDef[] {
 const capabilityEngine = createCapabilityEngine();
 const entitlementEngine = createEntitlementEngine();
 
+function isModuleAvailableForIndustry(
+  module: ModuleManifest,
+  industry: string,
+): boolean {
+  if (module.visibility?.always) return true;
+  const industries = module.industries;
+  if (!industries || industries.length === 0) return true;
+  return industries.includes(industry as IndustryKey);
+}
+
 export function resolveWorkspace(input: WorkspaceContextInput): ResolvedWorkspace {
   const industry = input.industry && input.industry in INDUSTRY_PROFILES ? input.industry : 'general';
   const role = input.role ?? resolveRoleKey(undefined, input.permissions);
@@ -73,6 +84,7 @@ export function resolveWorkspace(input: WorkspaceContextInput): ResolvedWorkspac
   // Permissions that auto-gate a module on top of any explicit input modules.
   const permissionEnabled = allModules.filter((m) => {
     if (m.id === 'dashboard') return true;
+    if (!isModuleAvailableForIndustry(m, industry)) return false;
     return hasAny(input.permissions, m.permissions);
   }).map((m) => m.id);
 
@@ -90,7 +102,8 @@ export function resolveWorkspace(input: WorkspaceContextInput): ResolvedWorkspac
   const rawWidgets = [...roleProfile.widgets, ...industryProfile.widgets];
   const widgets = dedupeWidgets(rawWidgets.filter((w) => resolveWidget(w, ctx)));
 
-  const navigation = buildNavigation(allModules, input.permissions);
+  const industryModules = allModules.filter((m) => isModuleAvailableForIndustry(m, industry));
+  const navigation = buildNavigation(industryModules, input.permissions);
 
   const quickActions: QuickActionDef[] = dedupeQuickActions([
     ...roleProfile.quickActions,
