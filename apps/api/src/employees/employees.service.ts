@@ -1,4 +1,5 @@
-import { BadRequestException, Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, ConflictException, InternalServerErrorException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -153,32 +154,46 @@ export class EmployeesService {
 
     const employeeCode = await this.generateUniqueEmployeeCode(orgId);
 
-    const employee = await this.prisma.employee.create({
-      data: {
-        employeeCode,
-        organizationId: orgId,
-        firstName: dto.firstName.trim(),
-        lastName: dto.lastName.trim(),
-        email: dto.email.trim().toLowerCase(),
-        phone: dto.phone?.trim() ?? null,
-        gender: dto.gender as 'MALE' | 'FEMALE' | 'OTHER' | null ?? null,
-        dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
-        hireDate: dto.hireDate ? new Date(dto.hireDate) : new Date(),
-        departmentId: dto.departmentId ?? null,
-        position: dto.position?.trim() ?? null,
-        salary: dto.salary ?? 0,
-        userId: dto.userId ?? null,
-      },
-      select: {
-        id: true,
-        employeeCode: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        isActive: true,
-        createdAt: true,
-      },
-    });
+    let employee;
+    try {
+      employee = await this.prisma.employee.create({
+        data: {
+          employeeCode,
+          organizationId: orgId,
+          firstName: dto.firstName.trim(),
+          lastName: dto.lastName.trim(),
+          email: dto.email.trim().toLowerCase(),
+          phone: dto.phone?.trim() ?? null,
+          gender: dto.gender as 'MALE' | 'FEMALE' | 'OTHER' | null ?? null,
+          dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
+          hireDate: dto.hireDate ? new Date(dto.hireDate) : new Date(),
+          departmentId: dto.departmentId ?? null,
+          position: dto.position?.trim() ?? null,
+          salary: dto.salary ?? 0,
+          userId: dto.userId ?? null,
+        },
+        select: {
+          id: true,
+          employeeCode: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          isActive: true,
+          createdAt: true,
+        },
+      });
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const collisionRetry = await this.retryCreateWithNextCode(orgId, dto);
+        if (collisionRetry) {
+          employee = collisionRetry;
+        } else {
+          throw new InternalServerErrorException('Failed to generate unique employee code after multiple attempts');
+        }
+      } else {
+        throw error;
+      }
+    }
 
     await this.auditService.record({
       userId: actorId,
@@ -290,20 +305,51 @@ export class EmployeesService {
       }
     }
 
-    const maxRetries = 10;
+    return `EMP-${String(nextNumber).padStart(4, '0')}`;
+  }
+
+  private async retryCreateWithNextCode(
+    orgId: string,
+    dto: CreateEmployeeDto,
+  ): Promise<{ id: string; employeeCode: string; firstName: string; lastName: string; email: string; isActive: boolean; createdAt: Date } | null> {
+    const maxRetries = 5;
     for (let attempt = 0; attempt < maxRetries; attempt++) {
-      const code = `EMP-${String(nextNumber + attempt).padStart(4, '0')}`;
-      const existing = await this.prisma.employee.findFirst({
-        where: { employeeCode: code },
-        select: { id: true },
-      });
-      if (!existing) {
-        return code;
+      const code = await this.generateUniqueEmployeeCode(orgId);
+      try {
+        return await this.prisma.employee.create({
+          data: {
+            employeeCode: code,
+            organizationId: orgId,
+            firstName: dto.firstName.trim(),
+            lastName: dto.lastName.trim(),
+            email: dto.email.trim().toLowerCase(),
+            phone: dto.phone?.trim() ?? null,
+            gender: dto.gender as 'MALE' | 'FEMALE' | 'OTHER' | null ?? null,
+            dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
+            hireDate: dto.hireDate ? new Date(dto.hireDate) : new Date(),
+            departmentId: dto.departmentId ?? null,
+            position: dto.position?.trim() ?? null,
+            salary: dto.salary ?? 0,
+            userId: dto.userId ?? null,
+          },
+          select: {
+            id: true,
+            employeeCode: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            isActive: true,
+            createdAt: true,
+          },
+        });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          continue;
+        }
+        throw error;
       }
     }
-
-    const fallbackCode = `EMP-${Date.now()}`;
-    return fallbackCode;
+    return null;
   }
 
   async getStats(orgId: string) {

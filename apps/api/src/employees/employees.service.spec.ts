@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ConflictException } from '@nestjs/common';
+import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 
 import { EmployeesService } from './employees.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -60,6 +60,24 @@ describe('EmployeesService', () => {
       expect(result).toEqual(employees);
       expect(prisma.employee.findMany).toHaveBeenCalled();
     });
+
+    it('should filter by search term', async () => {
+      prisma.employee.findMany.mockResolvedValue([]);
+      await service.findAll('org-1', { search: 'John' });
+      expect(prisma.employee.findMany).toHaveBeenCalled();
+    });
+
+    it('should filter by department', async () => {
+      prisma.employee.findMany.mockResolvedValue([]);
+      await service.findAll('org-1', { departmentId: 'dept-1' });
+      expect(prisma.employee.findMany).toHaveBeenCalled();
+    });
+
+    it('should filter by active status', async () => {
+      prisma.employee.findMany.mockResolvedValue([]);
+      await service.findAll('org-1', { isActive: true });
+      expect(prisma.employee.findMany).toHaveBeenCalled();
+    });
   });
 
   describe('findOne', () => {
@@ -113,6 +131,65 @@ describe('EmployeesService', () => {
         email: 'existing@test.com',
       })).rejects.toThrow(ConflictException);
     });
+
+    it('should throw BadRequestException if department not in org', async () => {
+      prisma.employee.findFirst.mockResolvedValue(null);
+      prisma.department.findFirst.mockResolvedValue(null);
+
+      await expect(service.create('org-1', 'actor-1', {
+        firstName: 'John',
+        lastName: 'Doe',
+        email: 'john@test.com',
+        departmentId: 'invalid-dept',
+      })).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException if userId not in org', async () => {
+      prisma.employee.findFirst.mockResolvedValue(null);
+      prisma.user.findFirst.mockResolvedValue(null);
+
+      await expect(service.create('org-1', 'actor-1', {
+        firstName: 'John',
+        lastName: 'Doe',
+        email: 'john@test.com',
+        userId: 'invalid-user',
+      })).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('update', () => {
+    it('should update employee', async () => {
+      prisma.employee.findFirst
+        .mockResolvedValueOnce({ id: '1', employeeCode: 'EMP-0001', firstName: 'John', lastName: 'Doe' })
+        .mockResolvedValueOnce(null);
+      prisma.employee.update.mockResolvedValue({
+        id: '1',
+        employeeCode: 'EMP-0001',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        email: 'john@test.com',
+        isActive: true,
+        updatedAt: new Date(),
+      });
+
+      const result = await service.update('org-1', 'actor-1', '1', { firstName: 'Jane' });
+
+      expect(result.firstName).toBe('Jane');
+      expect(auditService.record).toHaveBeenCalled();
+    });
+
+    it('should throw NotFoundException if employee not found', async () => {
+      prisma.employee.findFirst.mockResolvedValue(null);
+
+      await expect(service.update('org-1', 'actor-1', 'nonexistent', { firstName: 'Jane' })).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException if department not in org', async () => {
+      prisma.employee.findFirst.mockResolvedValue({ id: '1', employeeCode: 'EMP-0001', firstName: 'John', lastName: 'Doe' });
+      prisma.department.findFirst.mockResolvedValue(null);
+
+      await expect(service.update('org-1', 'actor-1', '1', { departmentId: 'invalid-dept' })).rejects.toThrow(BadRequestException);
+    });
   });
 
   describe('remove', () => {
@@ -135,6 +212,25 @@ describe('EmployeesService', () => {
       prisma.employee.findFirst.mockResolvedValue(null);
 
       await expect(service.remove('org-1', 'actor-1', 'nonexistent')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('getStats', () => {
+    it('should return employee statistics', async () => {
+      prisma.employee.count
+        .mockResolvedValueOnce(10)
+        .mockResolvedValueOnce(8);
+      prisma.employee.groupBy.mockResolvedValue([
+        { departmentId: 'dept-1', _count: { id: 5 } },
+        { departmentId: 'dept-2', _count: { id: 3 } },
+      ]);
+
+      const result = await service.getStats('org-1');
+
+      expect(result.total).toBe(10);
+      expect(result.active).toBe(8);
+      expect(result.inactive).toBe(2);
+      expect(result.byDepartment).toHaveLength(2);
     });
   });
 });

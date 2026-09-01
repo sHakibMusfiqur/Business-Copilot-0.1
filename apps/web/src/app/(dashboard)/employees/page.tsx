@@ -1,25 +1,34 @@
 'use client';
 
 import { useState, useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Search, Users, Building2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { DashboardError } from '@/components/dashboard/dashboard-error';
 import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
-import { RequirePermission } from '@/components/rbac/require-permission';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
+import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
 import { usePermissions } from '@/hooks/use-permissions';
-import { EMPLOYEES_READ, EMPLOYEES_CREATE } from '@/lib/permissions';
-import { getEmployees, type EmployeesResponse } from '@/lib/api/employees';
+import { EMPLOYEES_READ, EMPLOYEES_CREATE, EMPLOYEES_UPDATE, EMPLOYEES_DELETE } from '@/lib/permissions';
+import { getEmployees, deleteEmployee, type Employee, type EmployeesResponse } from '@/lib/api/employees';
+import { CreateEmployeeDialog } from '@/components/employees/create-employee-dialog';
+import { EditEmployeeDialog } from '@/components/employees/edit-employee-dialog';
 
 export default function EmployeesPage() {
   const { hasPermission, isLoaded } = usePermissions();
+  const queryClient = useQueryClient();
 
   const canRead = isLoaded && hasPermission(EMPLOYEES_READ);
   const canCreate = isLoaded && hasPermission(EMPLOYEES_CREATE);
+  const canUpdate = isLoaded && hasPermission(EMPLOYEES_UPDATE);
+  const canDelete = isLoaded && hasPermission(EMPLOYEES_DELETE);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<boolean | undefined>(undefined);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
+  const [deleteEmployeeTarget, setDeleteEmployeeTarget] = useState<Employee | null>(null);
 
   const employeesQuery = useQuery<EmployeesResponse>({
     queryKey: ['employees', { search, isActive: statusFilter }],
@@ -34,21 +43,21 @@ export default function EmployeesPage() {
     setSearch(value);
   }, []);
 
+  function invalidate() {
+    queryClient.invalidateQueries({ queryKey: ['employees'] });
+    queryClient.invalidateQueries({ queryKey: ['reports'] });
+  }
+
   if (!isLoaded) {
     return <DashboardSkeleton />;
   }
 
   if (!canRead) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Employees</h1>
-          <p className="text-muted-foreground">Manage your organization&apos;s employees.</p>
-        </div>
-        <RequirePermission permission={EMPLOYEES_READ}>
-          <div />
-        </RequirePermission>
-      </div>
+      <ForbiddenState
+        title="Access restricted"
+        description="You don't have permission to view employees. Contact your organization administrator."
+      />
     );
   }
 
@@ -62,7 +71,7 @@ export default function EmployeesPage() {
           <p className="text-muted-foreground">Manage your organization&apos;s employees.</p>
         </div>
         {canCreate && (
-          <Button size="sm" className="gap-1.5">
+          <Button size="sm" className="gap-1.5" onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4" /> Add Employee
           </Button>
         )}
@@ -117,6 +126,9 @@ export default function EmployeesPage() {
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Position</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Hire Date</th>
+                  {(canUpdate || canDelete) && (
+                    <th className="px-4 py-3 text-right font-medium text-muted-foreground">Actions</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -157,6 +169,31 @@ export default function EmployeesPage() {
                     <td className="px-4 py-3 text-muted-foreground">
                       {new Date(employee.hireDate).toLocaleDateString()}
                     </td>
+                    {(canUpdate || canDelete) && (
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {canUpdate && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setEditEmployee(employee)}
+                            >
+                              Edit
+                            </Button>
+                          )}
+                          {canDelete && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => setDeleteEmployeeTarget(employee)}
+                            >
+                              Delete
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -164,6 +201,32 @@ export default function EmployeesPage() {
           </div>
         </div>
       )}
+
+      <CreateEmployeeDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={invalidate}
+      />
+
+      <EditEmployeeDialog
+        employee={editEmployee}
+        open={editEmployee !== null}
+        onClose={() => setEditEmployee(null)}
+        onUpdated={invalidate}
+      />
+
+      <ConfirmDeleteDialog
+        entityName={deleteEmployeeTarget ? `${deleteEmployeeTarget.firstName} ${deleteEmployeeTarget.lastName}` : null}
+        title="Delete Employee"
+        description="This action cannot be undone. The employee record will be permanently removed."
+        buttonLabel="Delete Employee"
+        successTitle="Employee deleted"
+        errorFallback="Failed to delete employee."
+        open={deleteEmployeeTarget !== null}
+        onClose={() => setDeleteEmployeeTarget(null)}
+        onDeleted={invalidate}
+        deleteFn={() => deleteEmployeeTarget ? deleteEmployee(deleteEmployeeTarget.id) : Promise.resolve()}
+      />
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { BarChart3, ShoppingCart, Package, Users, DollarSign } from 'lucide-reac
 
 import { DashboardError } from '@/components/dashboard/dashboard-error';
 import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
-import { RequirePermission } from '@/components/rbac/require-permission';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { usePermissions } from '@/hooks/use-permissions';
 import { REPORTS_READ } from '@/lib/permissions';
 import { getReportsOverview, type ReportsOverview } from '@/lib/api/reports';
@@ -28,15 +28,10 @@ export default function ReportsPage() {
 
   if (!canRead) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Reports</h1>
-          <p className="text-muted-foreground">View business analytics and summaries.</p>
-        </div>
-        <RequirePermission permission={REPORTS_READ}>
-          <div />
-        </RequirePermission>
-      </div>
+      <ForbiddenState
+        title="Access restricted"
+        description="You don't have permission to view reports. Contact your organization administrator."
+      />
     );
   }
 
@@ -91,12 +86,12 @@ export default function ReportsPage() {
             <div className="rounded-lg border border-border bg-card p-4">
               <div className="flex items-center gap-2 text-muted-foreground">
                 <DollarSign className="h-4 w-4" />
-                <span className="text-sm">Net Position</span>
+                <span className="text-sm">Sales Revenue − Purchase Cost</span>
               </div>
               <p className="mt-2 text-2xl font-bold">
                 {formatCurrency(overview.sales.totalRevenue - overview.purchases.totalCost)}
               </p>
-              <p className="text-xs text-muted-foreground">Revenue - Cost</p>
+              <p className="text-xs text-muted-foreground">Confirmed/delivered orders only</p>
             </div>
           </div>
 
@@ -176,7 +171,7 @@ export default function ReportsPage() {
                 ) : (
                   overview.employees.byDepartment.map((dept) => (
                     <div key={dept.departmentId ?? 'none'} className="flex items-center justify-between">
-                      <span className="text-sm">{dept.departmentId ?? 'Unassigned'}</span>
+                      <span className="text-sm">{dept.departmentName}</span>
                       <span className="font-medium">{dept.count}</span>
                     </div>
                   ))

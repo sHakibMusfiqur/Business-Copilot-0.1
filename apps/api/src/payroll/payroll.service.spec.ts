@@ -58,6 +58,18 @@ describe('PayrollService', () => {
       expect(result).toEqual(records);
       expect(prisma.payroll.findMany).toHaveBeenCalled();
     });
+
+    it('should filter by employeeId', async () => {
+      prisma.payroll.findMany.mockResolvedValue([]);
+      await service.findAll('org-1', { employeeId: 'emp-1' });
+      expect(prisma.payroll.findMany).toHaveBeenCalled();
+    });
+
+    it('should filter by period dates', async () => {
+      prisma.payroll.findMany.mockResolvedValue([]);
+      await service.findAll('org-1', { periodStart: '2026-01-01', periodEnd: '2026-01-31' });
+      expect(prisma.payroll.findMany).toHaveBeenCalled();
+    });
   });
 
   describe('findOne', () => {
@@ -78,7 +90,7 @@ describe('PayrollService', () => {
   });
 
   describe('create', () => {
-    it('should create payroll record', async () => {
+    it('should create payroll record with correct net salary', async () => {
       prisma.employee.findFirst.mockResolvedValue({ id: 'emp-1', firstName: 'John', lastName: 'Doe' });
       prisma.payroll.findFirst.mockResolvedValue(null);
       prisma.payroll.create.mockResolvedValue({
@@ -108,6 +120,28 @@ describe('PayrollService', () => {
       expect(auditService.record).toHaveBeenCalled();
     });
 
+    it('should calculate net salary correctly', async () => {
+      prisma.employee.findFirst.mockResolvedValue({ id: 'emp-1', firstName: 'John', lastName: 'Doe' });
+      prisma.payroll.findFirst.mockResolvedValue(null);
+      prisma.payroll.create.mockImplementation(async (args) => ({
+        id: '1',
+        ...args.data,
+        createdAt: new Date(),
+      }));
+
+      const result = await service.create('org-1', 'actor-1', {
+        employeeId: 'emp-1',
+        periodStart: '2026-01-01',
+        periodEnd: '2026-01-31',
+        basicSalary: 10000,
+        allowances: 2000,
+        deductions: 1000,
+        tax: 1500,
+      });
+
+      expect(result.netSalary).toBe(9500);
+    });
+
     it('should throw BadRequestException if employee not in org', async () => {
       prisma.employee.findFirst.mockResolvedValue(null);
 
@@ -117,6 +151,60 @@ describe('PayrollService', () => {
         periodEnd: '2026-01-31',
         basicSalary: 5000,
       })).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException for duplicate employee and period', async () => {
+      prisma.employee.findFirst.mockResolvedValue({ id: 'emp-1', firstName: 'John', lastName: 'Doe' });
+      prisma.payroll.findFirst.mockResolvedValue({ id: 'existing' });
+
+      await expect(service.create('org-1', 'actor-1', {
+        employeeId: 'emp-1',
+        periodStart: '2026-01-01',
+        periodEnd: '2026-01-31',
+        basicSalary: 5000,
+      })).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('update', () => {
+    it('should update payroll record', async () => {
+      prisma.payroll.findFirst
+        .mockResolvedValueOnce({ id: '1', employeeId: 'emp-1', basicSalary: 5000, allowances: 500, deductions: 200, tax: 300 })
+        .mockResolvedValueOnce(null);
+      prisma.payroll.update.mockResolvedValue({
+        id: '1',
+        employeeId: 'emp-1',
+        basicSalary: 6000,
+        allowances: 500,
+        deductions: 200,
+        tax: 300,
+        netSalary: 6000,
+        updatedAt: new Date(),
+      });
+
+      const result = await service.update('org-1', 'actor-1', '1', { basicSalary: 6000 });
+
+      expect(result.basicSalary).toBe(6000);
+      expect(auditService.record).toHaveBeenCalled();
+    });
+
+    it('should recalculate net salary on update', async () => {
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', employeeId: 'emp-1', basicSalary: 5000, allowances: 500, deductions: 200, tax: 300 });
+      prisma.payroll.update.mockImplementation(async (args) => ({
+        id: '1',
+        ...args.data,
+        updatedAt: new Date(),
+      }));
+
+      const result = await service.update('org-1', 'actor-1', '1', { basicSalary: 8000 });
+
+      expect(result.netSalary).toBe(8000);
+    });
+
+    it('should throw NotFoundException if record not found', async () => {
+      prisma.payroll.findFirst.mockResolvedValue(null);
+
+      await expect(service.update('org-1', 'actor-1', 'nonexistent', { basicSalary: 6000 })).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -140,6 +228,28 @@ describe('PayrollService', () => {
       prisma.payroll.findFirst.mockResolvedValue(null);
 
       await expect(service.remove('org-1', 'actor-1', 'nonexistent')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('getStats', () => {
+    it('should return payroll statistics', async () => {
+      prisma.payroll.count.mockResolvedValue(10);
+      prisma.payroll.aggregate.mockResolvedValue({
+        _sum: { netSalary: 50000, basicSalary: 40000, allowances: 15000, deductions: 3000, tax: 2000 },
+      });
+      prisma.payroll.groupBy.mockResolvedValue([
+        { periodStart: new Date('2026-01-01'), _sum: { netSalary: 5000 }, _count: { id: 2 } },
+      ]);
+
+      const result = await service.getStats('org-1');
+
+      expect(result.total).toBe(10);
+      expect(result.totalNetSalary).toBe(50000);
+      expect(result.totalBasicSalary).toBe(40000);
+      expect(result.totalAllowances).toBe(15000);
+      expect(result.totalDeductions).toBe(3000);
+      expect(result.totalTax).toBe(2000);
+      expect(result.byMonth).toHaveLength(1);
     });
   });
 });

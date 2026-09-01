@@ -1,20 +1,33 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
-import { Wallet, Calendar, DollarSign, TrendingUp } from 'lucide-react';
+import { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Plus, Wallet, Calendar, DollarSign, TrendingUp } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
 import { DashboardError } from '@/components/dashboard/dashboard-error';
 import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
-import { RequirePermission } from '@/components/rbac/require-permission';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
+import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
 import { usePermissions } from '@/hooks/use-permissions';
-import { PAYROLL_READ } from '@/lib/permissions';
-import { getPayroll, getPayrollStats, type PayrollRecord, type PayrollStats } from '@/lib/api/payroll';
+import { PAYROLL_READ, PAYROLL_CREATE, PAYROLL_UPDATE, PAYROLL_DELETE } from '@/lib/permissions';
+import { getPayroll, getPayrollStats, deletePayroll, type PayrollRecord, type PayrollStats } from '@/lib/api/payroll';
 import { formatCurrency } from '@/lib/utils';
+import { CreatePayrollDialog } from '@/components/payroll/create-payroll-dialog';
+import { EditPayrollDialog } from '@/components/payroll/edit-payroll-dialog';
 
 export default function PayrollPage() {
   const { hasPermission, isLoaded } = usePermissions();
+  const queryClient = useQueryClient();
 
   const canRead = isLoaded && hasPermission(PAYROLL_READ);
+  const canCreate = isLoaded && hasPermission(PAYROLL_CREATE);
+  const canUpdate = isLoaded && hasPermission(PAYROLL_UPDATE);
+  const canDelete = isLoaded && hasPermission(PAYROLL_DELETE);
+
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editRecord, setEditRecord] = useState<PayrollRecord | null>(null);
+  const [deleteRecordTarget, setDeleteRecordTarget] = useState<PayrollRecord | null>(null);
 
   const payrollQuery = useQuery<PayrollRecord[]>({
     queryKey: ['payroll'],
@@ -28,21 +41,21 @@ export default function PayrollPage() {
     enabled: canRead,
   });
 
+  function invalidate() {
+    queryClient.invalidateQueries({ queryKey: ['payroll'] });
+    queryClient.invalidateQueries({ queryKey: ['reports'] });
+  }
+
   if (!isLoaded) {
     return <DashboardSkeleton />;
   }
 
   if (!canRead) {
     return (
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Payroll</h1>
-          <p className="text-muted-foreground">Manage employee payroll and compensation.</p>
-        </div>
-        <RequirePermission permission={PAYROLL_READ}>
-          <div />
-        </RequirePermission>
-      </div>
+      <ForbiddenState
+        title="Access restricted"
+        description="You don't have permission to view payroll records. Contact your organization administrator."
+      />
     );
   }
 
@@ -51,9 +64,16 @@ export default function PayrollPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Payroll</h1>
-        <p className="text-muted-foreground">Manage employee payroll and compensation.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Payroll</h1>
+          <p className="text-muted-foreground">Manage employee payroll and compensation.</p>
+        </div>
+        {canCreate && (
+          <Button size="sm" className="gap-1.5" onClick={() => setCreateOpen(true)}>
+            <Plus className="h-4 w-4" /> Add Record
+          </Button>
+        )}
       </div>
 
       {stats && (
@@ -98,7 +118,7 @@ export default function PayrollPage() {
           <Wallet className="h-12 w-12 text-muted-foreground/50" />
           <p className="mt-4 text-sm font-medium text-muted-foreground">No payroll records found</p>
           <p className="mt-1 text-xs text-muted-foreground/70">
-            Payroll records will appear here once created.
+            {canCreate ? 'Create your first payroll record to get started.' : 'Payroll records will appear here once created.'}
           </p>
         </div>
       ) : (
@@ -115,6 +135,9 @@ export default function PayrollPage() {
                   <th className="px-4 py-3 text-right font-medium text-muted-foreground">Tax</th>
                   <th className="px-4 py-3 text-right font-medium text-muted-foreground">Net Salary</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Payment Date</th>
+                  {(canUpdate || canDelete) && (
+                    <th className="px-4 py-3 text-right font-medium text-muted-foreground">Actions</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -148,6 +171,31 @@ export default function PayrollPage() {
                     <td className="px-4 py-3 text-muted-foreground">
                       {record.paymentDate ? new Date(record.paymentDate).toLocaleDateString() : '—'}
                     </td>
+                    {(canUpdate || canDelete) && (
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {canUpdate && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setEditRecord(record)}
+                            >
+                              Edit
+                            </Button>
+                          )}
+                          {canDelete && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => setDeleteRecordTarget(record)}
+                            >
+                              Delete
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -155,6 +203,32 @@ export default function PayrollPage() {
           </div>
         </div>
       )}
+
+      <CreatePayrollDialog
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onCreated={invalidate}
+      />
+
+      <EditPayrollDialog
+        record={editRecord}
+        open={editRecord !== null}
+        onClose={() => setEditRecord(null)}
+        onUpdated={invalidate}
+      />
+
+      <ConfirmDeleteDialog
+        entityName={deleteRecordTarget ? `${deleteRecordTarget.employee.firstName} ${deleteRecordTarget.employee.lastName} (${new Date(deleteRecordTarget.periodStart).toLocaleDateString()} - ${new Date(deleteRecordTarget.periodEnd).toLocaleDateString()})` : null}
+        title="Delete Payroll Record"
+        description="This action cannot be undone. The payroll record will be permanently removed."
+        buttonLabel="Delete Record"
+        successTitle="Payroll record deleted"
+        errorFallback="Failed to delete payroll record."
+        open={deleteRecordTarget !== null}
+        onClose={() => setDeleteRecordTarget(null)}
+        onDeleted={invalidate}
+        deleteFn={() => deleteRecordTarget ? deletePayroll(deleteRecordTarget.id) : Promise.resolve()}
+      />
     </div>
   );
 }

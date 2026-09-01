@@ -22,3 +22,6 @@ export * from './crm';
 export * from './audit';
 export * from './settings';
 export * from './admin';
+export * from './employees';
+export * from './payroll';
+export * from './reports';

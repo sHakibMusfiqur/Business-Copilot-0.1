@@ -41,6 +41,7 @@ export interface EmployeeSummary {
   inactiveEmployees: number;
   byDepartment: Array<{
     departmentId: string | null;
+    departmentName: string;
     count: number;
   }>;
   recentHires: Array<{

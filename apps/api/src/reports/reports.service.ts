@@ -128,7 +128,7 @@ export class ReportsService {
   }
 
   async getEmployeeSummary(orgId: string) {
-    const [totalEmployees, activeEmployees, byDepartment, recentHires] = await Promise.all([
+    const [totalEmployees, activeEmployees, byDepartmentRaw, recentHires] = await Promise.all([
       this.prisma.employee.count({ where: { organizationId: orgId } }),
       this.prisma.employee.count({ where: { organizationId: orgId, isActive: true } }),
       this.prisma.employee.groupBy({
@@ -152,14 +152,30 @@ export class ReportsService {
       }),
     ]);
 
+    const departmentIds = byDepartmentRaw
+      .map((d) => d.departmentId)
+      .filter((id): id is string => id !== null);
+
+    const departments = departmentIds.length > 0
+      ? await this.prisma.department.findMany({
+          where: { id: { in: departmentIds }, organizationId: orgId },
+          select: { id: true, name: true },
+        })
+      : [];
+
+    const departmentMap = new Map(departments.map((d) => [d.id, d.name]));
+
+    const byDepartment = byDepartmentRaw.map((d) => ({
+      departmentId: d.departmentId,
+      departmentName: d.departmentId ? (departmentMap.get(d.departmentId) ?? 'Unknown') : 'Unassigned',
+      count: d._count.id,
+    }));
+
     return {
       totalEmployees,
       activeEmployees,
       inactiveEmployees: totalEmployees - activeEmployees,
-      byDepartment: byDepartment.map((d) => ({
-        departmentId: d.departmentId,
-        count: d._count.id,
-      })),
+      byDepartment,
       recentHires,
     };
   }
