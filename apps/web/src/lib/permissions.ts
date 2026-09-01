@@ -57,7 +57,23 @@ export const PAYMENTS_READ = 'payments.read' as const;
 export const PAYMENTS_CREATE = 'payments.create' as const;
 
 // ── Reports ──────────────────────────────────────────────────────────────────
+export const REPORTS_READ = 'reports.read' as const;
+export const REPORTS_EXPORT = 'reports.export' as const;
+export const REPORTS_PRINT = 'reports.print' as const;
+export const REPORTS_AI = 'reports.ai' as const;
 export const REPORTS_FINANCE = 'reports.finance' as const;
+
+// ── Employees ────────────────────────────────────────────────────────────────
+export const EMPLOYEES_READ = 'employees.read' as const;
+export const EMPLOYEES_CREATE = 'employees.create' as const;
+export const EMPLOYEES_UPDATE = 'employees.update' as const;
+export const EMPLOYEES_DELETE = 'employees.delete' as const;
+
+// ── Payroll ──────────────────────────────────────────────────────────────────
+export const PAYROLL_READ = 'payroll.read' as const;
+export const PAYROLL_CREATE = 'payroll.create' as const;
+export const PAYROLL_UPDATE = 'payroll.update' as const;
+export const PAYROLL_DELETE = 'payroll.delete' as const;
 
 // ── CRM ──────────────────────────────────────────────────────────────────────
 export const CRM_READ = 'crm.read' as const;

@@ -117,4 +117,20 @@ export const API_ROUTES = {
     START: '/import/start',
     ROOT: '/import',
   },
+  EMPLOYEES: {
+    ROOT: '/employees',
+    STATS: '/employees/stats',
+  },
+  PAYROLL: {
+    ROOT: '/payroll',
+    STATS: '/payroll/stats',
+  },
+  REPORTS: {
+    OVERVIEW: '/reports/overview',
+    SALES: '/reports/sales',
+    PURCHASES: '/reports/purchases',
+    INVENTORY: '/reports/inventory',
+    ACCOUNTING: '/reports/accounting',
+    EMPLOYEES: '/reports/employees',
+  },
 } as const;

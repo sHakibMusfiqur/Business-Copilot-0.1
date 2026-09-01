@@ -16,17 +16,20 @@ import { CrmModule } from './crm/crm.module';
 import { CustomersModule } from './customers/customers.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DepartmentsModule } from './departments/departments.module';
+import { EmployeesModule } from './employees/employees.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { ImportModule } from './import/import.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { MailModule } from './mail/mail.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { OrganizationModule } from './organization/organization.module';
+import { PayrollModule } from './payroll/payroll.module';
 import { PlatformAdminModule } from './platform-admin/platform-admin.module';
 import { PurchaseModule } from './purchase/purchase.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RbacModule } from './rbac/rbac.module';
 import { RedisModule } from './infrastructure/redis/redis.module';
+import { ReportsModule } from './reports/reports.module';
 import { ProductsModule } from './products/products.module';
 import { SalesModule } from './sales/sales.module';
 import { SettingsModule } from './settings/settings.module';
@@ -54,10 +57,12 @@ import { THROTTLE_BUCKETS } from './common/throttle/throttle.config';
     CategoriesModule,
     CustomersModule,
     DepartmentsModule,
+    EmployeesModule,
     InvitationsModule,
     MailModule,
     OnboardingModule,
     OrganizationModule,
+    PayrollModule,
     PlatformAdminModule,
     DashboardModule,
     InventoryModule,
@@ -65,6 +70,7 @@ import { THROTTLE_BUCKETS } from './common/throttle/throttle.config';
     ProductsModule,
     PurchaseModule,
     RbacModule,
+    ReportsModule,
     SalesModule,
     SettingsModule,
     SuppliersModule,
