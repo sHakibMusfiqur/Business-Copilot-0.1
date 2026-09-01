@@ -112,17 +112,29 @@ export class PayrollService {
       throw new BadRequestException('employeeId does not belong to this organization');
     }
 
-    const existingPayroll = await this.prisma.payroll.findFirst({
+    const periodStart = new Date(dto.periodStart);
+    const periodEnd = new Date(dto.periodEnd);
+
+    if (periodStart > periodEnd) {
+      throw new BadRequestException('periodStart must not be after periodEnd');
+    }
+
+    if (dto.basicSalary < 0 || (dto.allowances !== undefined && dto.allowances < 0) ||
+        (dto.deductions !== undefined && dto.deductions < 0) || (dto.tax !== undefined && dto.tax < 0)) {
+      throw new BadRequestException('Salary components must be non-negative');
+    }
+
+    const overlapping = await this.prisma.payroll.findFirst({
       where: {
         employeeId: dto.employeeId,
-        periodStart: new Date(dto.periodStart),
-        periodEnd: new Date(dto.periodEnd),
+        periodStart: { lte: periodEnd },
+        periodEnd: { gte: periodStart },
       },
       select: { id: true },
     });
 
-    if (existingPayroll) {
-      throw new BadRequestException('A payroll record already exists for this employee and period');
+    if (overlapping) {
+      throw new BadRequestException('Payroll period overlaps with an existing record for this employee');
     }
 
     const netSalary = dto.basicSalary + (dto.allowances ?? 0) - (dto.deductions ?? 0) - (dto.tax ?? 0);
@@ -175,11 +187,41 @@ export class PayrollService {
   async update(orgId: string, actorId: string, payrollId: string, dto: UpdatePayrollDto) {
     const payroll = await this.prisma.payroll.findFirst({
       where: { id: payrollId, employee: { organizationId: orgId } },
-      select: { id: true, employeeId: true, basicSalary: true, allowances: true, deductions: true, tax: true },
+      select: { id: true, employeeId: true, periodStart: true, periodEnd: true, basicSalary: true, allowances: true, deductions: true, tax: true },
     });
 
     if (!payroll) {
       throw new NotFoundException('Payroll record not found');
+    }
+
+    const periodStart = dto.periodStart ? new Date(dto.periodStart) : payroll.periodStart;
+    const periodEnd = dto.periodEnd ? new Date(dto.periodEnd) : payroll.periodEnd;
+
+    if (periodStart > periodEnd) {
+      throw new BadRequestException('periodStart must not be after periodEnd');
+    }
+
+    if ((dto.basicSalary !== undefined && dto.basicSalary < 0) ||
+        (dto.allowances !== undefined && dto.allowances < 0) ||
+        (dto.deductions !== undefined && dto.deductions < 0) ||
+        (dto.tax !== undefined && dto.tax < 0)) {
+      throw new BadRequestException('Salary components must be non-negative');
+    }
+
+    if (dto.periodStart || dto.periodEnd) {
+      const overlapping = await this.prisma.payroll.findFirst({
+        where: {
+          id: { not: payrollId },
+          employeeId: payroll.employeeId,
+          periodStart: { lte: periodEnd },
+          periodEnd: { gte: periodStart },
+        },
+        select: { id: true },
+      });
+
+      if (overlapping) {
+        throw new BadRequestException('Payroll period overlaps with an existing record for this employee');
+      }
     }
 
     const basicSalary = dto.basicSalary ?? Number(payroll.basicSalary);

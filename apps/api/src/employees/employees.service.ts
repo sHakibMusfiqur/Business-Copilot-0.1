@@ -184,6 +184,10 @@ export class EmployeesService {
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        const target = (error.meta?.target as string[]) ?? [];
+        if (target.includes('email')) {
+          throw new ConflictException('An employee with this email already exists');
+        }
         const collisionRetry = await this.retryCreateWithCollisionHandling(orgId, dto, employeeCode);
         if (collisionRetry) {
           employee = collisionRetry;

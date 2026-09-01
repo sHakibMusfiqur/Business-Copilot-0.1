@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { PurchaseStatus } from '@prisma/client';
 import type { Prisma } from '@prisma/client';
@@ -155,8 +156,6 @@ export class PurchaseService {
       throw new BadRequestException('One or more products not found');
     }
 
-    const orderNumber = await this.generateOrderNumber();
-
     const itemsData = this.buildPurchaseItems(dto.items, products);
 
     const subtotal = itemsData.reduce((sum, item) => sum + (item.unitCost * item.quantity), 0);
@@ -168,30 +167,45 @@ export class PurchaseService {
       throw new BadRequestException('Purchase order total cannot be negative');
     }
 
-    const purchase = await this.prisma.purchaseOrder.create({
-      data: {
-        orderNumber,
-        organizationId: orgId,
-        supplierId: dto.supplierId,
-        subtotal,
-        discount: totalDiscount,
-        tax: totalTax,
-        total,
-        notes: dto.notes ?? null,
-        createdById: userId,
-        items: { create: itemsData },
-      },
-      select: {
-        id: true,
-        orderNumber: true,
-        status: true,
-        total: true,
-        createdAt: true,
-      },
-    });
+    const maxRetries = 5;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const orderNumber = await this.generateOrderNumber(orgId);
 
-    this.logger.log(`Purchase created: ${purchase.orderNumber} (${purchase.id}) by ${userId}`);
-    return purchase;
+      try {
+        const purchase = await this.prisma.purchaseOrder.create({
+          data: {
+            orderNumber,
+            organizationId: orgId,
+            supplierId: dto.supplierId,
+            subtotal,
+            discount: totalDiscount,
+            tax: totalTax,
+            total,
+            notes: dto.notes ?? null,
+            createdById: userId,
+            items: { create: itemsData },
+          },
+          select: {
+            id: true,
+            orderNumber: true,
+            status: true,
+            total: true,
+            createdAt: true,
+          },
+        });
+
+        this.logger.log(`Purchase created: ${purchase.orderNumber} (${purchase.id}) by ${userId}`);
+        return purchase;
+      } catch (err) {
+        if ((err as Prisma.PrismaClientKnownRequestError)?.code === 'P2002' && attempt < maxRetries) {
+          this.logger.warn(`Order number collision for ${orderNumber}, retrying (${attempt}/${maxRetries})`);
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    throw new InternalServerErrorException('Failed to create purchase order due to order number collision. Please try again.');
   }
 
   async update(orgId: string, userId: string, purchaseId: string, dto: UpdatePurchaseDto) {
@@ -243,18 +257,29 @@ export class PurchaseService {
         throw new BadRequestException('Purchase order total cannot be negative');
       }
 
-      await this.prisma.purchaseOrderItem.deleteMany({
-        where: { purchaseOrderId: purchaseId },
+      await this.prisma.$transaction(async (tx) => {
+        await tx.purchaseOrderItem.deleteMany({
+          where: { purchaseOrderId: purchaseId },
+        });
+
+        await tx.purchaseOrderItem.createMany({
+          data: itemsData.map((d) => ({ ...d, purchaseOrderId: purchaseId })),
+        });
+
+        await tx.purchaseOrder.update({
+          where: { id: purchaseId },
+          data: {
+            subtotal,
+            discount: totalDiscount,
+            tax: totalTax,
+            total,
+            ...(dto.supplierId !== undefined && { supplier: { connect: { id: dto.supplierId } } }),
+            ...(dto.notes !== undefined && { notes: dto.notes }),
+          },
+        });
       });
 
-      await this.prisma.purchaseOrderItem.createMany({
-        data: itemsData.map((d) => ({ ...d, purchaseOrderId: purchaseId })),
-      });
-
-      updateData.subtotal = subtotal;
-      updateData.discount = totalDiscount;
-      updateData.tax = totalTax;
-      updateData.total = total;
+      return { id: purchaseId, message: 'Purchase order updated successfully' };
     }
 
     const updated = await this.prisma.purchaseOrder.update({
@@ -506,12 +531,12 @@ export class PurchaseService {
     });
   }
 
-  private async generateOrderNumber(): Promise<string> {
+  private async generateOrderNumber(orgId: string): Promise<string> {
     const year = new Date().getFullYear();
     const prefix = `PO-${year}-`;
 
     const lastOrder = await this.prisma.purchaseOrder.findFirst({
-      where: { orderNumber: { startsWith: prefix } },
+      where: { organizationId: orgId, orderNumber: { startsWith: prefix } },
       orderBy: { orderNumber: 'desc' },
       select: { orderNumber: true },
     });

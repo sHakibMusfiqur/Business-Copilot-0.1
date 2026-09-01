@@ -248,12 +248,19 @@ describe('PurchaseService pricing (server-authoritative / P3-M2)', () => {
     itemDeleteMany = jest.fn().mockResolvedValue({});
     itemCreateMany = jest.fn().mockResolvedValue({});
 
+    const mockTx = {
+      purchaseOrderItem: { deleteMany: itemDeleteMany, createMany: itemCreateMany },
+      purchaseOrder: { update: orderUpdate },
+    };
+    const txTransaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(mockTx));
+
     service = new PurchaseService(
       {
         supplier: { findFirst: supplierFindFirst },
         product: { findMany: productFindMany },
         purchaseOrder: { findFirst: orderFindFirst, create: orderCreate, update: orderUpdate },
         purchaseOrderItem: { deleteMany: itemDeleteMany, createMany: itemCreateMany },
+        $transaction: txTransaction,
       } as unknown as PrismaService,
       {} as never,
     );
@@ -431,6 +438,7 @@ describe('PurchaseService pricing validation (V-1)', () => {
   let orderUpdate: jest.Mock;
   let itemDeleteMany: jest.Mock;
   let itemCreateMany: jest.Mock;
+  let txTransaction: jest.Mock;
 
   beforeEach(() => {
     supplierFindFirst = jest.fn().mockResolvedValue({ id: 'sup-1' });
@@ -441,12 +449,19 @@ describe('PurchaseService pricing validation (V-1)', () => {
     itemDeleteMany = jest.fn().mockResolvedValue({});
     itemCreateMany = jest.fn().mockResolvedValue({});
 
+    const mockTx = {
+      purchaseOrderItem: { deleteMany: itemDeleteMany, createMany: itemCreateMany },
+      purchaseOrder: { update: orderUpdate },
+    };
+    txTransaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(mockTx));
+
     service = new PurchaseService(
       {
         supplier: { findFirst: supplierFindFirst },
         product: { findMany: productFindMany },
         purchaseOrder: { findFirst: orderFindFirst, create: orderCreate, update: orderUpdate },
         purchaseOrderItem: { deleteMany: itemDeleteMany, createMany: itemCreateMany },
+        $transaction: txTransaction,
       } as unknown as PrismaService,
       {} as never,
     );

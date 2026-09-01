@@ -36,6 +36,7 @@ export class ReportsService {
     return {
       totalOrders,
       totalRevenue: Number(totalRevenue._sum.total ?? 0),
+      totalRevenueStatuses: ['CONFIRMED', 'DELIVERED'] as const,
       byStatus: byStatus.map((s) => ({
         status: s.status,
         count: s._count.id,
@@ -74,6 +75,7 @@ export class ReportsService {
     return {
       totalOrders,
       totalCost: Number(totalCost._sum.total ?? 0),
+      totalCostStatuses: ['APPROVED', 'RECEIVED'] as const,
       byStatus: byStatus.map((s) => ({
         status: s.status,
         count: s._count.id,

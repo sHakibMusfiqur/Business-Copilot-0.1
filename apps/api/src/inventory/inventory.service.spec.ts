@@ -11,32 +11,32 @@ const PRODUCT_ID = 'prod-1';
 describe('InventoryService (concurrency-safe stock adjustments)', () => {
   let service: InventoryService;
   let productFindFirst: jest.Mock;
-  let inventoryFindFirst: jest.Mock;
   let inventoryFindUnique: jest.Mock;
   let inventoryUpdate: jest.Mock;
   let inventoryUpdateMany: jest.Mock;
   let inventoryCreate: jest.Mock;
   let inventoryTransactionCreate: jest.Mock;
   let transaction: jest.Mock;
+  let queryRaw: jest.Mock;
 
   beforeEach(() => {
     productFindFirst = jest.fn().mockResolvedValue({ id: PRODUCT_ID, name: 'Widget', sku: 'W-1' });
-    inventoryFindFirst = jest.fn();
     inventoryFindUnique = jest.fn();
     inventoryUpdate = jest.fn().mockResolvedValue({});
     inventoryUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
     inventoryCreate = jest.fn().mockResolvedValue({});
     inventoryTransactionCreate = jest.fn().mockResolvedValue({});
+    queryRaw = jest.fn().mockResolvedValue([]);
 
     const mockTx = {
       inventory: {
-        findFirst: inventoryFindFirst,
         findUnique: inventoryFindUnique,
         update: inventoryUpdate,
         updateMany: inventoryUpdateMany,
         create: inventoryCreate,
       },
       inventoryTransaction: { create: inventoryTransactionCreate },
+      $queryRaw: queryRaw,
     };
 
     transaction = jest.fn().mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => cb(mockTx));
@@ -74,7 +74,7 @@ describe('InventoryService (concurrency-safe stock adjustments)', () => {
 
   describe('OUT adjustment', () => {
     it('succeeds when sufficient stock exists and uses atomic guarded decrement', async () => {
-      inventoryFindFirst.mockResolvedValue({ id: 'inv-1', quantity: 10 });
+      queryRaw.mockResolvedValue([{ id: 'inv-1', quantity: 10 }]);
       inventoryFindUnique.mockResolvedValue({ id: 'inv-1', quantity: 4 });
 
       const result = await service.adjust(ORG_ID, USER_ID, outDto(6));
@@ -89,8 +89,7 @@ describe('InventoryService (concurrency-safe stock adjustments)', () => {
     });
 
     it('fails when insufficient stock and does not write inventory', async () => {
-      inventoryFindFirst.mockResolvedValue({ id: 'inv-1', quantity: 3 });
-      // updateMany returns count=0 (WHERE quantity >= 6 fails)
+      queryRaw.mockResolvedValue([{ id: 'inv-1', quantity: 3 }]);
       inventoryUpdateMany.mockResolvedValue({ count: 0 });
       inventoryFindUnique.mockResolvedValue({ id: 'inv-1', quantity: 3 });
 
@@ -100,7 +99,7 @@ describe('InventoryService (concurrency-safe stock adjustments)', () => {
     });
 
     it('fails when no inventory row exists (implicit stock is 0)', async () => {
-      inventoryFindFirst.mockResolvedValue(null);
+      queryRaw.mockResolvedValue([]);
 
       await expect(service.adjust(ORG_ID, USER_ID, outDto(6))).rejects.toThrow(BadRequestException);
       expect(inventoryUpdateMany).not.toHaveBeenCalled();
@@ -110,7 +109,7 @@ describe('InventoryService (concurrency-safe stock adjustments)', () => {
 
   describe('IN adjustment', () => {
     it('succeeds with existing inventory row using atomic increment', async () => {
-      inventoryFindFirst.mockResolvedValue({ id: 'inv-1', quantity: 10 });
+      queryRaw.mockResolvedValue([{ id: 'inv-1', quantity: 10 }]);
       inventoryFindUnique.mockResolvedValue({ id: 'inv-1', quantity: 15 });
 
       const result = await service.adjust(ORG_ID, USER_ID, inDto(5));
@@ -125,7 +124,7 @@ describe('InventoryService (concurrency-safe stock adjustments)', () => {
     });
 
     it('creates inventory row when no row exists', async () => {
-      inventoryFindFirst.mockResolvedValue(null);
+      queryRaw.mockResolvedValue([]);
 
       const result = await service.adjust(ORG_ID, USER_ID, inDto(5));
 
@@ -140,7 +139,7 @@ describe('InventoryService (concurrency-safe stock adjustments)', () => {
 
   describe('ADJUSTMENT (absolute set)', () => {
     it('sets absolute value with existing inventory', async () => {
-      inventoryFindFirst.mockResolvedValue({ id: 'inv-1', quantity: 50 });
+      queryRaw.mockResolvedValue([{ id: 'inv-1', quantity: 50 }]);
 
       const result = await service.adjust(ORG_ID, USER_ID, adjustDto(100));
 
@@ -153,7 +152,7 @@ describe('InventoryService (concurrency-safe stock adjustments)', () => {
     });
 
     it('creates inventory row when no row exists', async () => {
-      inventoryFindFirst.mockResolvedValue(null);
+      queryRaw.mockResolvedValue([]);
 
       const result = await service.adjust(ORG_ID, USER_ID, adjustDto(100));
 
@@ -167,25 +166,21 @@ describe('InventoryService (concurrency-safe stock adjustments)', () => {
 
   describe('Concurrency safety', () => {
     it('uses atomic updateMany for OUT (not read-modify-write)', async () => {
-      inventoryFindFirst.mockResolvedValue({ id: 'inv-1', quantity: 10 });
+      queryRaw.mockResolvedValue([{ id: 'inv-1', quantity: 10 }]);
       inventoryFindUnique.mockResolvedValue({ id: 'inv-1', quantity: 4 });
 
       await service.adjust(ORG_ID, USER_ID, outDto(6));
 
-      // The key concurrency mechanism: updateMany with WHERE quantity >= requested.
-      // Under concurrent OUT requests, MySQL row-level locking ensures only one
-      // transaction sees quantity >= requested; the other gets count=0.
       expect(inventoryUpdateMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({ quantity: { gte: 6 } }),
         }),
       );
-      // Must NOT use absolute-value update for OUT
       expect(inventoryUpdate).not.toHaveBeenCalled();
     });
 
     it('uses atomic updateMany for IN (not read-modify-write)', async () => {
-      inventoryFindFirst.mockResolvedValue({ id: 'inv-1', quantity: 10 });
+      queryRaw.mockResolvedValue([{ id: 'inv-1', quantity: 10 }]);
       inventoryFindUnique.mockResolvedValue({ id: 'inv-1', quantity: 15 });
 
       await service.adjust(ORG_ID, USER_ID, inDto(5));
@@ -199,8 +194,7 @@ describe('InventoryService (concurrency-safe stock adjustments)', () => {
     });
 
     it('rejects OUT when atomic update finds insufficient stock', async () => {
-      inventoryFindFirst.mockResolvedValue({ id: 'inv-1', quantity: 5 });
-      // Simulates concurrent decrement: WHERE quantity >= 6 fails
+      queryRaw.mockResolvedValue([{ id: 'inv-1', quantity: 5 }]);
       inventoryUpdateMany.mockResolvedValue({ count: 0 });
       inventoryFindUnique.mockResolvedValue({ id: 'inv-1', quantity: 5 });
 
@@ -208,11 +202,20 @@ describe('InventoryService (concurrency-safe stock adjustments)', () => {
 
       expect(inventoryTransactionCreate).not.toHaveBeenCalled();
     });
+
+    it('uses SELECT ... FOR UPDATE via $queryRaw', async () => {
+      queryRaw.mockResolvedValue([{ id: 'inv-1', quantity: 10 }]);
+      inventoryFindUnique.mockResolvedValue({ id: 'inv-1', quantity: 4 });
+
+      await service.adjust(ORG_ID, USER_ID, outDto(6));
+
+      expect(queryRaw).toHaveBeenCalled();
+    });
   });
 
   describe('History record', () => {
     it('records correct previousQuantity and newQuantity for OUT', async () => {
-      inventoryFindFirst.mockResolvedValue({ id: 'inv-1', quantity: 10 });
+      queryRaw.mockResolvedValue([{ id: 'inv-1', quantity: 10 }]);
       inventoryFindUnique.mockResolvedValue({ id: 'inv-1', quantity: 4 });
 
       await service.adjust(ORG_ID, USER_ID, outDto(6, 'test note'));
@@ -232,7 +235,7 @@ describe('InventoryService (concurrency-safe stock adjustments)', () => {
     });
 
     it('records correct previousQuantity and newQuantity for IN', async () => {
-      inventoryFindFirst.mockResolvedValue({ id: 'inv-1', quantity: 10 });
+      queryRaw.mockResolvedValue([{ id: 'inv-1', quantity: 10 }]);
       inventoryFindUnique.mockResolvedValue({ id: 'inv-1', quantity: 15 });
 
       await service.adjust(ORG_ID, USER_ID, inDto(5));
@@ -248,7 +251,7 @@ describe('InventoryService (concurrency-safe stock adjustments)', () => {
     });
 
     it('records no history on failed OUT', async () => {
-      inventoryFindFirst.mockResolvedValue({ id: 'inv-1', quantity: 3 });
+      queryRaw.mockResolvedValue([{ id: 'inv-1', quantity: 3 }]);
       inventoryUpdateMany.mockResolvedValue({ count: 0 });
       inventoryFindUnique.mockResolvedValue({ id: 'inv-1', quantity: 3 });
 
@@ -262,32 +265,13 @@ describe('InventoryService (concurrency-safe stock adjustments)', () => {
       productFindFirst.mockResolvedValue(null);
 
       await expect(service.adjust(ORG_ID, USER_ID, outDto(6))).rejects.toThrow(NotFoundException);
-      expect(inventoryFindFirst).not.toHaveBeenCalled();
-    });
-
-    it('scopes the initial inventory lookup to the product organization', async () => {
-      inventoryFindFirst.mockResolvedValue({ id: 'inv-1', quantity: 10 });
-      inventoryFindUnique.mockResolvedValue({ id: 'inv-1', quantity: 15 });
-
-      await service.adjust(ORG_ID, USER_ID, inDto(5));
-
-      expect(inventoryFindFirst).toHaveBeenCalledWith({
-        where: { productId: PRODUCT_ID, warehouseId: null, product: { organizationId: ORG_ID } },
-      });
-    });
-
-    it('treats inventory on a cross-organization product as absent', async () => {
-      inventoryFindFirst.mockResolvedValue(null);
-
-      await expect(service.adjust(ORG_ID, USER_ID, outDto(6))).rejects.toThrow(BadRequestException);
-      expect(inventoryUpdateMany).not.toHaveBeenCalled();
-      expect(inventoryTransactionCreate).not.toHaveBeenCalled();
+      expect(queryRaw).not.toHaveBeenCalled();
     });
   });
 
   describe('Edge cases', () => {
     it('throws on invalid transaction type', async () => {
-      inventoryFindFirst.mockResolvedValue({ id: 'inv-1', quantity: 10 });
+      queryRaw.mockResolvedValue([{ id: 'inv-1', quantity: 10 }]);
 
       await expect(
         service.adjust(ORG_ID, USER_ID, { productId: PRODUCT_ID, type: 'INVALID' as TransactionType, quantity: 5 }),

@@ -64,6 +64,16 @@ export class CreatePayrollDto {
 }
 
 export class UpdatePayrollDto {
+  @ApiPropertyOptional({ description: 'Period start date (ISO 8601)' })
+  @IsOptional()
+  @IsDateString()
+  periodStart?: string;
+
+  @ApiPropertyOptional({ description: 'Period end date (ISO 8601)' })
+  @IsOptional()
+  @IsDateString()
+  periodEnd?: string;
+
   @ApiPropertyOptional({ description: 'Basic salary for this period' })
   @IsOptional()
   @IsNumber()

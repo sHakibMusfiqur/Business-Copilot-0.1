@@ -169,7 +169,7 @@ export class SalesService {
 
     const maxRetries = 5;
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      const orderNumber = await this.generateOrderNumber();
+      const orderNumber = await this.generateOrderNumber(orgId);
 
       try {
         const sale = await this.prisma.salesOrder.create({
@@ -521,12 +521,12 @@ export class SalesService {
     });
   }
 
-  private async generateOrderNumber(): Promise<string> {
+  private async generateOrderNumber(orgId: string): Promise<string> {
     const year = new Date().getFullYear();
     const prefix = `SO-${year}-`;
 
     const lastOrder = await this.prisma.salesOrder.findFirst({
-      where: { orderNumber: { startsWith: prefix } },
+      where: { organizationId: orgId, orderNumber: { startsWith: prefix } },
       orderBy: { orderNumber: 'desc' },
       select: { orderNumber: true },
     });

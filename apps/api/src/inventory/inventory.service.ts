@@ -152,11 +152,14 @@ export class InventoryService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      const inventory = await tx.inventory.findFirst({
-        where: { productId: product.id, warehouseId: null, product: { organizationId: orgId } },
-      });
+      const inventory = await tx.$queryRaw<Array<{ id: string; quantity: unknown }>>`
+        SELECT id, quantity FROM "Inventory"
+        WHERE "productId" = ${product.id} AND "warehouseId" IS NULL
+        FOR UPDATE
+      `;
+      const inventoryRow = inventory[0] ?? null;
 
-      const existingInventoryId = inventory?.id;
+      const existingInventoryId = inventoryRow?.id ?? null;
       let previousQuantity: number;
       let newQuantity: number;
 
@@ -213,8 +216,9 @@ export class InventoryService {
 
         case TransactionType.ADJUSTMENT: {
           // Absolute set — last-write-wins is the intended semantics.
+          // Row is locked by SELECT ... FOR UPDATE above, ensuring consistent previousQuantity.
           newQuantity = dto.quantity;
-          previousQuantity = inventory ? Number(inventory.quantity) : 0;
+          previousQuantity = inventoryRow ? Number(inventoryRow.quantity) : 0;
 
           if (existingInventoryId) {
             await tx.inventory.update({

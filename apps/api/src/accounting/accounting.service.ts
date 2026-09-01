@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
   ConflictException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { Prisma, JournalEntryStatus, PaymentType } from '@prisma/client';
 
@@ -156,7 +157,7 @@ export class AccountingService {
 
     try {
       const updated = await this.prisma.account.update({
-        where: { id: accountId },
+        where: { id: accountId, organizationId: orgId },
         data: {
           code: dto.code,
           name: dto.name,
@@ -203,7 +204,7 @@ export class AccountingService {
       throw new BadRequestException('Cannot delete an account with journal entries. Deactivate it instead.');
     }
 
-    await this.prisma.account.delete({ where: { id: accountId } });
+    await this.prisma.account.delete({ where: { id: accountId, organizationId: orgId } });
     this.logger.log(`Account deleted: ${account.code} - ${account.name} (${accountId})`);
     return { message: 'Account deleted successfully' };
   }
@@ -320,40 +321,58 @@ export class AccountingService {
 
     await this.validateAccountIds(orgId, dto.lines.map((l) => l.accountId));
 
-    const entryNumber = await this.generateJournalEntryNumber(orgId);
+    const maxRetries = 5;
+    let lastError: unknown;
 
-    const entry = await this.prisma.journalEntry.create({
-      data: {
-        entryNumber,
-        organizationId: orgId,
-        description: dto.description,
-        referenceId: dto.referenceId ?? null,
-        referenceType: dto.referenceType ?? null,
-        createdById: userId,
-        lines: {
-          create: dto.lines.map((l) => ({
-            accountId: l.accountId,
-            debit: l.debit,
-            credit: l.credit,
-            description: l.description ?? null,
-          })),
-        },
-      },
-      select: {
-        id: true,
-        entryNumber: true,
-        date: true,
-        description: true,
-        status: true,
-        createdAt: true,
-        lines: {
-          select: { id: true, debit: true, credit: true, account: { select: { code: true, name: true } } },
-        },
-      },
-    });
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const entryNumber = await this.generateJournalEntryNumber(orgId);
 
-    this.logger.log(`Journal entry created: ${entry.entryNumber} (${entry.id}) by ${userId}`);
-    return entry;
+      try {
+        const entry = await this.prisma.journalEntry.create({
+          data: {
+            entryNumber,
+            organizationId: orgId,
+            description: dto.description,
+            referenceId: dto.referenceId ?? null,
+            referenceType: dto.referenceType ?? null,
+            createdById: userId,
+            lines: {
+              create: dto.lines.map((l) => ({
+                accountId: l.accountId,
+                debit: l.debit,
+                credit: l.credit,
+                description: l.description ?? null,
+              })),
+            },
+          },
+          select: {
+            id: true,
+            entryNumber: true,
+            date: true,
+            description: true,
+            status: true,
+            createdAt: true,
+            lines: {
+              select: { id: true, debit: true, credit: true, account: { select: { code: true, name: true } } },
+            },
+          },
+        });
+
+        this.logger.log(`Journal entry created: ${entry.entryNumber} (${entry.id}) by ${userId}`);
+        return entry;
+      } catch (err) {
+        if ((err as Prisma.PrismaClientKnownRequestError)?.code === 'P2002' && attempt < maxRetries) {
+          this.logger.warn(`Entry number collision for ${entryNumber}, retrying (${attempt}/${maxRetries})`);
+          lastError = err;
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    throw new InternalServerErrorException(
+      'Failed to create journal entry due to entry number collision. Please try again.',
+    );
   }
 
   async updateJournalEntry(orgId: string, _userId: string, entryId: string, dto: UpdateJournalEntryDto) {
@@ -396,7 +415,7 @@ export class AccountingService {
 
         if (dto.description) {
           await tx.journalEntry.update({
-            where: { id: entryId },
+            where: { id: entryId, organizationId: orgId },
             data: { description: dto.description },
           });
         }
@@ -407,7 +426,7 @@ export class AccountingService {
 
     if (dto.description) {
       await this.prisma.journalEntry.update({
-        where: { id: entryId },
+        where: { id: entryId, organizationId: orgId },
         data: { description: dto.description },
       });
     }
@@ -418,6 +437,7 @@ export class AccountingService {
   async postJournalEntry(orgId: string, userId: string, entryId: string) {
     const entry = await this.prisma.journalEntry.findFirst({
       where: { id: entryId, organizationId: orgId, deletedAt: null },
+      include: { lines: { select: { debit: true, credit: true } } },
     });
 
     if (!entry) throw new NotFoundException('Journal entry not found');
@@ -426,8 +446,15 @@ export class AccountingService {
       throw new ConflictException('Only DRAFT journal entries can be posted');
     }
 
+    const { debitTotal, creditTotal } = this.validateLines(entry.lines.map((l) => ({ debit: Number(l.debit), credit: Number(l.credit) })));
+    if (debitTotal !== creditTotal) {
+      throw new BadRequestException(
+        `Cannot post unbalanced journal entry. Debits: ${debitTotal}, Credits: ${creditTotal}`,
+      );
+    }
+
     const updated = await this.prisma.journalEntry.update({
-      where: { id: entryId },
+      where: { id: entryId, organizationId: orgId },
       data: { status: JournalEntryStatus.POSTED },
       select: { id: true, entryNumber: true, status: true, date: true },
     });
@@ -448,7 +475,7 @@ export class AccountingService {
     }
 
     await this.prisma.journalEntry.update({
-      where: { id: entryId },
+      where: { id: entryId, organizationId: orgId },
       data: { deletedAt: new Date() },
     });
 
