@@ -151,10 +151,7 @@ export class EmployeesService {
       }
     }
 
-    const employeeCount = await this.prisma.employee.count({
-      where: { organizationId: orgId },
-    });
-    const employeeCode = `EMP-${String(employeeCount + 1).padStart(4, '0')}`;
+    const employeeCode = await this.generateUniqueEmployeeCode(orgId);
 
     const employee = await this.prisma.employee.create({
       data: {
@@ -276,6 +273,37 @@ export class EmployeesService {
     });
 
     return { message: 'Employee deleted successfully' };
+  }
+
+  private async generateUniqueEmployeeCode(orgId: string): Promise<string> {
+    const maxEmployee = await this.prisma.employee.findFirst({
+      where: { organizationId: orgId, employeeCode: { startsWith: 'EMP-' } },
+      orderBy: { employeeCode: 'desc' },
+      select: { employeeCode: true },
+    });
+
+    let nextNumber = 1;
+    if (maxEmployee) {
+      const match = maxEmployee.employeeCode.match(/EMP-(\d+)/);
+      if (match) {
+        nextNumber = parseInt(match[1], 10) + 1;
+      }
+    }
+
+    const maxRetries = 10;
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      const code = `EMP-${String(nextNumber + attempt).padStart(4, '0')}`;
+      const existing = await this.prisma.employee.findFirst({
+        where: { employeeCode: code },
+        select: { id: true },
+      });
+      if (!existing) {
+        return code;
+      }
+    }
+
+    const fallbackCode = `EMP-${Date.now()}`;
+    return fallbackCode;
   }
 
   async getStats(orgId: string) {

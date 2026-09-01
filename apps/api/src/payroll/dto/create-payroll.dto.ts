@@ -1,5 +1,19 @@
-import { IsString, IsOptional, IsDateString, IsNumber, Min } from 'class-validator';
+import { IsString, IsOptional, IsDateString, IsNumber, Min, Validate, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+@ValidatorConstraint({ name: 'PeriodStartBeforeEnd', async: false })
+export class PeriodStartBeforeEnd implements ValidatorConstraintInterface {
+  validate(value: string, args: ValidationArguments): boolean {
+    const [relatedPropertyName] = args.constraints;
+    const relatedValue = (args.object as Record<string, unknown>)[relatedPropertyName] as string | undefined;
+    if (!relatedValue || !value) return true;
+    return new Date(value) <= new Date(relatedValue);
+  }
+
+  defaultMessage(args: ValidationArguments): string {
+    return `${args.property} must be on or before periodEnd`;
+  }
+}
 
 export class CreatePayrollDto {
   @ApiProperty({ description: 'Employee ID' })
@@ -8,6 +22,7 @@ export class CreatePayrollDto {
 
   @ApiProperty({ description: 'Period start date (ISO 8601)' })
   @IsDateString()
+  @Validate(PeriodStartBeforeEnd, ['periodEnd'])
   periodStart!: string;
 
   @ApiProperty({ description: 'Period end date (ISO 8601)' })
