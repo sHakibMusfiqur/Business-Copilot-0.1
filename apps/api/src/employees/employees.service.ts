@@ -184,7 +184,7 @@ export class EmployeesService {
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        const collisionRetry = await this.retryCreateWithNextCode(orgId, dto);
+        const collisionRetry = await this.retryCreateWithCollisionHandling(orgId, dto, employeeCode);
         if (collisionRetry) {
           employee = collisionRetry;
         } else {
@@ -308,13 +308,18 @@ export class EmployeesService {
     return `EMP-${String(nextNumber).padStart(4, '0')}`;
   }
 
-  private async retryCreateWithNextCode(
+  private async retryCreateWithCollisionHandling(
     orgId: string,
     dto: CreateEmployeeDto,
+    failedCode: string,
   ): Promise<{ id: string; employeeCode: string; firstName: string; lastName: string; email: string; isActive: boolean; createdAt: Date } | null> {
+    const match = failedCode.match(/EMP-(\d+)/);
+    const startNumber = match ? parseInt(match[1], 10) + 1 : 1;
     const maxRetries = 5;
+
     for (let attempt = 0; attempt < maxRetries; attempt++) {
-      const code = await this.generateUniqueEmployeeCode(orgId);
+      const nextNumber = startNumber + attempt;
+      const code = `EMP-${String(nextNumber).padStart(4, '0')}`;
       try {
         return await this.prisma.employee.create({
           data: {

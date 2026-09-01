@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { NotFoundException, ConflictException, BadRequestException, InternalServerErrorException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 
 import { EmployeesService } from './employees.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -154,6 +155,61 @@ describe('EmployeesService', () => {
         email: 'john@test.com',
         userId: 'invalid-user',
       })).rejects.toThrow(BadRequestException);
+    });
+
+    it('should retry on P2002 employeeCode collision and succeed', async () => {
+      prisma.employee.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ employeeCode: 'EMP-0001' });
+      prisma.department.findFirst.mockResolvedValue({ id: 'dept-1' });
+
+      const p2002Error = new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed',
+        { code: 'P2002', clientVersion: '5.0.0', meta: { target: ['employeeCode'] } },
+      );
+
+      prisma.employee.create
+        .mockRejectedValueOnce(p2002Error)
+        .mockResolvedValueOnce({
+          id: '2',
+          employeeCode: 'EMP-0002',
+          firstName: 'John',
+          lastName: 'Doe',
+          email: 'john@test.com',
+          isActive: true,
+          createdAt: new Date(),
+        });
+
+      const result = await service.create('org-1', 'actor-1', {
+        firstName: 'John',
+        lastName: 'Doe',
+        email: 'john@test.com',
+      });
+
+      expect(result.employeeCode).toBe('EMP-0002');
+      expect(prisma.employee.create).toHaveBeenCalledTimes(2);
+      expect(auditService.record).toHaveBeenCalled();
+    });
+
+    it('should throw InternalServerErrorException after exhausting retries', async () => {
+      prisma.employee.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ employeeCode: 'EMP-0001' });
+      prisma.department.findFirst.mockResolvedValue({ id: 'dept-1' });
+
+      const p2002Error = new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed',
+        { code: 'P2002', clientVersion: '5.0.0', meta: { target: ['employeeCode'] } },
+      );
+
+      prisma.employee.create.mockRejectedValue(p2002Error);
+
+      await expect(service.create('org-1', 'actor-1', {
+        firstName: 'John',
+        lastName: 'Doe',
+        email: 'john@test.com',
+      })).rejects.toThrow(InternalServerErrorException);
     });
   });
 
