@@ -5,14 +5,25 @@ import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 import { DashboardError } from '@/components/dashboard/dashboard-error';
 import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
+import { usePermissions } from '@/hooks/use-permissions';
+import { ACCOUNTING_JOURNAL_READ } from '@/lib/permissions';
 import { formatCurrency } from '@/lib/utils';
 import { getTrialBalance } from '@/lib/api';
 
 export default function TrialBalancePage() {
+  const { hasPermission, isLoaded } = usePermissions();
+  const canRead = isLoaded && hasPermission(ACCOUNTING_JOURNAL_READ);
+
   const query = useQuery({
     queryKey: ['trial-balance'],
     queryFn: () => getTrialBalance(),
+    enabled: canRead,
   });
+
+  if (!canRead) {
+    return <ForbiddenState title="Access restricted" description="You don't have permission to view trial balance. Contact your organization administrator." />;
+  }
 
   if (query.isLoading) return <DashboardSkeleton />;
   if (query.isError) return <DashboardError message={query.error instanceof Error ? query.error.message : undefined} onRetry={() => query.refetch()} />;

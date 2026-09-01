@@ -13,8 +13,9 @@ import { EditSupplierDialog } from '@/components/suppliers/edit-supplier-dialog'
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
 import { StatusToggleDialog } from '@/components/ui/status-toggle-dialog';
 import { RequirePermission } from '@/components/rbac/require-permission';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { usePermissions } from '@/hooks/use-permissions';
-import { SUPPLIERS_CREATE, SUPPLIERS_UPDATE, SUPPLIERS_DELETE } from '@/lib/permissions';
+import { SUPPLIERS_READ, SUPPLIERS_CREATE, SUPPLIERS_UPDATE, SUPPLIERS_DELETE } from '@/lib/permissions';
 import { deleteSupplier as deleteSupplierRequest, getSuppliers, updateSupplierStatus } from '@/lib/api';
 import type { Supplier, SuppliersResponse, SupplierMeta } from '@/components/suppliers/supplier-types';
 
@@ -22,6 +23,7 @@ export default function SuppliersPage() {
   const queryClient = useQueryClient();
   const { hasPermission, isLoaded } = usePermissions();
 
+  const canRead = isLoaded && hasPermission(SUPPLIERS_READ);
   const canUpdate = isLoaded && hasPermission(SUPPLIERS_UPDATE);
   const canDelete = isLoaded && hasPermission(SUPPLIERS_DELETE);
 
@@ -39,6 +41,7 @@ export default function SuppliersPage() {
   const suppliersQuery = useQuery<SuppliersResponse>({
     queryKey: ['suppliers', 'management', { page, limit, search, sortBy, sortOrder }],
     queryFn: () => getSuppliers({ page, limit, search: search || undefined, sortBy, sortOrder }),
+    enabled: canRead,
   });
 
   const invalidate = useCallback(() => {
@@ -61,6 +64,10 @@ export default function SuppliersPage() {
     setSearch(value);
     setPage(1);
   }, []);
+
+  if (!canRead) {
+    return <ForbiddenState title="Access restricted" description="You don't have permission to view suppliers. Contact your organization administrator." />;
+  }
 
   if (suppliersQuery.isLoading) {
     return <DashboardSkeleton />;

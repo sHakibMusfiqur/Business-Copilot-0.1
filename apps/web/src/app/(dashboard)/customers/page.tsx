@@ -13,8 +13,9 @@ import { EditCustomerDialog } from '@/components/customers/edit-customer-dialog'
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
 import { StatusToggleDialog } from '@/components/ui/status-toggle-dialog';
 import { RequirePermission } from '@/components/rbac/require-permission';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { usePermissions } from '@/hooks/use-permissions';
-import { CUSTOMERS_CREATE, CUSTOMERS_UPDATE, CUSTOMERS_DELETE } from '@/lib/permissions';
+import { CUSTOMERS_READ, CUSTOMERS_CREATE, CUSTOMERS_UPDATE, CUSTOMERS_DELETE } from '@/lib/permissions';
 import { deleteCustomer as deleteCustomerRequest, getCustomers, updateCustomerStatus } from '@/lib/api';
 import type { Customer, CustomersResponse, CustomerMeta } from '@/components/customers/customer-types';
 
@@ -22,6 +23,7 @@ export default function CustomersPage() {
   const queryClient = useQueryClient();
   const { hasPermission, isLoaded } = usePermissions();
 
+  const canRead = isLoaded && hasPermission(CUSTOMERS_READ);
   const canUpdate = isLoaded && hasPermission(CUSTOMERS_UPDATE);
   const canDelete = isLoaded && hasPermission(CUSTOMERS_DELETE);
 
@@ -39,6 +41,7 @@ export default function CustomersPage() {
   const customersQuery = useQuery<CustomersResponse>({
     queryKey: ['customers', 'management', { page, limit, search, sortBy, sortOrder }],
     queryFn: () => getCustomers({ page, limit, search: search || undefined, sortBy, sortOrder }),
+    enabled: canRead,
   });
 
   const invalidate = useCallback(() => {
@@ -61,6 +64,10 @@ export default function CustomersPage() {
     setSearch(value);
     setPage(1);
   }, []);
+
+  if (!canRead) {
+    return <ForbiddenState title="Access restricted" description="You don't have permission to view customers. Contact your organization administrator." />;
+  }
 
   if (customersQuery.isLoading) {
     return <DashboardSkeleton />;

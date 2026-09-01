@@ -6,12 +6,17 @@ import { BookOpenCheck } from 'lucide-react';
 
 import { DashboardError } from '@/components/dashboard/dashboard-error';
 import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
+import { usePermissions } from '@/hooks/use-permissions';
+import { ACCOUNTING_JOURNAL_READ } from '@/lib/permissions';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { getGeneralLedger, getAccounts } from '@/lib/api';
 
 export default function LedgerPage() {
+  const { hasPermission, isLoaded } = usePermissions();
+  const canRead = isLoaded && hasPermission(ACCOUNTING_JOURNAL_READ);
   const [accountId, setAccountId] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -19,12 +24,18 @@ export default function LedgerPage() {
   const accountsQuery = useQuery({
     queryKey: ['accounts', 'all'],
     queryFn: () => getAccounts({ limit: 200 }),
+    enabled: canRead,
   });
 
   const ledgerQuery = useQuery({
     queryKey: ['ledger', { accountId, dateFrom, dateTo }],
     queryFn: () => getGeneralLedger({ accountId: accountId || undefined, dateFrom: dateFrom || undefined, dateTo: dateTo || undefined }),
+    enabled: canRead,
   });
+
+  if (!canRead) {
+    return <ForbiddenState title="Access restricted" description="You don't have permission to view ledger. Contact your organization administrator." />;
+  }
 
   if (accountsQuery.isLoading) return <DashboardSkeleton />;
   if (accountsQuery.isError) return <DashboardError message={accountsQuery.error instanceof Error ? accountsQuery.error.message : undefined} onRetry={() => accountsQuery.refetch()} />;

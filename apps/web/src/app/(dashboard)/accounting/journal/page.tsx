@@ -16,8 +16,9 @@ import { CreateJournalDialog } from '@/components/accounting/create-journal-dial
 import { JournalDetailsDialog } from '@/components/accounting/journal-details-dialog';
 import { DeleteJournalDialog } from '@/components/accounting/delete-journal-dialog';
 import { RequirePermission } from '@/components/rbac/require-permission';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { usePermissions } from '@/hooks/use-permissions';
-import { ACCOUNTING_JOURNAL_CREATE, ACCOUNTING_JOURNAL_POST, ACCOUNTING_JOURNAL_DELETE } from '@/lib/permissions';
+import { ACCOUNTING_JOURNAL_READ, ACCOUNTING_JOURNAL_CREATE, ACCOUNTING_JOURNAL_POST, ACCOUNTING_JOURNAL_DELETE } from '@/lib/permissions';
 import { getJournalEntries, postJournalEntry } from '@/lib/api';
 import type { JournalEntry, Meta } from '@/components/accounting/accounting-types';
 import { useToast } from '@/components/ui/use-toast';
@@ -32,6 +33,7 @@ export default function JournalPage() {
   const { toast } = useToast();
   const { hasPermission, isLoaded } = usePermissions();
 
+  const canRead = isLoaded && hasPermission(ACCOUNTING_JOURNAL_READ);
   const canPost = isLoaded && hasPermission(ACCOUNTING_JOURNAL_POST);
   const canDelete = isLoaded && hasPermission(ACCOUNTING_JOURNAL_DELETE);
 
@@ -46,6 +48,7 @@ export default function JournalPage() {
   const query = useQuery({
     queryKey: ['journal-entries', { page, limit: 10, search, sortBy, sortOrder }],
     queryFn: () => getJournalEntries({ page, limit: 10, search: search || undefined, sortBy, sortOrder }),
+    enabled: canRead,
   });
 
   const invalidate = useCallback(() => {
@@ -76,6 +79,10 @@ export default function JournalPage() {
     setSearch(value);
     setPage(1);
   }, []);
+
+  if (!canRead) {
+    return <ForbiddenState title="Access restricted" description="You don't have permission to view journal entries. Contact your organization administrator." />;
+  }
 
   if (query.isLoading) return <DashboardSkeleton />;
   if (query.isError) return <DashboardError message={query.error instanceof Error ? query.error.message : undefined} onRetry={() => query.refetch()} />;

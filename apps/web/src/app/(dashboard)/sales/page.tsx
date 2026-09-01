@@ -15,8 +15,9 @@ import { SaleDetailsDialog } from '@/components/sales/sale-details-dialog';
 import { DeliverSaleDialog } from '@/components/sales/deliver-sale-dialog';
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
 import { RequirePermission } from '@/components/rbac/require-permission';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { usePermissions } from '@/hooks/use-permissions';
-import { SALES_CREATE, SALES_UPDATE, SALES_DELETE, SALES_APPROVE, SALES_DELIVER } from '@/lib/permissions';
+import { SALES_READ, SALES_CREATE, SALES_UPDATE, SALES_DELETE, SALES_APPROVE, SALES_DELIVER } from '@/lib/permissions';
 import { deleteSale as deleteSaleRequest, getSales, confirmSale } from '@/lib/api';
 import type { Sale, SaleMeta, SaleListResponse } from '@/components/sales/sales-types';
 
@@ -25,6 +26,7 @@ export default function SalesPage() {
   const { toast } = useToast();
   const { hasPermission, isLoaded } = usePermissions();
 
+  const canRead = isLoaded && hasPermission(SALES_READ);
   const canUpdate = isLoaded && hasPermission(SALES_UPDATE);
   const canDelete = isLoaded && hasPermission(SALES_DELETE);
   const canApprove = isLoaded && hasPermission(SALES_APPROVE);
@@ -45,6 +47,7 @@ export default function SalesPage() {
   const salesQuery = useQuery<SaleListResponse>({
     queryKey: ['sales', { page, limit, search, sortBy, sortOrder }],
     queryFn: () => getSales({ page, limit, search: search || undefined, sortBy, sortOrder }),
+    enabled: canRead,
   });
 
   const confirmMutation = useMutation({
@@ -87,6 +90,10 @@ export default function SalesPage() {
   const handleConfirm = useCallback((sale: Sale) => {
     confirmMutation.mutate(sale.id);
   }, [confirmMutation]);
+
+  if (!canRead) {
+    return <ForbiddenState title="Access restricted" description="You don't have permission to view sales. Contact your organization administrator." />;
+  }
 
   if (salesQuery.isLoading) {
     return <DashboardSkeleton />;

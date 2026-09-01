@@ -322,7 +322,6 @@ export class AccountingService {
     await this.validateAccountIds(orgId, dto.lines.map((l) => l.accountId));
 
     const maxRetries = 5;
-    let lastError: unknown;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       const entryNumber = await this.generateJournalEntryNumber(orgId);
@@ -363,7 +362,6 @@ export class AccountingService {
       } catch (err) {
         if ((err as Prisma.PrismaClientKnownRequestError)?.code === 'P2002' && attempt < maxRetries) {
           this.logger.warn(`Entry number collision for ${entryNumber}, retrying (${attempt}/${maxRetries})`);
-          lastError = err;
           continue;
         }
         throw err;
@@ -371,7 +369,7 @@ export class AccountingService {
     }
 
     throw new InternalServerErrorException(
-      'Failed to create journal entry due to entry number collision. Please try again.',
+      `Failed to create journal entry due to entry number collision after ${maxRetries} attempts. Please try again.`,
     );
   }
 

@@ -10,6 +10,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { DashboardError } from '@/components/dashboard/dashboard-error';
 import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
+import { usePermissions } from '@/hooks/use-permissions';
+import { ACCOUNTING_PAYABLES_READ } from '@/lib/permissions';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { DataTable, type Column } from '@/components/accounting/data-table';
 import { PayableDetailsDialog } from '@/components/accounting/payable-details-dialog';
@@ -25,6 +28,8 @@ const statusStyle: Record<string, string> = {
 };
 
 export default function PayablesPage() {
+  const { hasPermission, isLoaded } = usePermissions();
+  const canRead = isLoaded && hasPermission(ACCOUNTING_PAYABLES_READ);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [viewPayable, setViewPayable] = useState<Payable | null>(null);
@@ -37,7 +42,12 @@ export default function PayablesPage() {
   const query = useQuery({
     queryKey: ['payables', { page, limit: 10, search }],
     queryFn: () => getPayables({ page, limit: 10, search: search || undefined }),
+    enabled: canRead,
   });
+
+  if (!canRead) {
+    return <ForbiddenState title="Access restricted" description="You don't have permission to view payables. Contact your organization administrator." />;
+  }
 
   if (query.isLoading) return <DashboardSkeleton />;
   if (query.isError) return <DashboardError message={query.error instanceof Error ? query.error.message : undefined} onRetry={() => query.refetch()} />;

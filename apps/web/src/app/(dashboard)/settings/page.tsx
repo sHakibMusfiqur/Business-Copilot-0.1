@@ -15,6 +15,9 @@ import {
 } from 'lucide-react';
 
 import type { LucideIcon } from 'lucide-react';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
+import { usePermissions } from '@/hooks/use-permissions';
+import { SETTINGS_MANAGE } from '@/lib/permissions';
 
 const SETTINGS_GROUPS: {
   title: string;
@@ -51,6 +54,13 @@ const SETTINGS_GROUPS: {
 ];
 
 export default function SettingsPage() {
+  const { hasPermission, isLoaded } = usePermissions();
+  const canManage = isLoaded && hasPermission(SETTINGS_MANAGE);
+
+  if (!canManage) {
+    return <ForbiddenState title="Access restricted" description="You don't have permission to view settings. Contact your organization administrator." />;
+  }
+
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>

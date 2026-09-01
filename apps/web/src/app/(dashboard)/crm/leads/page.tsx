@@ -16,8 +16,9 @@ import { ChangeStatusDialog } from '@/components/crm/change-status-dialog';
 import { AssignUserDialog } from '@/components/crm/assign-user-dialog';
 import { CreateActivityDialog } from '@/components/crm/create-activity-dialog';
 import { RequirePermission } from '@/components/rbac/require-permission';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { usePermissions } from '@/hooks/use-permissions';
-import { CRM_CREATE, CRM_UPDATE, CRM_DELETE } from '@/lib/permissions';
+import { CRM_READ, CRM_CREATE, CRM_UPDATE, CRM_DELETE } from '@/lib/permissions';
 import { getLeads } from '@/lib/api';
 import type { LeadListItem, LeadListResponse, Meta } from '@/components/crm/crm-types';
 
@@ -25,6 +26,7 @@ export default function CrmLeadsPage() {
   const queryClient = useQueryClient();
   const { hasPermission, isLoaded } = usePermissions();
 
+  const canRead = isLoaded && hasPermission(CRM_READ);
   const canCreate = isLoaded && hasPermission(CRM_CREATE);
   const canUpdate = isLoaded && hasPermission(CRM_UPDATE);
   const canDelete = isLoaded && hasPermission(CRM_DELETE);
@@ -46,6 +48,7 @@ export default function CrmLeadsPage() {
   const leadsQuery = useQuery<LeadListResponse>({
     queryKey: ['crm', 'leads', { page, limit, search, sortBy, sortOrder }],
     queryFn: () => getLeads({ page, limit, search: search || undefined, sortBy, sortOrder }),
+    enabled: canRead,
   });
 
   const invalidate = useCallback(() => {
@@ -69,6 +72,10 @@ export default function CrmLeadsPage() {
     setSearch(value);
     setPage(1);
   }, []);
+
+  if (!canRead) {
+    return <ForbiddenState title="Access restricted" description="You don't have permission to view CRM leads. Contact your organization administrator." />;
+  }
 
   if (leadsQuery.isLoading) {
     return <DashboardSkeleton />;

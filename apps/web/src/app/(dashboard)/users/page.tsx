@@ -14,8 +14,9 @@ import { EffectivePermissionsDrawer } from '@/components/rbac/effective-permissi
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
 import { StatusToggleDialog } from '@/components/ui/status-toggle-dialog';
 import { RequirePermission } from '@/components/rbac/require-permission';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { usePermissions } from '@/hooks/use-permissions';
-import { USERS_CREATE, USERS_UPDATE, USERS_DELETE, ORGANIZATION_MANAGE } from '@/lib/permissions';
+import { USERS_READ, USERS_CREATE, USERS_UPDATE, USERS_DELETE, ORGANIZATION_MANAGE } from '@/lib/permissions';
 import { useToast } from '@/components/ui/use-toast';
 import {
   deleteUser as deleteUserRequest,
@@ -34,6 +35,7 @@ export default function UsersPage() {
   const { toast } = useToast();
   const { hasPermission, isLoaded } = usePermissions();
 
+  const canRead = isLoaded && hasPermission(USERS_READ);
   const canUpdate = isLoaded && hasPermission(USERS_UPDATE);
   const canDelete = isLoaded && hasPermission(USERS_DELETE);
   const canManageOrg = isLoaded && hasPermission(ORGANIZATION_MANAGE);
@@ -53,11 +55,13 @@ export default function UsersPage() {
   const usersQuery = useQuery<UsersResponse>({
     queryKey: ['users', 'management', { page, limit, search, sortBy, sortOrder }],
     queryFn: () => getUsers({ page, limit, search: search || undefined, sortBy, sortOrder }),
+    enabled: canRead,
   });
 
   const invitationsQuery = useQuery<Invitation[]>({
     queryKey: ['invitations'],
     queryFn: () => getInvitations(),
+    enabled: canRead,
   });
 
   const invalidate = useCallback(() => {
@@ -121,6 +125,10 @@ export default function UsersPage() {
     setSearch(value);
     setPage(1);
   }, []);
+
+  if (!canRead) {
+    return <ForbiddenState title="Access restricted" description="You don't have permission to view users. Contact your organization administrator." />;
+  }
 
   if (usersQuery.isLoading) {
     return <DashboardSkeleton />;

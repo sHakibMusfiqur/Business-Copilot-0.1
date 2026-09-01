@@ -11,6 +11,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
+import { usePermissions } from '@/hooks/use-permissions';
+import { USERS_READ } from '@/lib/permissions';
 import { SectionCard } from '@/components/setup/section-card';
 import { SetupPageShell } from '@/components/setup/setup-page-shell';
 import { createInvitation, getInvitations, revokeInvitation, resendInvitation } from '@/lib/api';
@@ -28,12 +31,15 @@ type FormData = z.infer<typeof schema>;
 
 export default function MembersPage() {
   const { toast } = useToast();
+  const { hasPermission, isLoaded } = usePermissions();
+  const canRead = isLoaded && hasPermission(USERS_READ);
   const [sending, setSending] = useState(false);
   const sendingRef = useRef(false);
 
   const invitationsQuery = useQuery({
     queryKey: ['invitations'],
     queryFn: () => getInvitations(),
+    enabled: canRead,
   });
 
   const inviteMutation = useMutation({
@@ -115,6 +121,10 @@ export default function MembersPage() {
   };
 
   const members = invitationsQuery.data ?? [];
+
+  if (!canRead) {
+    return <ForbiddenState title="Access restricted" description="You don't have permission to view organization members. Contact your organization administrator." />;
+  }
 
   return (
     <SetupPageShell

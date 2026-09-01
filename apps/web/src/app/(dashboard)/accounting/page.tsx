@@ -15,6 +15,9 @@ import {
 
 import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 import { DashboardError } from '@/components/dashboard/dashboard-error';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
+import { usePermissions } from '@/hooks/use-permissions';
+import { ACCOUNTING_ACCOUNTS_READ } from '@/lib/permissions';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { getAccountSummary, getJournalEntries, getPayments } from '@/lib/api';
 import type { AccountSummary, JournalEntry, Payment } from '@/components/accounting/accounting-types';
@@ -35,20 +38,30 @@ const quickLinks = [
 ];
 
 export default function AccountingPage() {
+  const { hasPermission, isLoaded } = usePermissions();
+  const canRead = isLoaded && hasPermission(ACCOUNTING_ACCOUNTS_READ);
+
   const summaryQuery = useQuery<AccountSummary>({
     queryKey: ['accounting-summary'],
     queryFn: () => getAccountSummary(),
+    enabled: canRead,
   });
 
   const recentEntriesQuery = useQuery({
     queryKey: ['journal-entries', { page: 1, limit: 5 }],
     queryFn: () => getJournalEntries({ page: 1, limit: 5, sortBy: 'createdAt', sortOrder: 'desc' }),
+    enabled: canRead,
   });
 
   const recentPaymentsQuery = useQuery({
     queryKey: ['payments', { page: 1, limit: 5 }],
     queryFn: () => getPayments({ page: 1, limit: 5 }),
+    enabled: canRead,
   });
+
+  if (!canRead) {
+    return <ForbiddenState title="Access restricted" description="You don't have permission to view accounting. Contact your organization administrator." />;
+  }
 
   if (summaryQuery.isLoading) return <DashboardSkeleton />;
   if (summaryQuery.isError) return <DashboardError message={summaryQuery.error instanceof Error ? summaryQuery.error.message : undefined} onRetry={() => summaryQuery.refetch()} />;

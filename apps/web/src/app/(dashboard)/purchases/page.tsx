@@ -14,8 +14,9 @@ import { PurchaseDetailsDialog } from '@/components/purchase/purchase-details-di
 import { ReceivePurchaseDialog } from '@/components/purchase/receive-purchase-dialog';
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
 import { RequirePermission } from '@/components/rbac/require-permission';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { usePermissions } from '@/hooks/use-permissions';
-import { PURCHASE_CREATE, PURCHASE_UPDATE, PURCHASE_DELETE, PURCHASE_APPROVE, PURCHASE_RECEIVE } from '@/lib/permissions';
+import { PURCHASE_READ, PURCHASE_CREATE, PURCHASE_UPDATE, PURCHASE_DELETE, PURCHASE_APPROVE, PURCHASE_RECEIVE } from '@/lib/permissions';
 import { deletePurchase as deletePurchaseRequest, getPurchases, approvePurchase } from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
 import { useMutation } from '@tanstack/react-query';
@@ -26,6 +27,7 @@ export default function PurchasesPage() {
   const { toast } = useToast();
   const { hasPermission, isLoaded } = usePermissions();
 
+  const canRead = isLoaded && hasPermission(PURCHASE_READ);
   const canUpdate = isLoaded && hasPermission(PURCHASE_UPDATE);
   const canDelete = isLoaded && hasPermission(PURCHASE_DELETE);
   const canApprove = isLoaded && hasPermission(PURCHASE_APPROVE);
@@ -46,6 +48,7 @@ export default function PurchasesPage() {
   const purchasesQuery = useQuery<PurchaseListResponse>({
     queryKey: ['purchases', { page, limit, search, sortBy, sortOrder }],
     queryFn: () => getPurchases({ page, limit, search: search || undefined, sortBy, sortOrder }),
+    enabled: canRead,
   });
 
   const approveMutation = useMutation({
@@ -88,6 +91,10 @@ export default function PurchasesPage() {
   const handleApprove = useCallback((purchase: Purchase) => {
     approveMutation.mutate(purchase.id);
   }, [approveMutation]);
+
+  if (!canRead) {
+    return <ForbiddenState title="Access restricted" description="You don't have permission to view purchases. Contact your organization administrator." />;
+  }
 
   if (purchasesQuery.isLoading) {
     return <DashboardSkeleton />;

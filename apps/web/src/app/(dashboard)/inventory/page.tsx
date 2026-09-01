@@ -11,14 +11,16 @@ import { InventoryTable } from '@/components/inventory/inventory-table';
 import { StockAdjustmentDialog } from '@/components/inventory/stock-adjustment-dialog';
 import { InventoryHistoryDialog } from '@/components/inventory/inventory-history-dialog';
 import { usePermissions } from '@/hooks/use-permissions';
-import { INVENTORY_ADJUST } from '@/lib/permissions';
+import { INVENTORY_READ, INVENTORY_ADJUST } from '@/lib/permissions';
 import { getInventory, getInventorySummary } from '@/lib/api';
 import type { InventoryProduct, InventoryResponse, InventoryMeta, InventorySummary } from '@/components/inventory/inventory-types';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
 
 export default function InventoryPage() {
   const queryClient = useQueryClient();
   const { hasPermission, isLoaded } = usePermissions();
 
+  const canRead = isLoaded && hasPermission(INVENTORY_READ);
   const canAdjust = isLoaded && hasPermission(INVENTORY_ADJUST);
 
   const [search, setSearch] = useState('');
@@ -33,11 +35,13 @@ export default function InventoryPage() {
   const inventoryQuery = useQuery<InventoryResponse>({
     queryKey: ['inventory', 'management', { page, limit, search, sortBy, sortOrder }],
     queryFn: () => getInventory({ page, limit, search: search || undefined, sortBy, sortOrder }),
+    enabled: canRead,
   });
 
   const summaryQuery = useQuery<InventorySummary>({
     queryKey: ['inventory', 'summary'],
     queryFn: () => getInventorySummary(),
+    enabled: canRead,
   });
 
   const invalidate = useCallback(() => {
@@ -62,6 +66,10 @@ export default function InventoryPage() {
     setSearch(value);
     setPage(1);
   }, []);
+
+  if (!canRead) {
+    return <ForbiddenState title="Access restricted" description="You don't have permission to view inventory. Contact your organization administrator." />;
+  }
 
   if (inventoryQuery.isLoading) {
     return <DashboardSkeleton />;

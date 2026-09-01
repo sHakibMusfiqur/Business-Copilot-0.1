@@ -13,8 +13,9 @@ import { EditProductDialog } from '@/components/products/edit-product-dialog';
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
 import { StatusToggleDialog } from '@/components/ui/status-toggle-dialog';
 import { RequirePermission } from '@/components/rbac/require-permission';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { usePermissions } from '@/hooks/use-permissions';
-import { PRODUCTS_CREATE, PRODUCTS_UPDATE, PRODUCTS_DELETE } from '@/lib/permissions';
+import { PRODUCTS_READ, PRODUCTS_CREATE, PRODUCTS_UPDATE, PRODUCTS_DELETE } from '@/lib/permissions';
 import { deleteProduct as deleteProductRequest, getProducts, updateProductStatus } from '@/lib/api';
 import type { Product, ProductsResponse, ProductMeta } from '@/components/products/product-types';
 
@@ -22,6 +23,7 @@ export default function ProductsPage() {
   const queryClient = useQueryClient();
   const { hasPermission, isLoaded } = usePermissions();
 
+  const canRead = isLoaded && hasPermission(PRODUCTS_READ);
   const canUpdate = isLoaded && hasPermission(PRODUCTS_UPDATE);
   const canDelete = isLoaded && hasPermission(PRODUCTS_DELETE);
 
@@ -39,6 +41,7 @@ export default function ProductsPage() {
   const productsQuery = useQuery<ProductsResponse>({
     queryKey: ['products', 'management', { page, limit, search, sortBy, sortOrder }],
     queryFn: () => getProducts({ page, limit, search: search || undefined, sortBy, sortOrder }),
+    enabled: canRead,
   });
 
   const invalidate = useCallback(() => {
@@ -61,6 +64,10 @@ export default function ProductsPage() {
     setSearch(value);
     setPage(1);
   }, []);
+
+  if (!canRead) {
+    return <ForbiddenState title="Access restricted" description="You don't have permission to view products. Contact your organization administrator." />;
+  }
 
   if (productsQuery.isLoading) {
     return <DashboardSkeleton />;

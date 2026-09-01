@@ -7,11 +7,13 @@ import { Plus, DollarSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DashboardError } from '@/components/dashboard/dashboard-error';
 import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
+import { usePermissions } from '@/hooks/use-permissions';
+import { PAYMENTS_READ, PAYMENTS_CREATE } from '@/lib/permissions';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { DataTable, type Column } from '@/components/accounting/data-table';
 import { CreatePaymentDialog } from '@/components/accounting/create-payment-dialog';
 import { RequirePermission } from '@/components/rbac/require-permission';
-import { PAYMENTS_CREATE } from '@/lib/permissions';
 import { getPayments } from '@/lib/api';
 import type { Payment, Meta } from '@/components/accounting/accounting-types';
 
@@ -19,6 +21,8 @@ const noopSearch = () => {};
 
 export default function PaymentsPage() {
   const queryClient = useQueryClient();
+  const { hasPermission, isLoaded } = usePermissions();
+  const canRead = isLoaded && hasPermission(PAYMENTS_READ);
 
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
@@ -26,11 +30,16 @@ export default function PaymentsPage() {
   const query = useQuery({
     queryKey: ['payments', { page, limit: 10 }],
     queryFn: () => getPayments({ page, limit: 10 }),
+    enabled: canRead,
   });
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: ['payments'] });
     queryClient.invalidateQueries({ queryKey: ['accounting-summary'] });
+  }
+
+  if (!canRead) {
+    return <ForbiddenState title="Access restricted" description="You don't have permission to view payments. Contact your organization administrator." />;
   }
 
   if (query.isLoading) return <DashboardSkeleton />;

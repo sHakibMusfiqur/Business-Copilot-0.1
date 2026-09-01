@@ -16,6 +16,9 @@ import {
 
 import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 import { DashboardError } from '@/components/dashboard/dashboard-error';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
+import { usePermissions } from '@/hooks/use-permissions';
+import { CRM_READ } from '@/lib/permissions';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { getCrmSummary } from '@/lib/api';
 import type { LeadSummary, Activity } from '@/components/crm/crm-types';
@@ -30,10 +33,18 @@ const activityTypeIcon: Record<string, typeof Phone> = {
 };
 
 export default function CrmDashboardPage() {
+  const { hasPermission, isLoaded } = usePermissions();
+  const canRead = isLoaded && hasPermission(CRM_READ);
+
   const summaryQuery = useQuery<LeadSummary>({
     queryKey: ['crm', 'summary'],
     queryFn: () => getCrmSummary(),
+    enabled: canRead,
   });
+
+  if (!canRead) {
+    return <ForbiddenState title="Access restricted" description="You don't have permission to view CRM. Contact your organization administrator." />;
+  }
 
   if (summaryQuery.isLoading) {
     return <DashboardSkeleton />;

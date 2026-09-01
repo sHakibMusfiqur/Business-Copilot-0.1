@@ -13,6 +13,9 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from '@/components/ui/use-toast';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
+import { usePermissions } from '@/hooks/use-permissions';
+import { ORGANIZATION_MANAGE } from '@/lib/permissions';
 import { SectionCard } from '@/components/setup/section-card';
 import { SetupPageShell } from '@/components/setup/setup-page-shell';
 import { api, getRoles } from '@/lib/api';
@@ -44,6 +47,8 @@ interface ExistingRole {
 export default function RolesSetupPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const { hasPermission, isLoaded } = usePermissions();
+  const canManage = isLoaded && hasPermission(ORGANIZATION_MANAGE);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -115,6 +120,10 @@ export default function RolesSetupPage() {
       if (mountedRef.current) setSaving(false);
     }
   };
+
+  if (!canManage) {
+    return <ForbiddenState title="Access restricted" description="You don't have permission to view role management. Contact your organization administrator." />;
+  }
 
   return (
     <SetupPageShell

@@ -19,8 +19,9 @@ import { EditAccountDialog } from '@/components/accounting/edit-account-dialog';
 import { AccountDetailsDialog } from '@/components/accounting/account-details-dialog';
 import { DeleteAccountDialog } from '@/components/accounting/delete-account-dialog';
 import { RequirePermission } from '@/components/rbac/require-permission';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { usePermissions } from '@/hooks/use-permissions';
-import { ACCOUNTING_ACCOUNTS_CREATE, ACCOUNTING_ACCOUNTS_UPDATE, ACCOUNTING_ACCOUNTS_DELETE } from '@/lib/permissions';
+import { ACCOUNTING_ACCOUNTS_READ, ACCOUNTING_ACCOUNTS_CREATE, ACCOUNTING_ACCOUNTS_UPDATE, ACCOUNTING_ACCOUNTS_DELETE } from '@/lib/permissions';
 import { getAccounts } from '@/lib/api';
 import type { Account, Meta } from '@/components/accounting/accounting-types';
 
@@ -36,6 +37,7 @@ export default function AccountsPage() {
   const queryClient = useQueryClient();
   const { hasPermission, isLoaded } = usePermissions();
 
+  const canRead = isLoaded && hasPermission(ACCOUNTING_ACCOUNTS_READ);
   const canUpdate = isLoaded && hasPermission(ACCOUNTING_ACCOUNTS_UPDATE);
   const canDelete = isLoaded && hasPermission(ACCOUNTING_ACCOUNTS_DELETE);
 
@@ -51,6 +53,7 @@ export default function AccountsPage() {
   const query = useQuery({
     queryKey: ['accounts', { page, limit: 50, search, sortBy, sortOrder }],
     queryFn: () => getAccounts({ page, limit: 50, search: search || undefined, sortBy, sortOrder }),
+    enabled: canRead,
   });
 
   const invalidate = useCallback(() => {
@@ -70,6 +73,10 @@ export default function AccountsPage() {
     setSearch(value);
     setPage(1);
   }, []);
+
+  if (!canRead) {
+    return <ForbiddenState title="Access restricted" description="You don't have permission to view accounts. Contact your organization administrator." />;
+  }
 
   if (query.isLoading) return <DashboardSkeleton />;
   if (query.isError) return <DashboardError message={query.error instanceof Error ? query.error.message : undefined} onRetry={() => query.refetch()} />;
