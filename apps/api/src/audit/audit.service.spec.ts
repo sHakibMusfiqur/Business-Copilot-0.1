@@ -79,5 +79,30 @@ describe('AuditService', () => {
         total: 1500,
       });
     });
+
+    it('strips case-insensitive sensitive keys', async () => {
+      await service.record({
+        userId: 'u1',
+        action: 'TEST_ACTION',
+        metadata: {
+          Password: 'val1',
+          PASSWORD: 'val2',
+          Token: 'val3',
+          TOKEN: 'val4',
+          ApiKey: 'val5',
+          SECRET: 'val6',
+          safe: 'keep',
+        },
+      });
+
+      const savedMetadata = auditLogCreate.mock.calls[0][0].data.metadata;
+      expect(savedMetadata).toEqual({ safe: 'keep' });
+      expect(savedMetadata).not.toHaveProperty('Password');
+      expect(savedMetadata).not.toHaveProperty('PASSWORD');
+      expect(savedMetadata).not.toHaveProperty('Token');
+      expect(savedMetadata).not.toHaveProperty('TOKEN');
+      expect(savedMetadata).not.toHaveProperty('ApiKey');
+      expect(savedMetadata).not.toHaveProperty('SECRET');
+    });
   });
 });

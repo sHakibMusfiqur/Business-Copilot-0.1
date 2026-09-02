@@ -177,7 +177,6 @@ export class AuthService {
         emailVerified: true,
         organizationId: true,
         lastLoginAt: true,
-        deletedAt: true,
         createdAt: true,
         updatedAt: true,
         organization: { select: { isActive: true, suspendedAt: true, deletedAt: true } },

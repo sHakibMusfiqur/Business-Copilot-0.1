@@ -42,20 +42,15 @@ export class EmployeesService {
         firstName: true,
         lastName: true,
         email: true,
-        phone: true,
         gender: true,
         hireDate: true,
         departmentId: true,
         position: true,
-        salary: true,
         isActive: true,
         createdAt: true,
         userId: true,
         department: {
           select: { id: true, name: true, code: true },
-        },
-        _count: {
-          select: { leaves: true, payrolls: true },
         },
       },
     });
@@ -82,29 +77,6 @@ export class EmployeesService {
         userId: true,
         department: {
           select: { id: true, name: true, code: true },
-        },
-        leaves: {
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-          select: {
-            id: true,
-            startDate: true,
-            endDate: true,
-            type: true,
-            status: true,
-            reason: true,
-            createdAt: true,
-          },
-        },
-        payrolls: {
-          orderBy: { periodEnd: 'desc' },
-          take: 12,
-          select: {
-            id: true,
-            periodStart: true,
-            periodEnd: true,
-            netSalary: true,
-          },
         },
       },
     });

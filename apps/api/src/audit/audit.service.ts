@@ -46,12 +46,12 @@ export class AuditService {
   private sanitizeMetadata(metadata?: Record<string, unknown>): Record<string, unknown> {
     if (!metadata) return {};
     const sensitiveKeys = new Set([
-      'password', 'passwordHash', 'token', 'accessToken', 'refreshToken',
-      'secret', 'apiKey', 'authorization', 'cookie',
+      'password', 'passwordhash', 'token', 'accesstoken', 'refreshtoken',
+      'secret', 'apikey', 'authorization', 'cookie',
     ]);
     const sanitized: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(metadata)) {
-      if (!sensitiveKeys.has(key)) {
+      if (!sensitiveKeys.has(key.toLowerCase())) {
         sanitized[key] = value;
       }
     }

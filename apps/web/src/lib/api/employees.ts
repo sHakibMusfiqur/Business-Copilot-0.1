@@ -12,7 +12,7 @@ export interface Employee {
   hireDate: string;
   departmentId?: string;
   position?: string;
-  salary: number;
+  salary?: number;
   isActive: boolean;
   createdAt: string;
   userId?: string;
@@ -20,10 +20,6 @@ export interface Employee {
     id: string;
     name: string;
     code: string;
-  };
-  _count?: {
-    leaves: number;
-    payrolls: number;
   };
 }
 

@@ -265,7 +265,7 @@ export class UsersService {
       }
 
       const result = await tx.user.update({
-        where: { id: userId },
+        where: { id: userId, organizationId: orgId },
         data: updateData,
         select: {
           id: true,
@@ -323,7 +323,7 @@ export class UsersService {
     await this.prisma.$transaction([
       this.prisma.refreshToken.deleteMany({ where: { userId } }),
       this.prisma.user.update({
-        where: { id: userId },
+        where: { id: userId, organizationId: orgId },
         data: { deletedAt: new Date(), isActive: false },
       }),
     ]);
@@ -354,7 +354,7 @@ export class UsersService {
     }
 
     const updated = await this.prisma.user.update({
-      where: { id: userId },
+      where: { id: userId, organizationId: orgId },
       data: { isActive: dto.isActive },
       select: {
         id: true,

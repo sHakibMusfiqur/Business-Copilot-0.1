@@ -1,14 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { X, Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
-import { updateEmployee, type Employee } from '@/lib/api/employees';
+import { updateEmployee, getEmployee, type Employee, type EmployeeDetail } from '@/lib/api/employees';
 
 interface EditEmployeeDialogProps {
   employee: Employee | null;
@@ -28,17 +28,23 @@ export function EditEmployeeDialog({ employee, open, onClose, onUpdated }: EditE
   const [isActive, setIsActive] = useState(true);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
+  const { data: fullEmployee } = useQuery<EmployeeDetail>({
+    queryKey: ['employee', employee?.id],
+    queryFn: () => getEmployee(employee?.id ?? ''),
+    enabled: open && !!employee?.id,
+  });
+
   useEffect(() => {
-    if (employee) {
-      setFirstName(employee.firstName);
-      setLastName(employee.lastName);
-      setPhone(employee.phone ?? '');
-      setGender(employee.gender ?? '');
-      setPosition(employee.position ?? '');
-      setSalary(employee.salary?.toString() ?? '');
-      setIsActive(employee.isActive);
+    if (fullEmployee) {
+      setFirstName(fullEmployee.firstName);
+      setLastName(fullEmployee.lastName);
+      setPhone(fullEmployee.phone ?? '');
+      setGender(fullEmployee.gender ?? '');
+      setPosition(fullEmployee.position ?? '');
+      setSalary(fullEmployee.salary?.toString() ?? '');
+      setIsActive(fullEmployee.isActive);
     }
-  }, [employee]);
+  }, [fullEmployee]);
 
   const updateMutation = useMutation({
     mutationFn: () => employee ? updateEmployee(employee.id, {
