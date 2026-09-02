@@ -38,7 +38,7 @@ export class AuditController {
     @CurrentUser() user: CurrentUserPayload,
   ) {
     const isPlatformAdmin = user.role === 'SUPER_ADMIN';
-    return this.auditService.findAll(query, user.organizationId, isPlatformAdmin);
+    return this.auditService.findAll(query, user.organizationId, isPlatformAdmin, user.id);
   }
 
   @Get('actions')
@@ -46,7 +46,7 @@ export class AuditController {
   @ApiOkResponse({ description: 'Distinct audit actions' })
   async getActions(@CurrentUser() user: CurrentUserPayload) {
     const isPlatformAdmin = user.role === 'SUPER_ADMIN';
-    return this.auditService.getDistinctActions(user.organizationId, isPlatformAdmin);
+    return this.auditService.getDistinctActions(user.organizationId, isPlatformAdmin, user.id);
   }
 
   @Get('export')
@@ -58,7 +58,7 @@ export class AuditController {
     @Res() response: Response,
   ) {
     const isPlatformAdmin = user.role === 'SUPER_ADMIN';
-    const csv = await this.auditService.exportCsv(query, user.organizationId, isPlatformAdmin);
+    const csv = await this.auditService.exportCsv(query, user.organizationId, isPlatformAdmin, user.id);
 
     response.setHeader('Content-Type', 'text/csv; charset=utf-8');
     response.setHeader(

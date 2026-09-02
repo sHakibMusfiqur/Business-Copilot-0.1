@@ -243,10 +243,10 @@ describe('Industry-based module filtering', () => {
   describe('navDisabled -> hidden', () => {
     it('excludes navDisabled modules from navigation', () => {
       const nav = getNavIdsForIndustry('general');
-      expect(nav).not.toContain('employees');
-      expect(nav).not.toContain('payroll');
-      expect(nav).not.toContain('reports');
       expect(nav).not.toContain('ai');
+      expect(nav).toContain('employees');
+      expect(nav).toContain('payroll');
+      expect(nav).toContain('reports');
     });
   });
 

@@ -19,6 +19,7 @@ export interface AuditRecordParams {
 @Injectable()
 export class AuditService {
   private readonly logger = new Logger(AuditService.name);
+  private loggingCrossTenantAccess = false;
 
   constructor(private readonly prisma: PrismaService) {}
 
@@ -32,7 +33,7 @@ export class AuditService {
           entity: params.entity ?? null,
           entityId: params.entityId ?? null,
           status: params.status ?? 'SUCCESS',
-          metadata: (params.metadata ?? {}) as Prisma.InputJsonValue,
+          metadata: this.sanitizeMetadata(params.metadata) as Prisma.InputJsonValue,
           ipAddress: params.ipAddress ?? null,
           userAgent: params.userAgent ?? null,
         },
@@ -42,15 +43,51 @@ export class AuditService {
     }
   }
 
+  private sanitizeMetadata(metadata?: Record<string, unknown>): Record<string, unknown> {
+    if (!metadata) return {};
+    const sensitiveKeys = new Set([
+      'password', 'passwordHash', 'token', 'accessToken', 'refreshToken',
+      'secret', 'apiKey', 'authorization', 'cookie',
+    ]);
+    const sanitized: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(metadata)) {
+      if (!sensitiveKeys.has(key)) {
+        sanitized[key] = value;
+      }
+    }
+    return sanitized;
+  }
+
+  private async logCrossTenantAccess(userId: string | undefined): Promise<void> {
+    if (this.loggingCrossTenantAccess) return;
+    this.loggingCrossTenantAccess = true;
+    try {
+      await this.record({
+        userId,
+        action: 'PLATFORM_ADMIN_CROSS_TENANT_AUDIT_ACCESS',
+        entity: 'AuditLog',
+        status: 'SUCCESS',
+        metadata: { scope: 'all_organizations' },
+      });
+    } finally {
+      this.loggingCrossTenantAccess = false;
+    }
+  }
+
   async findAll(
     query: AuditQueryDto,
     orgId?: string,
     isPlatformAdmin = false,
+    userId?: string,
   ) {
     const where: Prisma.AuditLogWhereInput = {};
 
     if (!isPlatformAdmin && orgId) {
       where.organizationId = orgId;
+    }
+
+    if (isPlatformAdmin && !orgId) {
+      await this.logCrossTenantAccess(userId);
     }
 
     if (query.action) {
@@ -105,9 +142,13 @@ export class AuditService {
     query: AuditQueryDto,
     orgId?: string,
     isPlatformAdmin = false,
+    userId?: string,
   ): Promise<string> {
     const where: Prisma.AuditLogWhereInput = {};
     if (!isPlatformAdmin && orgId) where.organizationId = orgId;
+    if (isPlatformAdmin && !orgId) {
+      await this.logCrossTenantAccess(userId);
+    }
     if (query.action) where.action = query.action;
     if (query.entity) where.entity = query.entity;
 
@@ -137,9 +178,12 @@ export class AuditService {
     return header + rows.join('\n');
   }
 
-  async getDistinctActions(orgId?: string, isPlatformAdmin = false): Promise<string[]> {
+  async getDistinctActions(orgId?: string, isPlatformAdmin = false, userId?: string): Promise<string[]> {
     const where: Prisma.AuditLogWhereInput = {};
     if (!isPlatformAdmin && orgId) where.organizationId = orgId;
+    if (isPlatformAdmin && !orgId) {
+      await this.logCrossTenantAccess(userId);
+    }
 
     const result = await this.prisma.auditLog.groupBy({
       by: ['action'],

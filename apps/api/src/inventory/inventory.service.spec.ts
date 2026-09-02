@@ -44,7 +44,9 @@ describe('InventoryService (concurrency-safe stock adjustments)', () => {
     service = new InventoryService({
       product: { findFirst: productFindFirst },
       $transaction: transaction,
-    } as unknown as PrismaService);
+    } as unknown as PrismaService, {
+      record: jest.fn().mockResolvedValue(undefined),
+    } as never);
   });
 
   afterEach(() => {

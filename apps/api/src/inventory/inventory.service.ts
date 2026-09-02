@@ -8,6 +8,7 @@ import { TransactionType } from '@prisma/client';
 import type { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 
 import type { QueryInventoryDto } from './dto/query-inventory.dto';
 import type { CreateStockAdjustmentDto } from './dto/create-stock-adjustment.dto';
@@ -18,6 +19,7 @@ export class InventoryService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
   ) {}
 
   async findAll(orgId: string, query: QueryInventoryDto) {
@@ -257,6 +259,23 @@ export class InventoryService {
       this.logger.log(
         `${actionLabel}: ${product.name} (${product.sku}) — qty: ${dto.quantity}, prev: ${previousQuantity}, new: ${newQuantity} by ${userId}`,
       );
+
+      await this.auditService.record({
+        userId,
+        organizationId: orgId,
+        action: `INVENTORY_${dto.type}`,
+        entity: 'Product',
+        entityId: product.id,
+        status: 'SUCCESS',
+        metadata: {
+          productName: product.name,
+          productSku: product.sku,
+          type: dto.type,
+          quantity: dto.quantity,
+          previousQuantity,
+          newQuantity,
+        },
+      });
 
       return {
         productId: product.id,

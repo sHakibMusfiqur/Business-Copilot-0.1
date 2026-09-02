@@ -1,4 +1,4 @@
-import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export enum BillingInterval {
   MONTHLY = 'MONTHLY',
@@ -57,5 +57,6 @@ export class RefundPaymentDto {
   @IsOptional()
   @IsNumber()
   @Min(0.01)
+  @Max(99999999.99)
   amount?: number;
 }

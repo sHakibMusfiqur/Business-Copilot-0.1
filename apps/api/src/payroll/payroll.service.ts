@@ -231,7 +231,7 @@ export class PayrollService {
     const netSalary = basicSalary + allowances - deductions - tax;
 
     const updated = await this.prisma.payroll.update({
-      where: { id: payrollId },
+      where: { id: payrollId, employee: { organizationId: orgId } },
       data: {
         ...(dto.basicSalary !== undefined && { basicSalary: dto.basicSalary }),
         ...(dto.allowances !== undefined && { allowances: dto.allowances }),
@@ -279,7 +279,7 @@ export class PayrollService {
       throw new NotFoundException('Payroll record not found');
     }
 
-    await this.prisma.payroll.delete({ where: { id: payrollId } });
+    await this.prisma.payroll.delete({ where: { id: payrollId, employee: { organizationId: orgId } } });
 
     await this.auditService.record({
       userId: actorId,

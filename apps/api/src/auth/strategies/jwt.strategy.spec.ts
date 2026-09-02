@@ -3,6 +3,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { JwtStrategy } from './jwt.strategy';
 import { ConfigService } from '../../config/config.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { AuthService } from '../auth.service';
 
 type MutablePrisma = {
   user: {
@@ -13,6 +14,7 @@ type MutablePrisma = {
 describe('JwtStrategy (auth boundary)', () => {
   let prisma: MutablePrisma;
   let strategy: JwtStrategy;
+  let authService: { getOnboardingCompleted: jest.Mock };
 
   beforeEach(() => {
     prisma = {
@@ -20,9 +22,13 @@ describe('JwtStrategy (auth boundary)', () => {
         findUnique: jest.fn(),
       },
     };
+    authService = {
+      getOnboardingCompleted: jest.fn().mockResolvedValue(true),
+    };
     strategy = new JwtStrategy(
       prisma as unknown as PrismaService,
       { jwtSecret: 'test-secret' } as unknown as ConfigService,
+      authService as unknown as AuthService,
     );
   });
 

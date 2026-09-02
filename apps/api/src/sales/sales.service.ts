@@ -11,6 +11,7 @@ import { SalesStatus } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { AccountingService } from '../accounting/accounting.service';
+import { AuditService } from '../audit/audit.service';
 
 import type { QuerySaleDto } from './dto/query-sale.dto';
 import type { CreateSaleDto } from './dto/create-sale.dto';
@@ -23,6 +24,7 @@ export class SalesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly accountingService: AccountingService,
+    private readonly auditService: AuditService,
   ) {}
 
   async findAll(orgId: string, query: QuerySaleDto) {
@@ -267,7 +269,7 @@ export class SalesService {
         });
 
         await tx.salesOrder.update({
-          where: { id: saleId },
+          where: { id: saleId, organizationId: orgId },
           data: {
             subtotal,
             discount: totalDiscount,
@@ -283,7 +285,7 @@ export class SalesService {
     }
 
     const updated = await this.prisma.salesOrder.update({
-      where: { id: saleId },
+      where: { id: saleId, organizationId: orgId },
       data: updateData,
       select: {
         id: true,
@@ -299,48 +301,74 @@ export class SalesService {
   }
 
   async submit(orgId: string, userId: string, saleId: string) {
-    const sale = await this.prisma.salesOrder.findFirst({
-      where: { id: saleId, organizationId: orgId, deletedAt: null },
+    const result = await this.prisma.salesOrder.updateMany({
+      where: { id: saleId, organizationId: orgId, status: SalesStatus.DRAFT, deletedAt: null },
+      data: { status: SalesStatus.PENDING },
     });
 
-    if (!sale) {
-      throw new NotFoundException('Sales order not found');
-    }
-
-    if (sale.status !== SalesStatus.DRAFT) {
+    if (result.count === 0) {
+      const exists = await this.prisma.salesOrder.findFirst({
+        where: { id: saleId, organizationId: orgId, deletedAt: null },
+      });
+      if (!exists) throw new NotFoundException('Sales order not found');
       throw new ConflictException('Only DRAFT sales orders can be submitted');
     }
 
-    const updated = await this.prisma.salesOrder.update({
-      where: { id: saleId },
-      data: { status: SalesStatus.PENDING },
+    const updated = await this.prisma.salesOrder.findFirst({
+      where: { id: saleId, organizationId: orgId },
       select: { id: true, orderNumber: true, status: true },
     });
 
+    if (!updated) throw new NotFoundException('Sales order not found');
+
     this.logger.log(`Sales order submitted: ${updated.orderNumber} (${saleId}) by ${userId}`);
+
+    await this.auditService.record({
+      userId,
+      organizationId: orgId,
+      action: 'SALES_ORDER_SUBMITTED',
+      entity: 'SalesOrder',
+      entityId: saleId,
+      status: 'SUCCESS',
+      metadata: { orderNumber: updated.orderNumber },
+    });
+
     return updated;
   }
 
   async confirm(orgId: string, userId: string, saleId: string) {
-    const sale = await this.prisma.salesOrder.findFirst({
-      where: { id: saleId, organizationId: orgId, deletedAt: null },
+    const result = await this.prisma.salesOrder.updateMany({
+      where: { id: saleId, organizationId: orgId, status: SalesStatus.PENDING, deletedAt: null },
+      data: { status: SalesStatus.CONFIRMED },
     });
 
-    if (!sale) {
-      throw new NotFoundException('Sales order not found');
-    }
-
-    if (sale.status !== SalesStatus.PENDING) {
+    if (result.count === 0) {
+      const exists = await this.prisma.salesOrder.findFirst({
+        where: { id: saleId, organizationId: orgId, deletedAt: null },
+      });
+      if (!exists) throw new NotFoundException('Sales order not found');
       throw new ConflictException('Only PENDING sales orders can be confirmed');
     }
 
-    const updated = await this.prisma.salesOrder.update({
-      where: { id: saleId },
-      data: { status: SalesStatus.CONFIRMED },
+    const updated = await this.prisma.salesOrder.findFirst({
+      where: { id: saleId, organizationId: orgId },
       select: { id: true, orderNumber: true, status: true },
     });
 
+    if (!updated) throw new NotFoundException('Sales order not found');
+
     this.logger.log(`Sales order confirmed: ${updated.orderNumber} (${saleId}) by ${userId}`);
+
+    await this.auditService.record({
+      userId,
+      organizationId: orgId,
+      action: 'SALES_ORDER_CONFIRMED',
+      entity: 'SalesOrder',
+      entityId: saleId,
+      status: 'SUCCESS',
+      metadata: { orderNumber: updated.orderNumber },
+    });
+
     return updated;
   }
 
@@ -445,6 +473,17 @@ export class SalesService {
       }
 
       this.logger.log(`Sales order delivered: ${updated.orderNumber} (${saleId}) by ${userId}`);
+
+      await this.auditService.record({
+        userId,
+        organizationId: orgId,
+        action: 'SALES_ORDER_DELIVERED',
+        entity: 'SalesOrder',
+        entityId: saleId,
+        status: 'SUCCESS',
+        metadata: { orderNumber: updated.orderNumber },
+      });
+
       return updated;
     });
   }
@@ -463,7 +502,7 @@ export class SalesService {
     }
 
     await this.prisma.salesOrder.update({
-      where: { id: saleId },
+      where: { id: saleId, organizationId: orgId },
       data: { deletedAt: new Date() },
     });
 

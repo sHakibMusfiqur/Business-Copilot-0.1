@@ -11,6 +11,7 @@ import type { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { AccountingService } from '../accounting/accounting.service';
+import { AuditService } from '../audit/audit.service';
 
 import type { QueryPurchaseDto } from './dto/query-purchase.dto';
 import type { CreatePurchaseDto } from './dto/create-purchase.dto';
@@ -23,6 +24,7 @@ export class PurchaseService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly accountingService: AccountingService,
+    private readonly auditService: AuditService,
   ) {}
 
   async findAll(orgId: string, query: QueryPurchaseDto) {
@@ -267,7 +269,7 @@ export class PurchaseService {
         });
 
         await tx.purchaseOrder.update({
-          where: { id: purchaseId },
+          where: { id: purchaseId, organizationId: orgId },
           data: {
             subtotal,
             discount: totalDiscount,
@@ -283,7 +285,7 @@ export class PurchaseService {
     }
 
     const updated = await this.prisma.purchaseOrder.update({
-      where: { id: purchaseId },
+      where: { id: purchaseId, organizationId: orgId },
       data: updateData,
       select: {
         id: true,
@@ -299,48 +301,74 @@ export class PurchaseService {
   }
 
   async submit(orgId: string, userId: string, purchaseId: string) {
-    const purchase = await this.prisma.purchaseOrder.findFirst({
-      where: { id: purchaseId, organizationId: orgId, deletedAt: null },
+    const result = await this.prisma.purchaseOrder.updateMany({
+      where: { id: purchaseId, organizationId: orgId, status: PurchaseStatus.DRAFT, deletedAt: null },
+      data: { status: PurchaseStatus.PENDING },
     });
 
-    if (!purchase) {
-      throw new NotFoundException('Purchase order not found');
-    }
-
-    if (purchase.status !== PurchaseStatus.DRAFT) {
+    if (result.count === 0) {
+      const exists = await this.prisma.purchaseOrder.findFirst({
+        where: { id: purchaseId, organizationId: orgId, deletedAt: null },
+      });
+      if (!exists) throw new NotFoundException('Purchase order not found');
       throw new ConflictException('Only DRAFT purchase orders can be submitted');
     }
 
-    const updated = await this.prisma.purchaseOrder.update({
-      where: { id: purchaseId },
-      data: { status: PurchaseStatus.PENDING },
+    const updated = await this.prisma.purchaseOrder.findFirst({
+      where: { id: purchaseId, organizationId: orgId },
       select: { id: true, orderNumber: true, status: true },
     });
 
+    if (!updated) throw new NotFoundException('Purchase order not found');
+
     this.logger.log(`Purchase submitted: ${updated.orderNumber} (${purchaseId}) by ${userId}`);
+
+    await this.auditService.record({
+      userId,
+      organizationId: orgId,
+      action: 'PURCHASE_ORDER_SUBMITTED',
+      entity: 'PurchaseOrder',
+      entityId: purchaseId,
+      status: 'SUCCESS',
+      metadata: { orderNumber: updated.orderNumber },
+    });
+
     return updated;
   }
 
   async approve(orgId: string, userId: string, purchaseId: string) {
-    const purchase = await this.prisma.purchaseOrder.findFirst({
-      where: { id: purchaseId, organizationId: orgId, deletedAt: null },
+    const result = await this.prisma.purchaseOrder.updateMany({
+      where: { id: purchaseId, organizationId: orgId, status: PurchaseStatus.PENDING, deletedAt: null },
+      data: { status: PurchaseStatus.APPROVED },
     });
 
-    if (!purchase) {
-      throw new NotFoundException('Purchase order not found');
-    }
-
-    if (purchase.status !== PurchaseStatus.PENDING) {
+    if (result.count === 0) {
+      const exists = await this.prisma.purchaseOrder.findFirst({
+        where: { id: purchaseId, organizationId: orgId, deletedAt: null },
+      });
+      if (!exists) throw new NotFoundException('Purchase order not found');
       throw new ConflictException('Only PENDING purchase orders can be approved');
     }
 
-    const updated = await this.prisma.purchaseOrder.update({
-      where: { id: purchaseId },
-      data: { status: PurchaseStatus.APPROVED },
+    const updated = await this.prisma.purchaseOrder.findFirst({
+      where: { id: purchaseId, organizationId: orgId },
       select: { id: true, orderNumber: true, status: true },
     });
 
+    if (!updated) throw new NotFoundException('Purchase order not found');
+
     this.logger.log(`Purchase approved: ${updated.orderNumber} (${purchaseId}) by ${userId}`);
+
+    await this.auditService.record({
+      userId,
+      organizationId: orgId,
+      action: 'PURCHASE_ORDER_APPROVED',
+      entity: 'PurchaseOrder',
+      entityId: purchaseId,
+      status: 'SUCCESS',
+      metadata: { orderNumber: updated.orderNumber },
+    });
+
     return updated;
   }
 
@@ -455,6 +483,17 @@ export class PurchaseService {
       }
 
       this.logger.log(`Purchase received: ${updated.orderNumber} (${purchaseId}) by ${userId}`);
+
+      await this.auditService.record({
+        userId,
+        organizationId: orgId,
+        action: 'PURCHASE_ORDER_RECEIVED',
+        entity: 'PurchaseOrder',
+        entityId: purchaseId,
+        status: 'SUCCESS',
+        metadata: { orderNumber: updated.orderNumber },
+      });
+
       return updated;
     });
   }
@@ -473,7 +512,7 @@ export class PurchaseService {
     }
 
     await this.prisma.purchaseOrder.update({
-      where: { id: purchaseId },
+      where: { id: purchaseId, organizationId: orgId },
       data: { deletedAt: new Date() },
     });
 

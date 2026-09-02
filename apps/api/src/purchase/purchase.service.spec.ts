@@ -70,13 +70,14 @@ describe('PurchaseService receive (atomic status gate + atomic increment)', () =
 
     service = new PurchaseService(
       {
-        purchaseOrder: { findFirst: purchaseFindFirst },
+        purchaseOrder: { findFirst: purchaseFindFirst, updateMany: purchaseUpdateMany },
         $transaction: transaction,
       } as unknown as PrismaService,
       {
         createPayableForPurchase: payable,
         createJournalForPurchaseReceive: journal,
       } as never,
+      { record: jest.fn().mockResolvedValue(undefined) } as never,
     );
   });
 
@@ -263,6 +264,7 @@ describe('PurchaseService pricing (server-authoritative / P3-M2)', () => {
         $transaction: txTransaction,
       } as unknown as PrismaService,
       {} as never,
+      { record: jest.fn().mockResolvedValue(undefined) } as never,
     );
   });
 
@@ -337,17 +339,26 @@ describe('PurchaseService pricing (server-authoritative / P3-M2)', () => {
 describe('PurchaseService submit + approve lifecycle (P3-M3/P3-L1)', () => {
   let service: PurchaseService;
   let orderFindFirst: jest.Mock;
-  let orderUpdate: jest.Mock;
+  let orderUpdateMany: jest.Mock;
+  const state = { status: 'DRAFT' };
 
   beforeEach(() => {
-    orderFindFirst = jest.fn().mockResolvedValue({ id: PURCHASE_ID, organizationId: ORG_ID, status: 'DRAFT' });
-    orderUpdate = jest.fn().mockImplementation(async ({ data }) => ({ id: PURCHASE_ID, orderNumber: 'PO-2026-000001', status: data.status }));
+    state.status = 'DRAFT';
+    orderFindFirst = jest.fn().mockImplementation(async () => ({ id: PURCHASE_ID, organizationId: ORG_ID, status: state.status }));
+    orderUpdateMany = jest.fn().mockImplementation(async ({ where, data }) => {
+      if (where.status === state.status) {
+        state.status = data?.status || state.status;
+        return { count: 1 };
+      }
+      return { count: 0 };
+    });
 
     service = new PurchaseService(
       {
-        purchaseOrder: { findFirst: orderFindFirst, update: orderUpdate },
+        purchaseOrder: { findFirst: orderFindFirst, updateMany: orderUpdateMany },
       } as unknown as PrismaService,
       {} as never,
+      { record: jest.fn().mockResolvedValue(undefined) } as never,
     );
   });
 
@@ -359,56 +370,48 @@ describe('PurchaseService submit + approve lifecycle (P3-M3/P3-L1)', () => {
     orderFindFirst.mockResolvedValue(null);
 
     await expect(service.submit(ORG_ID, USER_ID, PURCHASE_ID)).rejects.toThrow(NotFoundException);
-    expect(orderUpdate).not.toHaveBeenCalled();
   });
 
   it('submit() transitions a DRAFT purchase to PENDING', async () => {
     const result = await service.submit(ORG_ID, USER_ID, PURCHASE_ID);
 
-    expect(orderFindFirst).toHaveBeenCalledWith({
-      where: { id: PURCHASE_ID, organizationId: ORG_ID, deletedAt: null },
-    });
-    expect(orderUpdate).toHaveBeenCalledWith({
-      where: { id: PURCHASE_ID },
+    expect(orderUpdateMany).toHaveBeenCalledWith({
+      where: { id: PURCHASE_ID, organizationId: ORG_ID, status: 'DRAFT', deletedAt: null },
       data: { status: 'PENDING' },
-      select: { id: true, orderNumber: true, status: true },
     });
     expect(result.status).toBe('PENDING');
   });
 
   it('submit() rejects non-DRAFT purchase orders', async () => {
-    orderFindFirst.mockResolvedValue({ id: PURCHASE_ID, organizationId: ORG_ID, status: 'APPROVED' });
+    state.status = 'APPROVED';
 
     await expect(service.submit(ORG_ID, USER_ID, PURCHASE_ID)).rejects.toThrow(ConflictException);
-    expect(orderUpdate).not.toHaveBeenCalled();
   });
 
   it('submit() enforces organization scoping', async () => {
     await service.submit(ORG_ID, USER_ID, PURCHASE_ID);
 
-    expect(orderFindFirst).toHaveBeenCalledWith(
+    expect(orderUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: expect.objectContaining({ organizationId: ORG_ID }) }),
     );
   });
 
   it('approve() now succeeds for a PENDING purchase (previously unreachable)', async () => {
-    orderFindFirst.mockResolvedValue({ id: PURCHASE_ID, organizationId: ORG_ID, status: 'PENDING' });
+    state.status = 'PENDING';
 
     const result = await service.approve(ORG_ID, USER_ID, PURCHASE_ID);
 
-    expect(orderUpdate).toHaveBeenCalledWith({
-      where: { id: PURCHASE_ID },
+    expect(orderUpdateMany).toHaveBeenCalledWith({
+      where: { id: PURCHASE_ID, organizationId: ORG_ID, status: 'PENDING', deletedAt: null },
       data: { status: 'APPROVED' },
-      select: { id: true, orderNumber: true, status: true },
     });
     expect(result.status).toBe('APPROVED');
   });
 
   it('approve() still rejects non-PENDING purchase orders', async () => {
-    orderFindFirst.mockResolvedValue({ id: PURCHASE_ID, organizationId: ORG_ID, status: 'DRAFT' });
+    state.status = 'DRAFT';
 
     await expect(service.approve(ORG_ID, USER_ID, PURCHASE_ID)).rejects.toThrow(ConflictException);
-    expect(orderUpdate).not.toHaveBeenCalled();
   });
 });
 
@@ -464,6 +467,7 @@ describe('PurchaseService pricing validation (V-1)', () => {
         $transaction: txTransaction,
       } as unknown as PrismaService,
       {} as never,
+      { record: jest.fn().mockResolvedValue(undefined) } as never,
     );
   });
 

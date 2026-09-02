@@ -217,7 +217,7 @@ export class ProductsService {
     }
 
     const updated = await this.prisma.product.update({
-      where: { id: productId },
+      where: { id: productId, organizationId: orgId },
       data: updateData,
       select: {
         id: true,
@@ -267,7 +267,7 @@ export class ProductsService {
     }
 
     await this.prisma.product.update({
-      where: { id: productId },
+      where: { id: productId, organizationId: orgId },
       data: { deletedAt: new Date(), isActive: false },
     });
 

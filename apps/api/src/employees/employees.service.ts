@@ -72,7 +72,6 @@ export class EmployeesService {
         email: true,
         phone: true,
         gender: true,
-        dateOfBirth: true,
         hireDate: true,
         departmentId: true,
         position: true,
@@ -104,12 +103,7 @@ export class EmployeesService {
             id: true,
             periodStart: true,
             periodEnd: true,
-            basicSalary: true,
-            allowances: true,
-            deductions: true,
-            tax: true,
             netSalary: true,
-            paymentDate: true,
           },
         },
       },
@@ -243,7 +237,7 @@ export class EmployeesService {
     if (dto.isActive !== undefined) updateData.isActive = dto.isActive;
 
     const updated = await this.prisma.employee.update({
-      where: { id: employeeId },
+      where: { id: employeeId, organizationId: orgId },
       data: updateData,
       select: {
         id: true,
@@ -279,7 +273,7 @@ export class EmployeesService {
       throw new NotFoundException('Employee not found');
     }
 
-    await this.prisma.employee.delete({ where: { id: employeeId } });
+    await this.prisma.employee.delete({ where: { id: employeeId, organizationId: orgId } });
 
     await this.auditService.record({
       userId: actorId,

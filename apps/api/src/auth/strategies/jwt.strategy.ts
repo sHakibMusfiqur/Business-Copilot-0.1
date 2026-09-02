@@ -5,12 +5,14 @@ import { ExtractJwt, Strategy } from 'passport-jwt';
 import type { CurrentUserPayload } from '../../common/decorators/current-user.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ConfigService } from '../../config/config.service';
+import { AuthService } from '../auth.service';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
     private readonly prisma: PrismaService,
     configService: ConfigService,
+    private readonly authService: AuthService,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -65,12 +67,18 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       }
     }
 
+    const onboardingCompleted = await this.authService.getOnboardingCompleted({
+      id: user.id,
+      email: user.email,
+      organizationId: user.organizationId,
+    });
+
     return {
       id: user.id,
       email: user.email,
       role: user.role,
       organizationId: user.organizationId ?? undefined,
-      onboardingCompleted: payload.onboardingCompleted,
+      onboardingCompleted,
     };
   }
 }

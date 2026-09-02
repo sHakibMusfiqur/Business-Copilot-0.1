@@ -165,7 +165,23 @@ export class AuthService {
   async login(dto: LoginDto, ip: string, userAgent?: string) {
     const user = await this.prisma.user.findUnique({
       where: { email: dto.email },
-      include: { organization: { select: { isActive: true, suspendedAt: true, deletedAt: true } } },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        phone: true,
+        avatar: true,
+        password: true,
+        role: true,
+        isActive: true,
+        emailVerified: true,
+        organizationId: true,
+        lastLoginAt: true,
+        deletedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        organization: { select: { isActive: true, suspendedAt: true, deletedAt: true } },
+      },
     });
 
     if (!user) {
@@ -293,7 +309,7 @@ export class AuthService {
       userAgent,
     });
 
-    const { password: _, ...userWithoutPassword } = user;
+    const { password: _, organization: _org, ...userWithoutPassword } = user;
 
     const onboardingCompleted = await this.getOnboardingCompleted(user);
 
@@ -1035,7 +1051,7 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
-  private async getOnboardingCompleted(user: {
+  async getOnboardingCompleted(user: {
     id: string;
     email?: string | null;
     organizationId?: string | null;
