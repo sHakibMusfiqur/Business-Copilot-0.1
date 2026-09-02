@@ -5,8 +5,9 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY apps/web/package.json ./apps/web/
 COPY packages/types/package.json ./packages/types/
-COPY packages/config/package.json ./packages/config/
-RUN npm ci --workspace=apps/web --include-workspace-root
+COPY packages/core/package.json ./packages/core/
+COPY packages/db/package.json ./packages/db/
+RUN npm ci --workspace=apps/web --include-workspace-root --ignore-scripts
 
 FROM base AS builder
 WORKDIR /app
