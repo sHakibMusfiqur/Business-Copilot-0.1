@@ -121,6 +121,10 @@ export const API_ROUTES = {
     ROOT: '/employees',
     STATS: '/employees/stats',
   },
+  LEAVES: {
+    ROOT: '/leaves',
+    STATS: '/leaves/stats',
+  },
   PAYROLL: {
     ROOT: '/payroll',
     STATS: '/payroll/stats',

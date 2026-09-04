@@ -7,6 +7,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -21,6 +22,7 @@ import { Permissions } from '../common/decorators/permissions.decorator';
 
 import { DepartmentsService } from './departments.service';
 import { CreateDepartmentDto } from './dto/create-department.dto';
+import { UpdateDepartmentDto } from './dto/update-department.dto';
 
 @ApiTags('Departments')
 @Controller('departments')
@@ -59,6 +61,21 @@ export class DepartmentsController {
   ) {
     const orgId = this.requireOrg(user);
     return this.departmentsService.create(orgId, user.id, dto);
+  }
+
+  @Patch(':id')
+  @UseGuards(PermissionGuard)
+  @Permissions(['users.update'])
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Update a department' })
+  @ApiOkResponse({ description: 'Department updated' })
+  async update(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id', ParseCuidPipe) departmentId: string,
+    @Body() dto: UpdateDepartmentDto,
+  ) {
+    const orgId = this.requireOrg(user);
+    return this.departmentsService.update(orgId, user.id, departmentId, dto);
   }
 
   @Delete(':id')

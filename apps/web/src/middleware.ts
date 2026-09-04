@@ -9,8 +9,7 @@ const PUBLIC_ROUTES = ['/', '/login', '/register', '/forgot-password', '/reset-p
 // Organization-aware login via URL path: businesscopilot.com/company/:slug/login
 const PUBLIC_PREFIXES = ['/company/'];
 
-// An authenticated user may still start a fresh registration (consecutive
-// accounts) without being bounced to /dashboard.
+
 const ALLOW_AUTHENTICATED_PUBLIC_ROUTES = ['/register'];
 
 const ONBOARDING_ROUTES = ['/onboarding'];
@@ -26,8 +25,10 @@ const ORG_ROUTE_PREFIXES = [
   '/purchases',
   '/invoices',
   '/accounting',
-  '/payroll',
+  '/departments',
   '/employees',
+  '/leaves',
+  '/payroll',
   '/users',
   '/roles',
   '/audit',
@@ -46,15 +47,10 @@ export function middleware(request: NextRequest) {
   const refreshToken = request.cookies.get('refresh_token')?.value;
   const payload = (token ? decodeJWT(token) : null) as JwtPayload | null;
   const activePayload = payload && !isTokenExpired(payload) ? payload : null;
-  // The API authenticates only via the Authorization: Bearer header, which on a
-  // fresh page load can be restored solely through the refresh_token cookie.
-  // An access_token cookie without a matching refresh_token is a stale/ghost
-  // session the client cannot back up with any API request, so treating it as
-  // logged in routes / -> /onboarding and dead-ends there.
+ 
   const isLoggedIn = activePayload !== null && Boolean(refreshToken);
   const role = isLoggedIn ? activePayload.role : null;
-  // Dashboard access requires onboarding to be fully completed. A placeholder
-  // organization assigned during registration must NOT count as a workspace.
+ 
   const onboardingCompleted = isLoggedIn ? activePayload.onboardingCompleted === true : false;
 
   // ── Public routes ──────────────────────────────────────────────
@@ -87,9 +83,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // ── Platform Console sign-in (public, but only to sign in) ─────
-  // An authenticated platform admin is sent straight into the console;
-  // an authenticated organization user is never allowed near /admin.
+  
   if (pathname === '/admin/login') {
     if (!isLoggedIn) {
       return NextResponse.next();
@@ -100,10 +94,6 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(onboardingCompleted ? '/dashboard' : '/onboarding', request.url));
   }
 
-  // ── Platform admin routes (SUPER_ADMIN only) ───────────────────
-  // Guarded before the generic protected-route block so unauthenticated
-  // visitors are sent to the Platform Console sign-in, never the
-  // organization login.
   if (pathname.startsWith('/admin')) {
     if (!isLoggedIn) {
       const adminLoginUrl = new URL('/admin/login', request.url);

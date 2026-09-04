@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 
 import type { CreateDepartmentDto } from './dto/create-department.dto';
+import type { UpdateDepartmentDto } from './dto/update-department.dto';
 
 @Injectable()
 export class DepartmentsService {
@@ -76,6 +77,57 @@ export class DepartmentsService {
     });
 
     return { ...department, shared: false };
+  }
+
+  async update(orgId: string, actorId: string, departmentId: string, dto: UpdateDepartmentDto) {
+    const department = await this.prisma.department.findFirst({
+      where: { id: departmentId, organizationId: orgId },
+      select: { id: true, name: true, code: true },
+    });
+
+    if (!department) {
+      throw new NotFoundException('Department not found');
+    }
+
+    if (dto.managerId) {
+      const manager = await this.prisma.user.findFirst({
+        where: { id: dto.managerId, organizationId: orgId },
+        select: { id: true },
+      });
+      if (!manager) {
+        throw new BadRequestException('managerId does not belong to this organization');
+      }
+    }
+
+    const updateData: Record<string, unknown> = {};
+    if (dto.name !== undefined) updateData.name = dto.name.trim();
+    if (dto.code !== undefined) updateData.code = dto.code.trim().toUpperCase();
+    if (dto.managerId !== undefined) updateData.managerId = dto.managerId;
+    if (dto.isActive !== undefined) updateData.isActive = dto.isActive;
+
+    const updated = await this.prisma.department.update({
+      where: { id: departmentId },
+      data: updateData,
+      select: {
+        id: true,
+        name: true,
+        code: true,
+        organizationId: true,
+        managerId: true,
+      },
+    });
+
+    await this.auditService.record({
+      userId: actorId,
+      organizationId: orgId,
+      action: 'DEPARTMENT_UPDATED',
+      entity: 'Department',
+      entityId: departmentId,
+      status: 'SUCCESS',
+      metadata: { name: updated.name, changes: Object.keys(dto) },
+    });
+
+    return { ...updated, shared: updated.organizationId === null };
   }
 
   async remove(orgId: string, actorId: string, departmentId: string) {

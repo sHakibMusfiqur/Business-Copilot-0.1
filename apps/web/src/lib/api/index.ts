@@ -23,5 +23,6 @@ export * from './audit';
 export * from './settings';
 export * from './admin';
 export * from './employees';
+export * from './leaves';
 export * from './payroll';
 export * from './reports';

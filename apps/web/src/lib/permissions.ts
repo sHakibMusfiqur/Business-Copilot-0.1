@@ -68,6 +68,8 @@ export const EMPLOYEES_READ = 'employees.read' as const;
 export const EMPLOYEES_CREATE = 'employees.create' as const;
 export const EMPLOYEES_UPDATE = 'employees.update' as const;
 export const EMPLOYEES_DELETE = 'employees.delete' as const;
+export const EMPLOYEES_APPROVE = 'employees.approve' as const;
+export const EMPLOYEES_REJECT = 'employees.reject' as const;
 
 // ── Payroll ──────────────────────────────────────────────────────────────────
 export const PAYROLL_READ = 'payroll.read' as const;

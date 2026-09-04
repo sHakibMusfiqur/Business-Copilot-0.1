@@ -19,6 +19,7 @@ import { DepartmentsModule } from './departments/departments.module';
 import { EmployeesModule } from './employees/employees.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { ImportModule } from './import/import.module';
+import { LeavesModule } from './leaves/leaves.module';
 import { InvitationsModule } from './invitations/invitations.module';
 import { MailModule } from './mail/mail.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
@@ -58,6 +59,7 @@ import { THROTTLE_BUCKETS } from './common/throttle/throttle.config';
     CustomersModule,
     DepartmentsModule,
     EmployeesModule,
+    LeavesModule,
     InvitationsModule,
     MailModule,
     OnboardingModule,
