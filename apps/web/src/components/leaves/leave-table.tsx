@@ -1,6 +1,6 @@
 'use client';
 
-import { CalendarDays, Check, X, Eye } from 'lucide-react';
+import { CalendarDays, Check, X, Eye, Pencil } from 'lucide-react';
 
 import type { Leave } from '@/lib/api/leaves';
 import { getLeaveTypeLabel, getLeaveStatusStyle, getLeaveStatusLabel, getDaysCount } from './leave-types';
@@ -9,12 +9,15 @@ interface LeaveTableProps {
   leaves: Leave[];
   canApprove: boolean;
   canUpdate: boolean;
+  canDelete: boolean;
   onApprove: (leave: Leave) => void;
   onReject: (leave: Leave) => void;
   onView: (leave: Leave) => void;
+  onEdit: (leave: Leave) => void;
+  onDelete: (leave: Leave) => void;
 }
 
-export function LeaveTable({ leaves, canApprove, canUpdate, onApprove, onReject, onView }: LeaveTableProps) {
+export function LeaveTable({ leaves, canApprove, canUpdate, canDelete, onApprove, onReject, onView, onEdit, onDelete }: LeaveTableProps) {
   return (
     <div className="rounded-lg border border-border bg-card">
       <div className="overflow-x-auto">
@@ -27,9 +30,7 @@ export function LeaveTable({ leaves, canApprove, canUpdate, onApprove, onReject,
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">Days</th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">Reason</th>
-              {(canApprove || canUpdate) && (
-                <th className="px-4 py-3 text-right font-medium text-muted-foreground">Actions</th>
-              )}
+              <th className="px-4 py-3 text-right font-medium text-muted-foreground">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -66,37 +67,53 @@ export function LeaveTable({ leaves, canApprove, canUpdate, onApprove, onReject,
                   </span>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground max-w-[200px] truncate">{leave.reason ?? '—'}</td>
-                {(canApprove || canUpdate) && (
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-1">
+                <td className="px-4 py-3 text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    <button
+                      onClick={() => onView(leave)}
+                      className="inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-muted"
+                      title="View details"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </button>
+                    {canUpdate && leave.status === 'PENDING' && (
                       <button
-                        onClick={() => onView(leave)}
+                        onClick={() => onEdit(leave)}
                         className="inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-muted"
-                        title="View details"
+                        title="Edit"
                       >
-                        <Eye className="h-4 w-4" />
+                        <Pencil className="h-4 w-4" />
                       </button>
-                      {canApprove && leave.status === 'PENDING' && (
-                        <>
-                          <button
-                            onClick={() => onApprove(leave)}
-                            className="inline-flex items-center justify-center rounded-md p-1.5 text-emerald-600 hover:bg-emerald-500/10"
-                            title="Approve"
-                          >
-                            <Check className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => onReject(leave)}
-                            className="inline-flex items-center justify-center rounded-md p-1.5 text-red-600 hover:bg-red-500/10"
-                            title="Reject"
-                          >
-                            <X className="h-4 w-4" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                )}
+                    )}
+                    {canApprove && leave.status === 'PENDING' && (
+                      <>
+                        <button
+                          onClick={() => onApprove(leave)}
+                          className="inline-flex items-center justify-center rounded-md p-1.5 text-emerald-600 hover:bg-emerald-500/10"
+                          title="Approve"
+                        >
+                          <Check className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => onReject(leave)}
+                          className="inline-flex items-center justify-center rounded-md p-1.5 text-red-600 hover:bg-red-500/10"
+                          title="Reject"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </>
+                    )}
+                    {canDelete && leave.status !== 'APPROVED' && (
+                      <button
+                        onClick={() => onDelete(leave)}
+                        className="inline-flex items-center justify-center rounded-md p-1.5 text-red-600 hover:bg-red-500/10"
+                        title="Delete"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    )}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>

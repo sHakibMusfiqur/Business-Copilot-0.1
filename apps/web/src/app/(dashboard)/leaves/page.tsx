@@ -15,6 +15,7 @@ import { getLeaves, deleteLeave, approveLeave, rejectLeave, type Leave, type Lea
 import { useToast } from '@/components/ui/use-toast';
 import { LeaveTable } from '@/components/leaves/leave-table';
 import { CreateLeaveDialog } from '@/components/leaves/create-leave-dialog';
+import { EditLeaveDialog } from '@/components/leaves/edit-leave-dialog';
 import { LeaveDetailsDialog } from '@/components/leaves/leave-details-dialog';
 
 export default function LeavesPage() {
@@ -33,6 +34,7 @@ export default function LeavesPage() {
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
+  const [editLeave, setEditLeave] = useState<Leave | null>(null);
   const [viewLeave, setViewLeave] = useState<Leave | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Leave | null>(null);
 
@@ -166,9 +168,12 @@ export default function LeavesPage() {
           leaves={leaves}
           canApprove={canApprove}
           canUpdate={canUpdate}
+          canDelete={canDelete}
           onApprove={(leave) => approveMutation.mutate(leave.id)}
           onReject={(leave) => rejectMutation.mutate(leave.id)}
           onView={setViewLeave}
+          onEdit={setEditLeave}
+          onDelete={setDeleteTarget}
         />
       )}
 
@@ -176,6 +181,13 @@ export default function LeavesPage() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={invalidate}
+      />
+
+      <EditLeaveDialog
+        leave={editLeave}
+        open={editLeave !== null}
+        onClose={() => setEditLeave(null)}
+        onUpdated={invalidate}
       />
 
       <LeaveDetailsDialog

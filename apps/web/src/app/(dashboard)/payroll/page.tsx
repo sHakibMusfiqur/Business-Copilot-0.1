@@ -2,36 +2,51 @@
 
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Wallet, Calendar, DollarSign, TrendingUp } from 'lucide-react';
+import { Plus, Search, Wallet, Calendar, DollarSign, TrendingUp, Eye } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { DashboardError } from '@/components/dashboard/dashboard-error';
 import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
+import { useToast } from '@/components/ui/use-toast';
 import { usePermissions } from '@/hooks/use-permissions';
 import { PAYROLL_READ, PAYROLL_CREATE, PAYROLL_UPDATE, PAYROLL_DELETE } from '@/lib/permissions';
-import { getPayroll, getPayrollStats, deletePayroll, type PayrollRecord, type PayrollStats } from '@/lib/api/payroll';
+import { getPayroll, getPayrollRecord, getPayrollStats, deletePayroll, type PayrollRecord, type PayrollDetail, type PayrollStats } from '@/lib/api/payroll';
+import { getEmployees, type Employee } from '@/lib/api/employees';
 import { formatCurrency } from '@/lib/utils';
 import { CreatePayrollDialog } from '@/components/payroll/create-payroll-dialog';
 import { EditPayrollDialog } from '@/components/payroll/edit-payroll-dialog';
+import { PayrollDetailsDialog } from '@/components/payroll/payroll-details-dialog';
+import { useQuery as useEmpQuery } from '@tanstack/react-query';
 
 export default function PayrollPage() {
   const { hasPermission, isLoaded } = usePermissions();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
   const canRead = isLoaded && hasPermission(PAYROLL_READ);
   const canCreate = isLoaded && hasPermission(PAYROLL_CREATE);
   const canUpdate = isLoaded && hasPermission(PAYROLL_UPDATE);
   const canDelete = isLoaded && hasPermission(PAYROLL_DELETE);
 
+  const [search, setSearch] = useState('');
+  const [employeeFilter, setEmployeeFilter] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [editRecord, setEditRecord] = useState<PayrollRecord | null>(null);
   const [deleteRecordTarget, setDeleteRecordTarget] = useState<PayrollRecord | null>(null);
+  const [viewRecord, setViewRecord] = useState<PayrollDetail | null>(null);
+  const [viewOpen, setViewOpen] = useState(false);
+
+  const employeesQuery = useEmpQuery<Employee[]>({
+    queryKey: ['employees', { isActive: true }],
+    queryFn: () => getEmployees({ isActive: true }),
+    enabled: canRead,
+  });
 
   const payrollQuery = useQuery<PayrollRecord[]>({
-    queryKey: ['payroll'],
-    queryFn: () => getPayroll(),
+    queryKey: ['payroll', { employeeId: employeeFilter || undefined }],
+    queryFn: () => getPayroll({ employeeId: employeeFilter || undefined }),
     enabled: canRead,
   });
 
@@ -46,9 +61,17 @@ export default function PayrollPage() {
     queryClient.invalidateQueries({ queryKey: ['reports'] });
   }
 
-  if (!isLoaded) {
-    return <DashboardSkeleton />;
+  async function handleViewDetail(record: PayrollRecord) {
+    try {
+      const detail = await getPayrollRecord(record.id);
+      setViewRecord(detail);
+      setViewOpen(true);
+    } catch {
+      toast({ title: 'Failed to load details', variant: 'destructive' });
+    }
   }
+
+  if (!isLoaded) return <DashboardSkeleton />;
 
   if (!canRead) {
     return (
@@ -59,7 +82,17 @@ export default function PayrollPage() {
     );
   }
 
-  const payroll = payrollQuery.data ?? [];
+  const payroll = (payrollQuery.data ?? []).filter((record) => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      record.employee.firstName.toLowerCase().includes(q) ||
+      record.employee.lastName.toLowerCase().includes(q) ||
+      record.employee.employeeCode.toLowerCase().includes(q)
+    );
+  });
+
+  const employees = employeesQuery.data ?? [];
   const stats = statsQuery.data;
 
   return (
@@ -109,6 +142,29 @@ export default function PayrollPage() {
         </div>
       )}
 
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search by employee name or code..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-lg border border-border bg-background pl-9 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+          />
+        </div>
+        <select
+          value={employeeFilter}
+          onChange={(e) => setEmployeeFilter(e.target.value)}
+          className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+        >
+          <option value="">All Employees</option>
+          {employees.map((emp) => (
+            <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName}</option>
+          ))}
+        </select>
+      </div>
+
       {payrollQuery.isLoading ? (
         <DashboardSkeleton />
       ) : payrollQuery.error ? (
@@ -118,7 +174,7 @@ export default function PayrollPage() {
           <Wallet className="h-12 w-12 text-muted-foreground/50" />
           <p className="mt-4 text-sm font-medium text-muted-foreground">No payroll records found</p>
           <p className="mt-1 text-xs text-muted-foreground/70">
-            {canCreate ? 'Create your first payroll record to get started.' : 'Payroll records will appear here once created.'}
+            {search || employeeFilter ? 'Try adjusting your filters.' : canCreate ? 'Create your first payroll record to get started.' : 'Payroll records will appear here once created.'}
           </p>
         </div>
       ) : (
@@ -135,9 +191,7 @@ export default function PayrollPage() {
                   <th className="px-4 py-3 text-right font-medium text-muted-foreground">Tax</th>
                   <th className="px-4 py-3 text-right font-medium text-muted-foreground">Net Salary</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Payment Date</th>
-                  {(canUpdate || canDelete) && (
-                    <th className="px-4 py-3 text-right font-medium text-muted-foreground">Actions</th>
-                  )}
+                  <th className="px-4 py-3 text-right font-medium text-muted-foreground">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -171,31 +225,32 @@ export default function PayrollPage() {
                     <td className="px-4 py-3 text-muted-foreground">
                       {record.paymentDate ? new Date(record.paymentDate).toLocaleDateString() : '—'}
                     </td>
-                    {(canUpdate || canDelete) && (
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {canUpdate && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setEditRecord(record)}
-                            >
-                              Edit
-                            </Button>
-                          )}
-                          {canDelete && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-destructive hover:text-destructive"
-                              onClick={() => setDeleteRecordTarget(record)}
-                            >
-                              Delete
-                            </Button>
-                          )}
-                        </div>
-                      </td>
-                    )}
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => handleViewDetail(record)}
+                          className="inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-muted"
+                          title="View details"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </button>
+                        {canUpdate && (
+                          <Button variant="ghost" size="sm" onClick={() => setEditRecord(record)}>
+                            Edit
+                          </Button>
+                        )}
+                        {canDelete && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => setDeleteRecordTarget(record)}
+                          >
+                            Delete
+                          </Button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -215,6 +270,12 @@ export default function PayrollPage() {
         open={editRecord !== null}
         onClose={() => setEditRecord(null)}
         onUpdated={invalidate}
+      />
+
+      <PayrollDetailsDialog
+        record={viewRecord}
+        open={viewOpen}
+        onClose={() => { setViewOpen(false); setViewRecord(null); }}
       />
 
       <ConfirmDeleteDialog
