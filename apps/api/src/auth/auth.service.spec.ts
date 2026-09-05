@@ -614,6 +614,160 @@ describe('AuthService (refresh / logout / reset security)', () => {
     });
   });
 
+  describe('register (email delivery status)', () => {
+    beforeEach(() => {
+      prisma.user.findUnique.mockReset();
+      prisma.user.create.mockReset();
+      prisma.pendingRegistration.findUnique.mockReset();
+      prisma.pendingRegistration.update.mockReset();
+      prisma.pendingRegistration.upsert.mockReset();
+      prisma.pendingRegistration.delete.mockReset();
+      prisma.pendingRegistration.update.mockResolvedValue(undefined);
+      prisma.pendingRegistration.upsert.mockResolvedValue(undefined);
+      prisma.pendingRegistration.delete.mockResolvedValue(undefined);
+      prisma.invitation.findFirst.mockReset();
+      (argon2.hash as jest.Mock).mockReset();
+      prisma.refreshToken.create.mockClear();
+      prisma.user.update.mockClear();
+      mail.sendOrgEmail.mockReset();
+      redis.set.mockReset();
+      redis.delete.mockReset();
+    });
+
+    it('returns emailSent=true when the verification email is delivered', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.pendingRegistration.findUnique.mockResolvedValue(null);
+      prisma.invitation.findFirst.mockResolvedValue(null);
+      (argon2.hash as jest.Mock).mockResolvedValue('hashed-password');
+      mail.sendOrgEmail.mockResolvedValue({ sent: true });
+
+      const result = await service.register(
+        { email: 'new@a.com', name: 'New', password: 'pw' } as never,
+        '1.1.1.1',
+      );
+
+      expect(result.emailSent).toBe(true);
+      expect(result.message).toContain('verification code has been sent');
+    });
+
+    it('returns emailSent=false when SMTP is not configured', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.pendingRegistration.findUnique.mockResolvedValue(null);
+      prisma.invitation.findFirst.mockResolvedValue(null);
+      (argon2.hash as jest.Mock).mockResolvedValue('hashed-password');
+      mail.sendOrgEmail.mockResolvedValue({ sent: false, reason: 'smtp-not-configured' });
+
+      const result = await service.register(
+        { email: 'new@a.com', name: 'New', password: 'pw' } as never,
+        '1.1.1.1',
+      );
+
+      expect(result.emailSent).toBe(false);
+      expect(result.message).toContain('could not be delivered');
+    });
+
+    it('returns emailSent=false when SMTP send fails', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.pendingRegistration.findUnique.mockResolvedValue(null);
+      prisma.invitation.findFirst.mockResolvedValue(null);
+      (argon2.hash as jest.Mock).mockResolvedValue('hashed-password');
+      mail.sendOrgEmail.mockResolvedValue({ sent: false, reason: 'send-failed' });
+
+      const result = await service.register(
+        { email: 'new@a.com', name: 'New', password: 'pw' } as never,
+        '1.1.1.1',
+      );
+
+      expect(result.emailSent).toBe(false);
+      expect(result.message).toContain('could not be delivered');
+    });
+
+    it('still creates PendingRegistration even when email delivery fails', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.pendingRegistration.findUnique.mockResolvedValue(null);
+      prisma.invitation.findFirst.mockResolvedValue(null);
+      (argon2.hash as jest.Mock).mockResolvedValue('hashed-password');
+      mail.sendOrgEmail.mockResolvedValue({ sent: false, reason: 'smtp-not-configured' });
+
+      const result = await service.register(
+        { email: 'new@a.com', name: 'New', password: 'pw' } as never,
+        '1.1.1.1',
+      );
+
+      expect(prisma.pendingRegistration.upsert).toHaveBeenCalled();
+      expect(result).toBeDefined();
+    });
+
+    it('verification code is stored in Redis even when email delivery fails', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+      prisma.pendingRegistration.findUnique.mockResolvedValue(null);
+      prisma.invitation.findFirst.mockResolvedValue(null);
+      (argon2.hash as jest.Mock).mockResolvedValue('hashed-password');
+      mail.sendOrgEmail.mockResolvedValue({ sent: false, reason: 'smtp-not-configured' });
+
+      await service.register(
+        { email: 'new@a.com', name: 'New', password: 'pw' } as never,
+        '1.1.1.1',
+      );
+
+      expect(redis.set).toHaveBeenCalledWith(
+        expect.stringContaining('auth:verify-code'),
+        expect.objectContaining({ hash: expect.any(String), expiresAt: expect.any(Number) }),
+        expect.objectContaining({ ttlSeconds: expect.any(Number) }),
+      );
+    });
+  });
+
+  describe('resendVerificationEmail (email delivery status)', () => {
+    beforeEach(() => {
+      prisma.pendingRegistration.findUnique.mockReset();
+      prisma.pendingRegistration.delete.mockReset();
+      prisma.pendingRegistration.delete.mockResolvedValue(undefined);
+      mail.sendOrgEmail.mockReset();
+    });
+
+    it('returns emailSent=true when the verification email is delivered', async () => {
+      prisma.pendingRegistration.findUnique.mockResolvedValue({
+        id: 'p1',
+        email: 'a@a.com',
+        name: 'A',
+        passwordHash: 'hash',
+        expiresAt: new Date(Date.now() + 120000),
+      });
+      mail.sendOrgEmail.mockResolvedValue({ sent: true });
+
+      const result = await service.resendVerificationEmail('a@a.com', '1.1.1.1');
+
+      expect(result.emailSent).toBe(true);
+      expect(mail.sendOrgEmail).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns emailSent=false when email delivery fails', async () => {
+      prisma.pendingRegistration.findUnique.mockResolvedValue({
+        id: 'p1',
+        email: 'a@a.com',
+        name: 'A',
+        passwordHash: 'hash',
+        expiresAt: new Date(Date.now() + 120000),
+      });
+      mail.sendOrgEmail.mockResolvedValue({ sent: false, reason: 'smtp-not-configured' });
+
+      const result = await service.resendVerificationEmail('a@a.com', '1.1.1.1');
+
+      expect(result.emailSent).toBe(false);
+      expect(result.message).toContain('could not be delivered');
+    });
+
+    it('returns emailSent=false for nonexistent email (no send attempted)', async () => {
+      prisma.pendingRegistration.findUnique.mockResolvedValue(null);
+
+      const result = await service.resendVerificationEmail('nope@a.com', '1.1.1.1');
+
+      expect(result.emailSent).toBe(false);
+      expect(mail.sendOrgEmail).not.toHaveBeenCalled();
+    });
+  });
+
   describe('verifyEmail', () => {
     beforeEach(() => {
       jwtService.verify.mockReset();

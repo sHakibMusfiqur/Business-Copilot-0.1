@@ -146,6 +146,10 @@ export class MailService {
       return { sent: false, reason: 'smtp-not-configured' };
     }
 
+    this.logger.log(
+      `Attempting SMTP send to org=${orgId || '(platform)'} host=${config.host}:${config.port} secure=${config.useSSL}`,
+    );
+
     let transporter: Transporter;
     try {
       transporter = nodemailer.createTransport({
@@ -170,7 +174,13 @@ export class MailService {
       this.logger.log(`Email sent to ${options.to} (messageId=${info.messageId})`);
       return { sent: true };
     } catch (error) {
-      this.logger.error(`Failed to send email to ${options.to} for org ${orgId}: ${(error as Error).message}`);
+      const errMsg = (error as Error).message;
+      // Log enough detail to diagnose SMTP issues without exposing credentials.
+      // Common causes: EAUTH (bad credentials), ECONNREFUSED (wrong host/port),
+      // ETIMEDOUT (network/firewall), ENOTFOUND (DNS failure).
+      this.logger.error(
+        `Failed to send email to org=${orgId || '(platform)'} host=${config.host}:${config.port}: ${errMsg}`,
+      );
       return { sent: false, reason: 'send-failed' };
     }
   }

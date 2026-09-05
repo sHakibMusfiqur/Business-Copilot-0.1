@@ -4,7 +4,7 @@ export interface RegistrationDeps {
   name: string;
   email: string;
   password: string;
-  registerUser: (name: string, email: string, password: string) => Promise<{ email: string; message: string }>;
+  registerUser: (name: string, email: string, password: string) => Promise<{ email: string; message: string; emailSent: boolean }>;
   createSession: (email: string, name: string) => Promise<{ id: string; onboardingToken?: string }>;
   navigate: (url: string) => void;
   setError: (message: string | null) => void;
@@ -71,11 +71,13 @@ export async function submitRegistration(p: RegistrationDeps): Promise<void> {
 
 async function runRegistration(p: RegistrationDeps): Promise<void> {
   let accountCreated = false;
+  let emailSent = true;
   try {
     p.onStatus?.(STARTING_STATUS_MESSAGE);
 
     try {
-      await p.registerUser(p.name, p.email, p.password);
+      const regResult = await p.registerUser(p.name, p.email, p.password);
+      emailSent = regResult.emailSent;
     } catch (firstError) {
       if (!isConnectionFailure(firstError)) throw firstError;
       p.onStatus?.(CONNECTING_STATUS_MESSAGE);
@@ -91,7 +93,8 @@ async function runRegistration(p: RegistrationDeps): Promise<void> {
       } else {
         await delay(REGISTER_RETRY_DELAY_MS);
       }
-      await p.registerUser(p.name, p.email, p.password);
+      const regResult = await p.registerUser(p.name, p.email, p.password);
+      emailSent = regResult.emailSent;
     }
     accountCreated = true;
 
@@ -100,7 +103,8 @@ async function runRegistration(p: RegistrationDeps): Promise<void> {
     // Registration never issues tokens, so the user stays unauthenticated here.
     try {
       const session = await p.createSession(p.email, p.name);
-      p.navigate(`/onboarding/verify?session=${session.id}`);
+      const emailParam = emailSent ? '' : '&emailSent=false';
+      p.navigate(`/onboarding/verify?session=${session.id}${emailParam}`);
       return;
     } catch {
       // The account is already committed; resume rather than dead-end.

@@ -23,7 +23,7 @@ export async function adminLogin(email: string, password: string) {
 export async function register(name: string, email: string, password: string) {
 const response = await api.post(API_ROUTES.AUTH.REGISTER, { name, email, password });
   resetAuthSession();
-  return response.data as { email: string; message: string };
+  return response.data as { email: string; message: string; emailSent: boolean };
 }
 
 export async function verifyEmail(token: string) {

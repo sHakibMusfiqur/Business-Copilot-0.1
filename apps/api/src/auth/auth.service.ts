@@ -144,13 +144,19 @@ export class AuthService {
 
     // Issue + send a fresh 6-digit code (rotates any previously issued one). A
     // mail delivery failure must not fail registration; the user can resend.
-    await this.sendVerificationCode(dto.email, null);
+    const emailResult = await this.sendVerificationCode(dto.email, null);
 
     await this.auditService.record({
       action: 'REGISTER',
       status: 'SUCCESS',
       entity: 'PendingRegistration',
-      metadata: { email: dto.email, reason: 'Pending registration confirmed; verification code sent' },
+      metadata: {
+        email: dto.email,
+        emailSent: emailResult.sent,
+        reason: emailResult.sent
+          ? 'Pending registration confirmed; verification code sent'
+          : `Pending registration confirmed; email delivery failed (${emailResult.reason})`,
+      },
       ipAddress: ip,
       userAgent,
     });
@@ -158,7 +164,10 @@ export class AuthService {
     // No access/refresh tokens here: no account exists until verification.
     return {
       email: dto.email,
-      message: 'If this email is new, a verification code has been sent. Check your inbox.',
+      message: emailResult.sent
+        ? 'If this email is new, a verification code has been sent. Check your inbox.'
+        : 'Registration successful but the verification email could not be delivered. Please try resending.',
+      emailSent: emailResult.sent,
     };
   }
 
@@ -698,7 +707,7 @@ export class AuthService {
     return { message: 'Email verified successfully. You can now sign in.' };
   }
 
-  async resendVerificationEmail(email: string, ip: string, userAgent?: string): Promise<{ message: string }> {
+  async resendVerificationEmail(email: string, ip: string, userAgent?: string): Promise<{ message: string; emailSent: boolean }> {
     // The pending registration — not a real User — is the claim being verified.
     // Never reveal whether (or in what state) a registration exists.
     const pending = await this.prisma.pendingRegistration.findUnique({
@@ -715,7 +724,7 @@ export class AuthService {
         ipAddress: ip,
         userAgent,
       });
-      return { message: 'If the email exists, a verification code has been sent' };
+      return { message: 'If the email exists, a verification code has been sent', emailSent: false };
     };
 
     if (!pending) return notFound('No pending registration');
@@ -727,18 +736,23 @@ export class AuthService {
       return notFound('Pending registration expired');
     }
 
-    await this.sendVerificationCode(email, null);
+    const emailResult = await this.sendVerificationCode(email, null);
 
     await this.auditService.record({
       action: 'RESEND_VERIFICATION',
       status: 'SUCCESS',
       entity: 'PendingRegistration',
-      metadata: { email },
+      metadata: { email, emailSent: emailResult.sent },
       ipAddress: ip,
       userAgent,
     });
 
-    return { message: 'If the email exists, a verification code has been sent' };
+    return {
+      message: emailResult.sent
+        ? 'If the email exists, a verification code has been sent'
+        : 'A verification code was generated but the email could not be delivered. Please try again.',
+      emailSent: emailResult.sent,
+    };
   }
 
   async verifyEmailByCode(
@@ -939,8 +953,9 @@ export class AuthService {
   private async sendVerificationCode(
     email: string,
     orgId: string | null,
-  ): Promise<void> {
-    this.logger.log(`Verification code requested for ${email}`);
+  ): Promise<{ sent: boolean; reason?: string }> {
+    const domain = email.split('@')[1] ?? 'unknown';
+    this.logger.log(`Verification code requested for domain=${domain}`);
     try {
       const code = this.generateVerifyCode();
       const codeHash = await argon2.hash(code);
@@ -951,16 +966,22 @@ export class AuthService {
         { hash: codeHash, expiresAt: Date.now() + VERIFY_CODE_TTL * 1000 },
         { ttlSeconds: VERIFY_CODE_TTL },
       );
+      this.logger.log(`Verification code persisted in Redis for domain=${domain}, ttl=${VERIFY_CODE_TTL}s`);
       const result = await this.mailService.sendOrgEmail(orgId, {
         to: email,
         type: 'emailVerification',
         data: { emailVerification: { code, expiresInHours: VERIFY_CODE_TTL / 3600 } },
       });
-      if (!result.sent) {
-        this.logger.warn(`Verification email not delivered for ${email} (${result.reason})`);
+      if (result.sent) {
+        this.logger.log(`Verification email sent successfully to domain=${domain}`);
+      } else {
+        this.logger.warn(`Verification email not delivered to domain=${domain} (reason=${result.reason})`);
       }
+      return { sent: result.sent, reason: result.reason };
     } catch (error) {
-      this.logger.error(`Failed to send verification code for ${email}: ${(error as Error).message}`);
+      const reason = (error as Error).message;
+      this.logger.error(`Verification code flow failed for domain=${domain}: ${reason}`);
+      return { sent: false, reason: 'send-failed' };
     }
   }
 

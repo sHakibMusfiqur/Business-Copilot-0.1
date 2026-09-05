@@ -167,6 +167,7 @@ export default function LeavesPage() {
         <LeaveTable
           leaves={leaves}
           canApprove={canApprove}
+          canReject={canReject}
           canUpdate={canUpdate}
           canDelete={canDelete}
           onApprove={(leave) => approveMutation.mutate(leave.id)}

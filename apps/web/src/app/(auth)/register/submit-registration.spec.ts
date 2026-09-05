@@ -16,7 +16,7 @@ import { ApiError } from '@/lib/api/client';
 function build() {
   const registerUser = vi
     .fn()
-    .mockResolvedValue({ email: 'a@b.com', message: 'Account created' });
+    .mockResolvedValue({ email: 'a@b.com', message: 'Account created', emailSent: true });
   const createSession = vi.fn().mockResolvedValue({ id: 's-1' });
   const navigate = vi.fn();
   const setError = vi.fn();
@@ -57,13 +57,33 @@ describe('submitRegistration', () => {
     expect(setError).not.toHaveBeenCalled();
   });
 
+  it('appends emailSent=false to the verify URL when the verification email could not be delivered', async () => {
+    const { p, registerUser, navigate, setError } = build();
+    registerUser.mockResolvedValue({ email: 'a@b.com', message: 'Registered', emailSent: false });
+
+    await submitRegistration(p);
+
+    expect(navigate).toHaveBeenCalledWith('/onboarding/verify?session=s-1&emailSent=false');
+    expect(setError).not.toHaveBeenCalled();
+  });
+
+  it('does not append emailSent param when email was sent successfully', async () => {
+    const { p, registerUser, navigate } = build();
+    registerUser.mockResolvedValue({ email: 'a@b.com', message: 'Registered', emailSent: true });
+
+    await submitRegistration(p);
+
+    expect(navigate).toHaveBeenCalledWith('/onboarding/verify?session=s-1');
+    expect(navigate.mock.calls[0][0]).not.toContain('emailSent');
+  });
+
   it('recovers from a brief connection failure by waiting for the API, then completes the flow exactly once', async () => {
     vi.useFakeTimers();
     try {
       const { p, registerUser, createSession, navigate, setError, pingHealth, onStatus } = build();
       registerUser
         .mockRejectedValueOnce(new ApiError('Network Error', 0, 'ERR_NETWORK'))
-        .mockResolvedValueOnce({ email: 'a@b.com', message: 'Account created' });
+        .mockResolvedValueOnce({ email: 'a@b.com', message: 'Account created', emailSent: true });
       pingHealth
         .mockRejectedValueOnce(new ApiError('Network Error', 0, 'ERR_NETWORK'))
         .mockResolvedValueOnce(undefined);
@@ -91,7 +111,7 @@ describe('submitRegistration', () => {
       delete p.pingHealth;
       registerUser
         .mockRejectedValueOnce(new ApiError('Network Error', 0, 'ERR_NETWORK'))
-        .mockResolvedValueOnce({ email: 'a@b.com', message: 'Account created' });
+        .mockResolvedValueOnce({ email: 'a@b.com', message: 'Account created', emailSent: true });
 
       const promise = submitRegistration(p);
       await vi.advanceTimersByTimeAsync(REGISTER_RETRY_DELAY_MS);
@@ -173,7 +193,7 @@ describe('submitRegistration', () => {
 
   it('creates the onboarding session exactly once and only after the account is committed', async () => {
     const { p, registerUser, createSession, navigate, setError } = build();
-    let resolveRegister!: (value: { email: string; message: string }) => void;
+    let resolveRegister!: (value: { email: string; message: string; emailSent: boolean }) => void;
     registerUser.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
@@ -187,7 +207,7 @@ describe('submitRegistration', () => {
     expect(createSession).not.toHaveBeenCalled();
     expect(navigate).not.toHaveBeenCalled();
 
-    resolveRegister({ email: 'a@b.com', message: 'Account created' });
+    resolveRegister({ email: 'a@b.com', message: 'Account created', emailSent: true });
     await promise;
 
     expect(createSession).toHaveBeenCalledTimes(1);
@@ -202,7 +222,7 @@ describe('submitRegistration', () => {
       const { p, registerUser, createSession, navigate, setError, pingHealth } = build();
       registerUser
         .mockRejectedValueOnce(new ApiError('Network Error', 0, 'ERR_NETWORK'))
-        .mockResolvedValueOnce({ email: 'a@b.com', message: 'Account created' });
+        .mockResolvedValueOnce({ email: 'a@b.com', message: 'Account created', emailSent: true });
       pingHealth
         .mockRejectedValueOnce(new ApiError('Network Error', 0, 'ERR_NETWORK'))
         .mockResolvedValueOnce(undefined);

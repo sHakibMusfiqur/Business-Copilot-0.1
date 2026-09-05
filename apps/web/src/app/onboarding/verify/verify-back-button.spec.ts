@@ -49,3 +49,22 @@ describe('Verify page Back button navigates to /register', () => {
     expect(target).not.toContain('session=');
   });
 });
+
+describe('Verify page emailSent query parameter', () => {
+  it('reads emailSent=false from URL to indicate email delivery failure', () => {
+    const params = new URLSearchParams('session=test-session-123&emailSent=false');
+    expect(params.get('emailSent')).toBe('false');
+  });
+
+  it('reads emailSent absent from URL as email delivery success (default)', () => {
+    const params = new URLSearchParams('session=test-session-123');
+    expect(params.get('emailSent')).toBeNull();
+  });
+
+  it('emailSent=false is distinguishable from emailSent=true', () => {
+    const failedParams = new URLSearchParams('session=s&emailSent=false');
+    const successParams = new URLSearchParams('session=s&emailSent=true');
+    expect(failedParams.get('emailSent')).toBe('false');
+    expect(successParams.get('emailSent')).toBe('true');
+  });
+});

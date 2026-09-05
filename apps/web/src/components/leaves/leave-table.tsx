@@ -8,6 +8,7 @@ import { getLeaveTypeLabel, getLeaveStatusStyle, getLeaveStatusLabel, getDaysCou
 interface LeaveTableProps {
   leaves: Leave[];
   canApprove: boolean;
+  canReject: boolean;
   canUpdate: boolean;
   canDelete: boolean;
   onApprove: (leave: Leave) => void;
@@ -17,7 +18,7 @@ interface LeaveTableProps {
   onDelete: (leave: Leave) => void;
 }
 
-export function LeaveTable({ leaves, canApprove, canUpdate, canDelete, onApprove, onReject, onView, onEdit, onDelete }: LeaveTableProps) {
+export function LeaveTable({ leaves, canApprove, canReject, canUpdate, canDelete, onApprove, onReject, onView, onEdit, onDelete }: LeaveTableProps) {
   return (
     <div className="rounded-lg border border-border bg-card">
       <div className="overflow-x-auto">
@@ -86,22 +87,22 @@ export function LeaveTable({ leaves, canApprove, canUpdate, canDelete, onApprove
                       </button>
                     )}
                     {canApprove && leave.status === 'PENDING' && (
-                      <>
-                        <button
-                          onClick={() => onApprove(leave)}
-                          className="inline-flex items-center justify-center rounded-md p-1.5 text-emerald-600 hover:bg-emerald-500/10"
-                          title="Approve"
-                        >
-                          <Check className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => onReject(leave)}
-                          className="inline-flex items-center justify-center rounded-md p-1.5 text-red-600 hover:bg-red-500/10"
-                          title="Reject"
-                        >
-                          <X className="h-4 w-4" />
-                        </button>
-                      </>
+                      <button
+                        onClick={() => onApprove(leave)}
+                        className="inline-flex items-center justify-center rounded-md p-1.5 text-emerald-600 hover:bg-emerald-500/10"
+                        title="Approve"
+                      >
+                        <Check className="h-4 w-4" />
+                      </button>
+                    )}
+                    {canReject && leave.status === 'PENDING' && (
+                      <button
+                        onClick={() => onReject(leave)}
+                        className="inline-flex items-center justify-center rounded-md p-1.5 text-red-600 hover:bg-red-500/10"
+                        title="Reject"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
                     )}
                     {canDelete && leave.status !== 'APPROVED' && (
                       <button

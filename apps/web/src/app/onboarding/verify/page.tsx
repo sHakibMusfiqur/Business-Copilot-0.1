@@ -3,12 +3,14 @@
 import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Mail, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { verifyEmailCode, resendVerification } from '@/lib/api';
 import { useOnboarding } from '../_hooks/onboarding-context';
 
 export default function VerifyPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const emailDeliveryFailed = searchParams.get('emailSent') === 'false';
   const { wizard, session, completeStep } = useOnboarding();
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -103,6 +105,15 @@ export default function VerifyPage() {
 
         {localError && (
           <p role="alert" className="mb-4 rounded-lg bg-red-500/10 px-4 py-2 text-sm text-red-400">{localError}</p>
+        )}
+
+        {emailDeliveryFailed && (
+          <div className="mb-4 rounded-lg bg-amber-500/10 border border-amber-500/20 px-4 py-3">
+            <p className="text-sm text-amber-400 font-medium">Verification email could not be delivered.</p>
+            <p className="mt-1 text-xs text-amber-400/70">
+              Check your spam folder, or click &quot;Resend code&quot; below to try again.
+            </p>
+          </div>
         )}
 
         <div className="flex justify-center gap-3">
