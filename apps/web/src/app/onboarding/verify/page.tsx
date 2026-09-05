@@ -3,10 +3,12 @@
 import { motion } from 'framer-motion';
 import { ArrowLeft, ArrowRight, Mail, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { verifyEmailCode, resendVerification } from '@/lib/api';
 import { useOnboarding } from '../_hooks/onboarding-context';
 
 export default function VerifyPage() {
+  const router = useRouter();
   const { wizard, session, completeStep } = useOnboarding();
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -137,7 +139,7 @@ export default function VerifyPage() {
 
         <div className="mt-8 flex items-center justify-between">
           <button
-            onClick={wizard.goBack}
+            onClick={() => router.push('/register')}
             className="flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-white"
           >
             <ArrowLeft className="h-4 w-4" /> Back
