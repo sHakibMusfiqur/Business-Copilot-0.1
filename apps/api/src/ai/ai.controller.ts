@@ -8,6 +8,7 @@ import {
   Post,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -49,6 +50,7 @@ export class AiController {
 
   @Post('ask')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Permissions(['ai.read'])
   @ApiBody({ type: AskCopilotDto })
   @ApiOkResponse({ description: 'Grounded Copilot answer or explicit unavailable state' })

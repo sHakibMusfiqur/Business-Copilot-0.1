@@ -508,9 +508,11 @@ export class DashboardService {
   }
 
   private async getTrends(orgId: string, canFinance: boolean, canSales: boolean): Promise<DashboardTrends> {
-    const revenue = canFinance ? await this.safeTrend(() => this.revenueTrend(orgId)) : this.zeros();
-    const expenses = canFinance ? await this.safeTrend(() => this.expenseTrend(orgId)) : this.zeros();
-    const sales = canSales ? await this.safeTrend(() => this.salesTrend(orgId)) : this.zeros();
+    const [revenue, expenses, sales] = await Promise.all([
+      canFinance ? this.safeTrend(() => this.revenueTrend(orgId)) : Promise.resolve(this.zeros()),
+      canFinance ? this.safeTrend(() => this.expenseTrend(orgId)) : Promise.resolve(this.zeros()),
+      canSales ? this.safeTrend(() => this.salesTrend(orgId)) : Promise.resolve(this.zeros()),
+    ]);
     const cashFlow = revenue.map((value, index) => Math.round((value - expenses[index]) * 100) / 100);
 
     return {

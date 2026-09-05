@@ -132,7 +132,25 @@ export class CustomersService {
       ...(dto.notes !== undefined && { notes: dto.notes.trim() }),
     };
 
-    const customer = await this.prisma.customer.create({ data });
+    const customer = await this.prisma.customer.create({
+      data,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        company: true,
+        taxId: true,
+        address: true,
+        city: true,
+        state: true,
+        zipCode: true,
+        country: true,
+        notes: true,
+        isActive: true,
+        createdAt: true,
+      },
+    });
 
     this.logger.log(`Customer created: ${customer.name} (${customer.id}) by ${currentUserId}`);
 

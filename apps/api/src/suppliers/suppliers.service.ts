@@ -134,7 +134,26 @@ export class SuppliersService {
       ...(dto.notes !== undefined && { notes: dto.notes.trim() }),
     };
 
-    const supplier = await this.prisma.supplier.create({ data });
+    const supplier = await this.prisma.supplier.create({
+      data,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        company: true,
+        taxId: true,
+        address: true,
+        city: true,
+        state: true,
+        zipCode: true,
+        country: true,
+        paymentTerms: true,
+        notes: true,
+        isActive: true,
+        createdAt: true,
+      },
+    });
 
     this.logger.log(`Supplier created: ${supplier.name} (${supplier.id}) by ${currentUserId}`);
     return supplier;

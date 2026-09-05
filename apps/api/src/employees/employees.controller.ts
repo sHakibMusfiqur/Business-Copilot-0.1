@@ -46,17 +46,23 @@ export class EmployeesController {
   @ApiQuery({ name: 'search', required: false, description: 'Search by name, email, or employee code' })
   @ApiQuery({ name: 'departmentId', required: false, description: 'Filter by department ID' })
   @ApiQuery({ name: 'isActive', required: false, description: 'Filter by active status' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page (max 100)' })
   async findAll(
     @CurrentUser() user: CurrentUserPayload,
     @Query('search') search?: string,
     @Query('departmentId') departmentId?: string,
     @Query('isActive') isActive?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     const orgId = this.requireOrg(user);
     return this.employeesService.findAll(orgId, {
       search,
       departmentId,
       isActive: isActive !== undefined ? isActive === 'true' : undefined,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
     });
   }
 

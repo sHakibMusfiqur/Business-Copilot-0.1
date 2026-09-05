@@ -12,7 +12,11 @@ export class PayrollService {
     private readonly auditService: AuditService,
   ) {}
 
-  async findAll(orgId: string, query?: { employeeId?: string; periodStart?: string; periodEnd?: string }) {
+  async findAll(orgId: string, query?: { employeeId?: string; periodStart?: string; periodEnd?: string; page?: number; limit?: number }) {
+    const page = Math.max(1, query?.page ?? 1);
+    const limit = Math.min(100, Math.max(1, query?.limit ?? 50));
+    const skip = (page - 1) * limit;
+
     const where: Record<string, unknown> = {
       employee: { organizationId: orgId },
     };
@@ -29,36 +33,46 @@ export class PayrollService {
       where.periodEnd = { lte: new Date(query.periodEnd) };
     }
 
-    return this.prisma.payroll.findMany({
-      where,
-      orderBy: { periodEnd: 'desc' },
-      select: {
-        id: true,
-        employeeId: true,
-        periodStart: true,
-        periodEnd: true,
-        basicSalary: true,
-        allowances: true,
-        deductions: true,
-        tax: true,
-        netSalary: true,
-        paymentDate: true,
-        notes: true,
-        createdAt: true,
-        employee: {
-          select: {
-            id: true,
-            employeeCode: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            department: {
-              select: { id: true, name: true, code: true },
+    const [data, total] = await Promise.all([
+      this.prisma.payroll.findMany({
+        where,
+        orderBy: { periodEnd: 'desc' },
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          employeeId: true,
+          periodStart: true,
+          periodEnd: true,
+          basicSalary: true,
+          allowances: true,
+          deductions: true,
+          tax: true,
+          netSalary: true,
+          paymentDate: true,
+          notes: true,
+          createdAt: true,
+          employee: {
+            select: {
+              id: true,
+              employeeCode: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              department: {
+                select: { id: true, name: true, code: true },
+              },
             },
           },
         },
-      },
-    });
+      }),
+      this.prisma.payroll.count({ where }),
+    ]);
+
+    return {
+      data,
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
   }
 
   async findOne(orgId: string, payrollId: string) {
@@ -127,6 +141,7 @@ export class PayrollService {
     const overlapping = await this.prisma.payroll.findFirst({
       where: {
         employeeId: dto.employeeId,
+        employee: { organizationId: orgId },
         periodStart: { lte: periodEnd },
         periodEnd: { gte: periodStart },
       },
@@ -213,6 +228,7 @@ export class PayrollService {
         where: {
           id: { not: payrollId },
           employeeId: payroll.employeeId,
+          employee: { organizationId: orgId },
           periodStart: { lte: periodEnd },
           periodEnd: { gte: periodStart },
         },

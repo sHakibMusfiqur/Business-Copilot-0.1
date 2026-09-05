@@ -19,7 +19,11 @@ export class LeavesService {
     private readonly auditService: AuditService,
   ) {}
 
-  async findAll(orgId: string, query?: { employeeId?: string; status?: string; type?: string }) {
+  async findAll(orgId: string, query?: { employeeId?: string; status?: string; type?: string; page?: number; limit?: number }) {
+    const page = Math.max(1, query?.page ?? 1);
+    const limit = Math.min(100, Math.max(1, query?.limit ?? 50));
+    const skip = (page - 1) * limit;
+
     const where: Record<string, unknown> = {
       employee: { organizationId: orgId },
     };
@@ -36,32 +40,42 @@ export class LeavesService {
       where.type = query.type;
     }
 
-    return this.prisma.leave.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        employeeId: true,
-        startDate: true,
-        endDate: true,
-        type: true,
-        reason: true,
-        status: true,
-        approvedBy: true,
-        createdAt: true,
-        updatedAt: true,
-        employee: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            email: true,
-            employeeCode: true,
-            department: { select: { id: true, name: true } },
+    const [data, total] = await Promise.all([
+      this.prisma.leave.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          employeeId: true,
+          startDate: true,
+          endDate: true,
+          type: true,
+          reason: true,
+          status: true,
+          approvedBy: true,
+          createdAt: true,
+          updatedAt: true,
+          employee: {
+            select: {
+              id: true,
+              firstName: true,
+              lastName: true,
+              email: true,
+              employeeCode: true,
+              department: { select: { id: true, name: true } },
+            },
           },
         },
-      },
-    });
+      }),
+      this.prisma.leave.count({ where }),
+    ]);
+
+    return {
+      data,
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
   }
 
   async findOne(orgId: string, leaveId: string) {
@@ -184,7 +198,7 @@ export class LeavesService {
     }
 
     const updated = await this.prisma.leave.update({
-      where: { id: leaveId },
+      where: { id: leaveId, employee: { organizationId: orgId } },
       data: updateData,
       select: {
         id: true,
@@ -228,7 +242,7 @@ export class LeavesService {
       throw new BadRequestException('Cannot delete an approved leave request');
     }
 
-    await this.prisma.leave.delete({ where: { id: leaveId } });
+    await this.prisma.leave.delete({ where: { id: leaveId, employee: { organizationId: orgId } } });
 
     await this.auditService.record({
       userId: actorId,
@@ -269,7 +283,7 @@ export class LeavesService {
     }
 
     const updated = await this.prisma.leave.update({
-      where: { id: leaveId },
+      where: { id: leaveId, employee: { organizationId: orgId } },
       data: { status: targetStatus as 'APPROVED' | 'REJECTED', approvedBy: actorId },
       select: {
         id: true,

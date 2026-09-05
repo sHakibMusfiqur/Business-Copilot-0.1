@@ -46,14 +46,18 @@ export class LeavesController {
   @ApiQuery({ name: 'employeeId', required: false })
   @ApiQuery({ name: 'status', required: false })
   @ApiQuery({ name: 'type', required: false })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page (max 100)' })
   async findAll(
     @CurrentUser() user: CurrentUserPayload,
     @Query('employeeId') employeeId?: string,
     @Query('status') status?: string,
     @Query('type') type?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     const orgId = this.requireOrg(user);
-    return this.leavesService.findAll(orgId, { employeeId, status, type });
+    return this.leavesService.findAll(orgId, { employeeId, status, type, page: page ? parseInt(page, 10) : undefined, limit: limit ? parseInt(limit, 10) : undefined });
   }
 
   @Get('stats')

@@ -52,21 +52,25 @@ describe('PayrollService', () => {
         { id: '1', employeeId: 'emp-1', periodStart: new Date(), periodEnd: new Date(), netSalary: 5000 },
       ];
       prisma.payroll.findMany.mockResolvedValue(records);
+      prisma.payroll.count.mockResolvedValue(1);
 
       const result = await service.findAll('org-1');
 
-      expect(result).toEqual(records);
+      expect(result.data).toEqual(records);
+      expect(result.meta.total).toBe(1);
       expect(prisma.payroll.findMany).toHaveBeenCalled();
     });
 
     it('should filter by employeeId', async () => {
       prisma.payroll.findMany.mockResolvedValue([]);
+      prisma.payroll.count.mockResolvedValue(0);
       await service.findAll('org-1', { employeeId: 'emp-1' });
       expect(prisma.payroll.findMany).toHaveBeenCalled();
     });
 
     it('should filter by period dates', async () => {
       prisma.payroll.findMany.mockResolvedValue([]);
+      prisma.payroll.count.mockResolvedValue(0);
       await service.findAll('org-1', { periodStart: '2026-01-01', periodEnd: '2026-01-31' });
       expect(prisma.payroll.findMany).toHaveBeenCalled();
     });

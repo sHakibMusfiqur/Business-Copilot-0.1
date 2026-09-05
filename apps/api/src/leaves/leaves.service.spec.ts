@@ -45,10 +45,12 @@ describe('LeavesService', () => {
     it('returns leaves scoped to organization', async () => {
       const leaves = [{ id: leaveId, status: 'PENDING' }];
       prismaMock.leave.findMany.mockResolvedValue(leaves);
+      prismaMock.leave.count.mockResolvedValue(1);
 
       const result = await service.findAll(orgId);
 
-      expect(result).toEqual(leaves);
+      expect(result.data).toEqual(leaves);
+      expect(result.meta.total).toBe(1);
       expect(prismaMock.leave.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
@@ -167,7 +169,7 @@ describe('LeavesService', () => {
       prismaMock.leave.delete.mockResolvedValue({});
 
       await service.remove(orgId, actorId, leaveId);
-      expect(prismaMock.leave.delete).toHaveBeenCalledWith({ where: { id: leaveId } });
+      expect(prismaMock.leave.delete).toHaveBeenCalledWith({ where: { id: leaveId, employee: { organizationId: orgId } } });
     });
 
     it('throws when trying to delete approved leave', async () => {

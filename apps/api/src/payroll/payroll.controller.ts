@@ -46,14 +46,24 @@ export class PayrollController {
   @ApiQuery({ name: 'employeeId', required: false, description: 'Filter by employee ID' })
   @ApiQuery({ name: 'periodStart', required: false, description: 'Filter from period start (ISO 8601)' })
   @ApiQuery({ name: 'periodEnd', required: false, description: 'Filter to period end (ISO 8601)' })
+  @ApiQuery({ name: 'page', required: false, description: 'Page number' })
+  @ApiQuery({ name: 'limit', required: false, description: 'Items per page (max 100)' })
   async findAll(
     @CurrentUser() user: CurrentUserPayload,
     @Query('employeeId') employeeId?: string,
     @Query('periodStart') periodStart?: string,
     @Query('periodEnd') periodEnd?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
     const orgId = this.requireOrg(user);
-    return this.payrollService.findAll(orgId, { employeeId, periodStart, periodEnd });
+    return this.payrollService.findAll(orgId, {
+      employeeId,
+      periodStart,
+      periodEnd,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
   }
 
   @Get('stats')

@@ -13,7 +13,11 @@ export class EmployeesService {
     private readonly auditService: AuditService,
   ) {}
 
-  async findAll(orgId: string, query?: { search?: string; departmentId?: string; isActive?: boolean }) {
+  async findAll(orgId: string, query?: { search?: string; departmentId?: string; isActive?: boolean; page?: number; limit?: number }) {
+    const page = Math.max(1, query?.page ?? 1);
+    const limit = Math.min(100, Math.max(1, query?.limit ?? 50));
+    const skip = (page - 1) * limit;
+
     const where: Record<string, unknown> = { organizationId: orgId };
 
     if (query?.search) {
@@ -33,27 +37,37 @@ export class EmployeesService {
       where.isActive = query.isActive;
     }
 
-    return this.prisma.employee.findMany({
-      where,
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        employeeCode: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        gender: true,
-        hireDate: true,
-        departmentId: true,
-        position: true,
-        isActive: true,
-        createdAt: true,
-        userId: true,
-        department: {
-          select: { id: true, name: true, code: true },
+    const [data, total] = await Promise.all([
+      this.prisma.employee.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          employeeCode: true,
+          firstName: true,
+          lastName: true,
+          email: true,
+          gender: true,
+          hireDate: true,
+          departmentId: true,
+          position: true,
+          isActive: true,
+          createdAt: true,
+          userId: true,
+          department: {
+            select: { id: true, name: true, code: true },
+          },
         },
-      },
-    });
+      }),
+      this.prisma.employee.count({ where }),
+    ]);
+
+    return {
+      data,
+      meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
   }
 
   async findOne(orgId: string, employeeId: string) {

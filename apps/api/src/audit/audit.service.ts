@@ -152,10 +152,21 @@ export class AuditService {
     if (query.action) where.action = query.action;
     if (query.entity) where.entity = query.entity;
 
+    const MAX_EXPORT_ROWS = 100_000;
+
     const logs = await this.prisma.auditLog.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      include: {
+      take: MAX_EXPORT_ROWS,
+      select: {
+        createdAt: true,
+        action: true,
+        entity: true,
+        entityId: true,
+        status: true,
+        ipAddress: true,
+        userAgent: true,
+        organizationId: true,
         user: { select: { name: true, email: true } },
       },
     });

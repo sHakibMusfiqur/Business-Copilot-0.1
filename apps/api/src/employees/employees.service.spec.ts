@@ -55,27 +55,32 @@ describe('EmployeesService', () => {
         { id: '1', employeeCode: 'EMP-0001', firstName: 'John', lastName: 'Doe', email: 'john@test.com' },
       ];
       prisma.employee.findMany.mockResolvedValue(employees);
+      prisma.employee.count.mockResolvedValue(1);
 
       const result = await service.findAll('org-1');
 
-      expect(result).toEqual(employees);
+      expect(result.data).toEqual(employees);
+      expect(result.meta.total).toBe(1);
       expect(prisma.employee.findMany).toHaveBeenCalled();
     });
 
     it('should filter by search term', async () => {
       prisma.employee.findMany.mockResolvedValue([]);
+      prisma.employee.count.mockResolvedValue(0);
       await service.findAll('org-1', { search: 'John' });
       expect(prisma.employee.findMany).toHaveBeenCalled();
     });
 
     it('should filter by department', async () => {
       prisma.employee.findMany.mockResolvedValue([]);
+      prisma.employee.count.mockResolvedValue(0);
       await service.findAll('org-1', { departmentId: 'dept-1' });
       expect(prisma.employee.findMany).toHaveBeenCalled();
     });
 
     it('should filter by active status', async () => {
       prisma.employee.findMany.mockResolvedValue([]);
+      prisma.employee.count.mockResolvedValue(0);
       await service.findAll('org-1', { isActive: true });
       expect(prisma.employee.findMany).toHaveBeenCalled();
     });
