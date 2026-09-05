@@ -42,7 +42,7 @@ export async function verifyEmailCode(email: string, code: string) {
 
 export async function resendVerification(email: string) {
   const response = await api.post(API_ROUTES.AUTH.RESEND_VERIFICATION, { email });
-  return response.data as { message: string };
+  return response.data as { message: string; emailSent: boolean };
 }
 
 export async function logout() {

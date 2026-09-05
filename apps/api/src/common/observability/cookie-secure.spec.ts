@@ -5,6 +5,7 @@ import { OrganizationController } from '../../organization/organization.controll
 import type { AuthService } from '../../auth/auth.service';
 import type { AdminAuthService } from '../../platform-admin/admin-auth.service';
 import type { OrganizationService } from '../../organization/organization.service';
+import type { MailService } from '../../mail/mail.service';
 
 interface MockResponse {
   cookie: jest.Mock;
@@ -50,9 +51,11 @@ describe('cookie secure flag follows ConfigService.isProduction', () => {
     } as never;
 
     function makeController(isProduction: boolean): AuthController {
+      const mailService = { verifyTransporter: jest.fn() } as unknown as MailService;
       return new AuthController(
         authService as unknown as AuthService,
         makeConfig(isProduction) as ConfigService,
+        mailService,
       );
     }
 

@@ -15,6 +15,7 @@ export default function VerifyPage() {
   const [code, setCode] = useState(['', '', '', '', '', '']);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [resendFailed, setResendFailed] = useState(false);
   const [timer, setTimer] = useState(60);
 
   useEffect(() => {
@@ -75,10 +76,14 @@ export default function VerifyPage() {
 
   const handleResend = async () => {
     setLocalError(null);
+    setResendFailed(false);
     setTimer(60);
     setCode(['', '', '', '', '', '']);
     try {
-      await resendVerification(session.email);
+      const result = await resendVerification(session.email);
+      if (!result.emailSent) {
+        setResendFailed(true);
+      }
     } catch (e) {
       setLocalError((e as Error).message ?? 'Could not resend the code');
     }
@@ -107,7 +112,7 @@ export default function VerifyPage() {
           <p role="alert" className="mb-4 rounded-lg bg-red-500/10 px-4 py-2 text-sm text-red-400">{localError}</p>
         )}
 
-        {emailDeliveryFailed && (
+        {(emailDeliveryFailed || resendFailed) && (
           <div className="mb-4 rounded-lg bg-amber-500/10 border border-amber-500/20 px-4 py-3">
             <p className="text-sm text-amber-400 font-medium">Verification email could not be delivered.</p>
             <p className="mt-1 text-xs text-amber-400/70">

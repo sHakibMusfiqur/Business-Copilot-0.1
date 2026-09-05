@@ -41,6 +41,8 @@ services:
     restart: unless-stopped
     ports:
       - "4000:4000"
+    env_file:
+      - ./apps/api/.env
     environment:
       NODE_ENV: development
       DATABASE_URL: "postgresql://postgres:postgres@postgres:5432/business_copilot?schema=public"

@@ -38,6 +38,20 @@ export interface SendMailResult {
   reason?: 'smtp-not-configured' | 'send-failed';
 }
 
+export interface SmtpDiagnostic {
+  host: string;
+  port: number;
+  secure: boolean;
+  usernamePresent: boolean;
+  passwordPresent: boolean;
+  configured: boolean;
+  verifySuccess: boolean;
+  errorCode?: string;
+  responseCode?: number;
+  command?: string;
+  errorMessage?: string;
+}
+
 const EMAIL_NAMESPACE = 'email';
 
 const PLATFORM_BRAND: BrandEmailContext = {
@@ -182,6 +196,64 @@ export class MailService {
         `Failed to send email to org=${orgId || '(platform)'} host=${config.host}:${config.port}: ${errMsg}`,
       );
       return { sent: false, reason: 'send-failed' };
+    }
+  }
+
+  /**
+   * Verifies SMTP transporter connectivity without sending any email.
+   * Returns safe diagnostic info: host, port, secure, credential presence,
+   * success/failure, and sanitized error details. Never logs passwords,
+   * verification codes, JWTs, or tokens.
+   */
+  async verifyTransporter(orgId: string = ''): Promise<SmtpDiagnostic> {
+    const config = await this.getEmailConfig(orgId);
+
+    const base: SmtpDiagnostic = {
+      host: config.host,
+      port: config.port,
+      secure: config.useSSL,
+      usernamePresent: Boolean(config.user),
+      passwordPresent: Boolean(config.pass),
+      configured: config.configured,
+      verifySuccess: false,
+    };
+
+    if (!config.configured) {
+      this.logger.log(`SMTP verify: not configured for org ${orgId || '(platform)'}`);
+      return { ...base, errorMessage: 'SMTP not configured (host or fromEmail missing)' };
+    }
+
+    const transporter = nodemailer.createTransport({
+      host: config.host,
+      port: config.port,
+      secure: config.useSSL,
+      auth: config.user ? { user: config.user, pass: config.pass } : undefined,
+    });
+
+    try {
+      await transporter.verify();
+      this.logger.log(`SMTP verify: success for ${config.host}:${config.port}`);
+      return { ...base, verifySuccess: true };
+    } catch (error) {
+      const err = error as Record<string, unknown>;
+      const code = typeof err.code === 'string' ? err.code : undefined;
+      const responseCode = typeof err.responseCode === 'number' ? err.responseCode : undefined;
+      const command = typeof err.command === 'string' ? err.command : undefined;
+      const message = typeof err.message === 'string' ? err.message : 'unknown error';
+
+      this.logger.error(
+        `SMTP verify: failed for ${config.host}:${config.port} code=${code ?? 'none'} ` +
+          `responseCode=${responseCode ?? 'none'} message=${message}`,
+      );
+
+      return {
+        ...base,
+        verifySuccess: false,
+        errorCode: code,
+        responseCode,
+        command,
+        errorMessage: message,
+      };
     }
   }
 }

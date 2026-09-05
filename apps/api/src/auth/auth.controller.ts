@@ -28,6 +28,7 @@ import type { CurrentUserPayload } from '../common/decorators/current-user.decor
 import { Public } from '../common/decorators/public.decorator';
 import { AuthThrottleGuard } from '../common/guards/auth-throttle.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { MailService } from '../mail/mail.service';
 
 import { AuthService } from './auth.service';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -44,6 +45,7 @@ export class AuthController {
   constructor(
     private readonly authService: AuthService,
     private readonly config: ConfigService,
+    private readonly mailService: MailService,
   ) {}
 
   @Public()
@@ -252,6 +254,13 @@ export class AuthController {
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
   async getMe(@CurrentUser() user: CurrentUserPayload) {
     return this.authService.getProfile(user.id);
+  }
+
+  @Public()
+  @Get('smtp-diagnostic')
+  @ApiOkResponse({ description: 'SMTP transporter diagnostic (safe: no secrets exposed)' })
+  async smtpDiagnostic() {
+    return this.mailService.verifyTransporter('');
   }
 
   private setRefreshTokenCookie(response: Response, refreshToken: string): void {
