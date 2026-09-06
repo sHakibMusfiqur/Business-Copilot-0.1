@@ -2,6 +2,7 @@ import type {
   DashboardOverview,
   DashboardStatistics,
   DashboardTrends,
+  IndustryMetrics,
 } from '@/components/dashboard/types';
 
 export type StatusTone = 'success' | 'warning' | 'danger' | 'neutral' | 'info';
@@ -179,6 +180,40 @@ export const METRIC_LABELS: Record<string, string> = {
   teamSize: 'Team Size',
   teamCost: 'Monthly Payroll',
   users: 'Users',
+  todaySales: "Today's Sales",
+  openOrders: 'Open Orders',
+  activeTables: 'Active Tables',
+  averageTicket: 'Average Ticket',
+  appointmentsToday: "Today's Appointments",
+  admissions: 'Admissions',
+  bedOccupancy: 'Bed Occupancy',
+  emergencyCases: 'Emergency Cases',
+  productionOutput: 'Production Output',
+  machineUtilization: 'Machine Utilization',
+  workOrders: 'Work Orders',
+  costPerUnit: 'Cost per Unit',
+  enrolled: 'Enrolled',
+  attendanceToday: "Today's Attendance",
+  feesCollected: 'Fees Collected',
+  activeProjects: 'Active Projects',
+  sprintProgress: 'Sprint Progress',
+  openPRs: 'Open PRs',
+  monthlyRecurringRevenue: 'MRR',
+  posSalesToday: "Today's POS Sales",
+  transactions: 'Transactions',
+  productsInStock: 'Products in Stock',
+  avgOrderValue: 'Avg Order Value',
+  prescriptionsToday: "Today's Prescriptions",
+  stockValue: 'Stock Value',
+  expiringSoon: 'Expiring Soon',
+  dailyRevenue: 'Daily Revenue',
+  orderBook: 'Order Book',
+  fabricStock: 'Fabric Stock',
+  pendingDelivery: 'Pending Delivery',
+  openTickets: 'Open Tickets',
+  billableHours: 'Billable Hours',
+  monthlyRetainer: 'Monthly Retainer',
+  recentOrders: 'Recent Orders',
 };
 
 /** Only sources backed by real backend trend time-series. */
@@ -204,7 +239,7 @@ const UNAVAILABLE_METRIC_BASE = {
 } as const;
 
 
-function metricOf(stats: DashboardStatistics, source: string): WidgetMetric {
+function metricOf(stats: DashboardStatistics, source: string, industryMetrics?: IndustryMetrics): WidgetMetric {
   const revenue = stats.monthlyRevenue;
   const expense = stats.monthlyExpense;
   const netProfit = revenue - expense;
@@ -215,6 +250,13 @@ function metricOf(stats: DashboardStatistics, source: string): WidgetMetric {
     'netProfit',
     'teamCost',
     'monthlyPayroll',
+    'averageTicket',
+    'avgOrderValue',
+    'costPerUnit',
+    'monthlyRecurringRevenue',
+    'monthlyRetainer',
+    'dailyRevenue',
+    'stockValue',
   ]);
 
   const confirmed: Record<string, { value: number; currency?: boolean }> = {
@@ -231,6 +273,17 @@ function metricOf(stats: DashboardStatistics, source: string): WidgetMetric {
     teamSize: { value: stats.totalUsers },
     users: { value: stats.totalUsers },
   };
+
+  if (industryMetrics) {
+    confirmed.todaySales = { value: industryMetrics.todaySales };
+    confirmed.openOrders = { value: industryMetrics.pendingOrders };
+    confirmed.transactions = { value: industryMetrics.todayOrders };
+    confirmed.averageTicket = { value: industryMetrics.averageOrderValue, currency: true };
+    confirmed.avgOrderValue = { value: industryMetrics.averageOrderValue, currency: true };
+    if (industryMetrics.lowStockCount > 0) {
+      confirmed.lowStock = { value: industryMetrics.lowStockCount };
+    }
+  }
 
   const c = confirmed[source];
   if (c) {
@@ -385,6 +438,7 @@ export function resolveWidgetData(
   }
 
   const stats = overview.statistics;
+  const industryMetrics = overview.industryMetrics;
 
   // ─── Operational signals (no arbitrary score) ───
   if (key === 'healthScore') {
@@ -433,9 +487,31 @@ export function resolveWidgetData(
     return unavailableSeries(accent, 'Revenue Forecast');
   }
 
+  // ─── Industry-specific list sources (real data when available) ───
+  if (key === 'recentOrders' && industryMetrics?.recentOrders) {
+    const rows: WidgetListRow[] = industryMetrics.recentOrders.slice(0, 5).map((o) => ({
+      id: o.id,
+      title: o.number,
+      subtitle: `$${o.total.toFixed(2)}`,
+      meta: o.date ? new Date(o.date).toLocaleDateString() : '',
+      status: o.status,
+      tone: o.status === 'DELIVERED' ? 'success' : o.status === 'CANCELLED' ? 'danger' : 'warning',
+    }));
+    return { ...base, rows, title: 'Recent Orders', available: rows.length > 0 };
+  }
+
+  if (key === 'lowStock' && industryMetrics && industryMetrics.lowStockCount > 0) {
+    return {
+      ...base,
+      rows: [{ id: 'low-stock', title: `${industryMetrics.lowStockCount} items below minimum stock`, subtitle: 'Restock recommended', status: 'Low Stock', tone: 'warning' }],
+      title: 'Low Stock Alert',
+      available: true,
+    };
+  }
+
   // ─── Metric sources ───
   if (key in METRIC_LABELS) {
-    const m = metricOf(stats, key);
+    const m = metricOf(stats, key, industryMetrics);
     return { ...base, metric: m, title: METRIC_LABELS[key], available: m.available };
   }
 
@@ -446,7 +522,7 @@ export function resolveWidgetData(
 
   // ─── List sources (only activity uses audit data; all others unavailable) ───
   if (
-    ['lowStock', 'recentOrders', 'ordersQueue', 'supportQueue', 'openTickets', 'kitchenQueue', 'medicineStock', 'machineStatus', 'academicCalendar', 'pullRequests', 'productionLines', 'leaveRequests'].includes(key)
+    ['ordersQueue', 'supportQueue', 'kitchenQueue', 'medicineStock', 'machineStatus', 'academicCalendar', 'pullRequests', 'productionLines', 'leaveRequests'].includes(key)
   ) {
     return unavailableList(accent, METRIC_LABELS[key] ?? key);
   }

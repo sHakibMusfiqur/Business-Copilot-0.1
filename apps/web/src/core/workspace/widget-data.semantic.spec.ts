@@ -1,16 +1,33 @@
 import { describe, expect, it } from 'vitest';
 
 import { resolveWidgetData, emptyStatistics } from './widget-data';
-import type { DashboardOverview, DashboardStatistics } from '@/components/dashboard/types';
+import type { DashboardOverview, DashboardStatistics, IndustryMetrics } from '@/components/dashboard/types';
 
 function makeStats(overrides: Partial<DashboardStatistics> = {}): DashboardStatistics {
   return { ...emptyStatistics(), ...overrides };
 }
 
-function makeOverview(stats: DashboardStatistics): DashboardOverview {
+const EMPTY_INDUSTRY_METRICS: IndustryMetrics = {
+  todaySales: 0,
+  todayOrders: 0,
+  todayRevenue: 0,
+  todayExpenses: 0,
+  pendingOrders: 0,
+  completedOrders: 0,
+  cancelledOrders: 0,
+  averageOrderValue: 0,
+  lowStockCount: 0,
+  inventoryValue: 0,
+  newCustomersThisMonth: 0,
+  topSellingProducts: [],
+  recentOrders: [],
+};
+
+function makeOverview(stats: DashboardStatistics, industryMetrics?: Partial<IndustryMetrics>): DashboardOverview {
   return {
-    organization: { id: 'org-1', name: 'Test Org', logo: null, createdAt: '' },
+    organization: { id: 'org-1', name: 'Test Org', logo: null, createdAt: '', industry: null },
     statistics: stats,
+    industryMetrics: { ...EMPTY_INDUSTRY_METRICS, ...industryMetrics },
     trends: { labels: [], revenue: [], expenses: [], sales: [], cashFlow: [] },
     quickActions: [],
     recentActivities: [],
@@ -104,88 +121,108 @@ describe('Semantic dashboard correctness', () => {
       totalUsers: 15,
     });
 
-    it('todaySales is unavailable (monthlyRevenue ≠ today sales)', () => {
+    it('todaySales maps to industryMetrics.todaySales (zero when no data)', () => {
       const data = resolveWidgetData('todaySales', makeOverview(stats), '#3B82F6');
-      expect(data.available).toBe(false);
-      expect(data.metric?.available).toBe(false);
+      expect(data.available).toBe(true);
+      expect(data.metric?.value).toBe(0);
     });
 
-    it('openOrders is unavailable (totalSalesOrders ≠ open orders)', () => {
+    it('todaySales maps real industry data', () => {
+      const data = resolveWidgetData('todaySales', makeOverview(stats, { todaySales: 15 }), '#3B82F6');
+      expect(data.available).toBe(true);
+      expect(data.metric?.value).toBe(15);
+    });
+
+    it('openOrders maps to industryMetrics.pendingOrders', () => {
       const data = resolveWidgetData('openOrders', makeOverview(stats), '#3B82F6');
-      expect(data.available).toBe(false);
+      expect(data.available).toBe(true);
+      expect(data.metric?.value).toBe(0);
     });
 
-    it('appointmentsToday is unavailable (totalCustomers ≠ appointments)', () => {
+    it('openOrders maps real industry data', () => {
+      const data = resolveWidgetData('openOrders', makeOverview(stats, { pendingOrders: 7 }), '#3B82F6');
+      expect(data.available).toBe(true);
+      expect(data.metric?.value).toBe(7);
+    });
+
+    it('appointmentsToday is unavailable (no backend source)', () => {
       const data = resolveWidgetData('appointmentsToday', makeOverview(stats), '#3B82F6');
       expect(data.available).toBe(false);
     });
 
-    it('productionOutput is unavailable (totalProducts ≠ production output)', () => {
+    it('productionOutput is unavailable (no backend source)', () => {
       const data = resolveWidgetData('productionOutput', makeOverview(stats), '#3B82F6');
       expect(data.available).toBe(false);
     });
 
-    it('workOrders is unavailable (totalPurchaseOrders ≠ work orders)', () => {
+    it('workOrders is unavailable (no backend source)', () => {
       const data = resolveWidgetData('workOrders', makeOverview(stats), '#3B82F6');
       expect(data.available).toBe(false);
     });
 
-    it('enrolled is unavailable (totalCustomers ≠ students)', () => {
+    it('enrolled is unavailable (no backend source)', () => {
       const data = resolveWidgetData('enrolled', makeOverview(stats), '#3B82F6');
       expect(data.available).toBe(false);
     });
 
-    it('feesCollected is unavailable (revenue ≠ school fees)', () => {
+    it('feesCollected is unavailable (no backend source)', () => {
       const data = resolveWidgetData('feesCollected', makeOverview(stats), '#3B82F6');
       expect(data.available).toBe(false);
     });
 
-    it('monthlyRecurringRevenue is unavailable (revenue ≠ MRR)', () => {
+    it('monthlyRecurringRevenue is unavailable (no backend source)', () => {
       const data = resolveWidgetData('monthlyRecurringRevenue', makeOverview(stats), '#3B82F6');
       expect(data.available).toBe(false);
     });
 
-    it('posSalesToday is unavailable (revenue ≠ today POS)', () => {
+    it('posSalesToday is unavailable (no backend source)', () => {
       const data = resolveWidgetData('posSalesToday', makeOverview(stats), '#3B82F6');
       expect(data.available).toBe(false);
     });
 
-    it('transactions is unavailable (totalSalesOrders ≠ transactions)', () => {
+    it('transactions maps to industryMetrics.todayOrders', () => {
       const data = resolveWidgetData('transactions', makeOverview(stats), '#3B82F6');
-      expect(data.available).toBe(false);
+      expect(data.available).toBe(true);
+      expect(data.metric?.value).toBe(0);
     });
 
-    it('productsInStock is unavailable (totalProducts ≠ stock on hand)', () => {
+    it('transactions maps real industry data', () => {
+      const data = resolveWidgetData('transactions', makeOverview(stats, { todayOrders: 23 }), '#3B82F6');
+      expect(data.available).toBe(true);
+      expect(data.metric?.value).toBe(23);
+    });
+
+    it('productsInStock is unavailable (no backend source)', () => {
       const data = resolveWidgetData('productsInStock', makeOverview(stats), '#3B82F6');
       expect(data.available).toBe(false);
     });
 
-    it('prescriptionsToday is unavailable (totalCustomers ≠ prescriptions)', () => {
+    it('prescriptionsToday is unavailable (no backend source)', () => {
       const data = resolveWidgetData('prescriptionsToday', makeOverview(stats), '#3B82F6');
       expect(data.available).toBe(false);
     });
 
-    it('stockValue is unavailable (expense ≠ inventory value)', () => {
+    it('stockValue is unavailable (no backend source)', () => {
       const data = resolveWidgetData('stockValue', makeOverview(stats), '#3B82F6');
       expect(data.available).toBe(false);
     });
 
-    it('dailyRevenue is unavailable (revenue ≠ daily revenue)', () => {
+    it('dailyRevenue is unavailable (no backend source)', () => {
       const data = resolveWidgetData('dailyRevenue', makeOverview(stats), '#3B82F6');
       expect(data.available).toBe(false);
     });
 
-    it('orderBook is unavailable (totalSalesOrders ≠ open order book)', () => {
+    it('orderBook is unavailable (no backend source)', () => {
       const data = resolveWidgetData('orderBook', makeOverview(stats), '#3B82F6');
       expect(data.available).toBe(false);
     });
 
-    it('fabricStock is unavailable (totalProducts ≠ fabric inventory)', () => {
+    it('fabricStock is unavailable (no backend source)', () => {
       const data = resolveWidgetData('fabricStock', makeOverview(stats), '#3B82F6');
       expect(data.available).toBe(false);
     });
 
-    it('monthlyRetainer is unavailable (revenue ≠ retainer income)', () => {
+    it('monthlyRetainer is unavailable (no backend source)', () => {
       const data = resolveWidgetData('monthlyRetainer', makeOverview(stats), '#3B82F6');
       expect(data.available).toBe(false);
     });
@@ -200,42 +237,51 @@ describe('Semantic dashboard correctness', () => {
       expect(data.available).toBe(false);
     });
 
-    it('pipeline is unavailable (totalSalesOrders ≠ CRM pipeline)', () => {
+    it('pipeline is unavailable (no backend source)', () => {
       const data = resolveWidgetData('pipeline', makeOverview(stats), '#3B82F6');
       expect(data.available).toBe(false);
     });
 
-    it('organizations is unavailable (hardcoded 1)', () => {
+    it('organizations is unavailable (no backend source)', () => {
       const data = resolveWidgetData('organizations', makeOverview(stats), '#3B82F6');
       expect(data.available).toBe(false);
     });
 
-    it('activeOrgs is unavailable (hardcoded 1)', () => {
+    it('activeOrgs is unavailable (no backend source)', () => {
       const data = resolveWidgetData('activeOrgs', makeOverview(stats), '#3B82F6');
       expect(data.available).toBe(false);
     });
 
-    it('aiTokens is unavailable (hardcoded 0)', () => {
+    it('aiTokens is unavailable (no backend source)', () => {
       const data = resolveWidgetData('aiTokens', makeOverview(stats), '#3B82F6');
       expect(data.available).toBe(false);
     });
 
-    it('platformRevenue is unavailable (org revenue ≠ platform revenue)', () => {
+    it('platformRevenue is unavailable (no backend source)', () => {
       const data = resolveWidgetData('platformRevenue', makeOverview(stats), '#3B82F6');
       expect(data.available).toBe(false);
     });
 
-    it('averageTicket is unavailable (revenue/orders ≠ per-ticket average)', () => {
+    it('averageTicket maps to industryMetrics.averageOrderValue', () => {
       const data = resolveWidgetData('averageTicket', makeOverview(stats), '#3B82F6');
-      expect(data.available).toBe(false);
+      expect(data.available).toBe(true);
+      expect(data.metric?.value).toBe(0);
     });
 
-    it('avgOrderValue is unavailable (revenue/orders ≠ order value)', () => {
+    it('averageTicket maps real industry data', () => {
+      const data = resolveWidgetData('averageTicket', makeOverview(stats, { averageOrderValue: 42.50 }), '#3B82F6');
+      expect(data.available).toBe(true);
+      expect(data.metric?.value).toBe(42.50);
+      expect(data.metric?.currency).toBe(true);
+    });
+
+    it('avgOrderValue maps to industryMetrics.averageOrderValue', () => {
       const data = resolveWidgetData('avgOrderValue', makeOverview(stats), '#3B82F6');
-      expect(data.available).toBe(false);
+      expect(data.available).toBe(true);
+      expect(data.metric?.value).toBe(0);
     });
 
-    it('costPerUnit is unavailable (expense/products ≠ manufacturing cost)', () => {
+    it('costPerUnit is unavailable (no backend source)', () => {
       const data = resolveWidgetData('costPerUnit', makeOverview(stats), '#3B82F6');
       expect(data.available).toBe(false);
     });
@@ -252,7 +298,7 @@ describe('Semantic dashboard correctness', () => {
 
     it('unavailable metric returns null value with available=false', () => {
       const stats = makeStats({ totalCustomers: 50 });
-      const data = resolveWidgetData('todaySales', makeOverview(stats), '#3B82F6');
+      const data = resolveWidgetData('appointmentsToday', makeOverview(stats), '#3B82F6');
       expect(data.available).toBe(false);
       expect(data.metric?.value).toBeNull();
     });
@@ -392,15 +438,36 @@ describe('Semantic dashboard correctness', () => {
   });
 
   describe('List widget integrity', () => {
-    it('recentOrders is unavailable (only activity may use audit data)', () => {
+    it('recentOrders is available when industryMetrics has orders', () => {
       const stats = makeStats();
-      const overview = makeOverview(stats);
-      overview.recentActivities = [
-        { id: '1', action: 'Created invoice', entity: 'Invoice', entityId: null, user: { id: 'u1', name: 'John', email: 'j@t.com' }, createdAt: '2026-01-01T00:00:00Z' },
-      ];
+      const overview = makeOverview(stats, {
+        recentOrders: [
+          { id: 'o1', number: 'SO-001', total: 150, status: 'DELIVERED', date: '2026-01-01' },
+        ],
+      });
       const data = resolveWidgetData('recentOrders', overview, '#3B82F6');
+      expect(data.rows).toHaveLength(1);
+      expect(data.rows?.[0].title).toBe('SO-001');
+      expect(data.available).toBe(true);
+    });
+
+    it('recentOrders is unavailable when no industry data', () => {
+      const data = resolveWidgetData('recentOrders', makeOverview(makeStats()), '#3B82F6');
       expect(data.rows).toEqual([]);
       expect(data.available).toBe(false);
+    });
+
+    it('lowStock shows alert when industryMetrics.lowStockCount > 0', () => {
+      const data = resolveWidgetData('lowStock', makeOverview(makeStats(), { lowStockCount: 5 }), '#3B82F6');
+      expect(data.available).toBe(true);
+      expect(data.rows).toHaveLength(1);
+      expect(data.rows?.[0].title).toContain('5 items');
+    });
+
+    it('lowStock falls back to stats.lowStockProducts when lowStockCount is 0', () => {
+      const data = resolveWidgetData('lowStock', makeOverview(makeStats()), '#3B82F6');
+      expect(data.available).toBe(true);
+      expect(data.metric?.value).toBe(0);
     });
 
     it('kitchenQueue is empty (no backend source)', () => {
@@ -425,11 +492,10 @@ describe('Semantic dashboard correctness', () => {
 
     it('openTickets is unavailable (no backend source)', () => {
       const data = resolveWidgetData('openTickets', makeOverview(makeStats()), '#3B82F6');
-      expect(data.rows).toEqual([]);
       expect(data.available).toBe(false);
     });
 
-    it('ordersQueue is empty (audit entries are not queue items)', () => {
+    it('ordersQueue is empty (no backend source)', () => {
       const data = resolveWidgetData('ordersQueue', makeOverview(makeStats()), '#3B82F6');
       expect(data.rows).toEqual([]);
     });
@@ -462,22 +528,22 @@ describe('Semantic dashboard correctness', () => {
   });
 
   describe('Platform metrics unavailable', () => {
-    it('organizations is unavailable (hardcoded 1)', () => {
+    it('organizations is unavailable (no backend source)', () => {
       const data = resolveWidgetData('organizations', makeOverview(makeStats()), '#3B82F6');
       expect(data.available).toBe(false);
     });
 
-    it('activeOrgs is unavailable (hardcoded 1)', () => {
+    it('activeOrgs is unavailable (no backend source)', () => {
       const data = resolveWidgetData('activeOrgs', makeOverview(makeStats()), '#3B82F6');
       expect(data.available).toBe(false);
     });
 
-    it('aiTokens is unavailable (hardcoded 0)', () => {
+    it('aiTokens is unavailable (no backend source)', () => {
       const data = resolveWidgetData('aiTokens', makeOverview(makeStats()), '#3B82F6');
       expect(data.available).toBe(false);
     });
 
-    it('platformRevenue is unavailable (org ≠ platform)', () => {
+    it('platformRevenue is unavailable (no backend source)', () => {
       const data = resolveWidgetData('platformRevenue', makeOverview(makeStats()), '#3B82F6');
       expect(data.available).toBe(false);
     });
@@ -597,10 +663,19 @@ describe('Semantic dashboard correctness', () => {
       expect(data.rows).toEqual([]);
     });
 
-    it('recentOrders is unavailable (no backend source)', () => {
+    it('recentOrders is unavailable when no industry data', () => {
       const data = resolveWidgetData('recentOrders', makeOverview(makeStats()), '#3B82F6');
       expect(data.available).toBe(false);
       expect(data.rows).toEqual([]);
+    });
+
+    it('recentOrders is available when industryMetrics has data', () => {
+      const overview = makeOverview(makeStats(), {
+        recentOrders: [{ id: '1', number: 'SO-1', total: 100, status: 'PENDING', date: '2026-01-01' }],
+      });
+      const data = resolveWidgetData('recentOrders', overview, '#3B82F6');
+      expect(data.available).toBe(true);
+      expect(data.rows).toHaveLength(1);
     });
   });
 
@@ -660,6 +735,26 @@ describe('Semantic dashboard correctness', () => {
     it('teamCost label is "Monthly Payroll"', () => {
       const data = resolveWidgetData('teamCost', makeOverview(makeStats()), '#3B82F6');
       expect(data.metric?.label).toBe('Monthly Payroll');
+    });
+
+    it('todaySales label is "Today\'s Sales"', () => {
+      const data = resolveWidgetData('todaySales', makeOverview(makeStats()), '#3B82F6');
+      expect(data.metric?.label).toBe("Today's Sales");
+    });
+
+    it('openOrders label is "Open Orders"', () => {
+      const data = resolveWidgetData('openOrders', makeOverview(makeStats()), '#3B82F6');
+      expect(data.metric?.label).toBe('Open Orders');
+    });
+
+    it('transactions label is "Transactions"', () => {
+      const data = resolveWidgetData('transactions', makeOverview(makeStats()), '#3B82F6');
+      expect(data.metric?.label).toBe('Transactions');
+    });
+
+    it('averageTicket label is "Average Ticket"', () => {
+      const data = resolveWidgetData('averageTicket', makeOverview(makeStats()), '#3B82F6');
+      expect(data.metric?.label).toBe('Average Ticket');
     });
   });
 });

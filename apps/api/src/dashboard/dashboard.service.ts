@@ -1,15 +1,26 @@
 import { Injectable, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { RedisService } from '../infrastructure/redis/redis.service';
 
 import { DEFAULT_QUICK_ACTIONS } from './quick-actions.config';
 import type { QuickAction } from './quick-actions.config';
+
+const VALID_INDUSTRY_KEYS = new Set([
+  'restaurant', 'hospital', 'manufacturing', 'school', 'software',
+  'retail', 'pharmacy', 'garments', 'it-services', 'general',
+]);
+
+export type IndustryKey =
+  | 'restaurant' | 'hospital' | 'manufacturing' | 'school' | 'software'
+  | 'retail' | 'pharmacy' | 'garments' | 'it-services' | 'general';
 
 export interface DashboardOrganization {
   id: string;
   name: string;
   logo: string | null;
   createdAt: Date;
+  industry: IndustryKey | null;
 }
 
 export interface DashboardStatistics {
@@ -26,6 +37,22 @@ export interface DashboardStatistics {
   totalEmployees: number;
   pendingLeaves: number;
   monthlyPayroll: number;
+}
+
+export interface IndustryMetrics {
+  todaySales: number;
+  todayOrders: number;
+  todayRevenue: number;
+  todayExpenses: number;
+  pendingOrders: number;
+  completedOrders: number;
+  cancelledOrders: number;
+  averageOrderValue: number;
+  lowStockCount: number;
+  inventoryValue: number;
+  newCustomersThisMonth: number;
+  topSellingProducts: Array<{ name: string; quantity: number; revenue: number }>;
+  recentOrders: Array<{ id: string; number: string; total: number; status: string; date: Date }>;
 }
 
 export interface RecentActivityItem {
@@ -84,6 +111,7 @@ export interface DashboardTrends {
 export interface DashboardOverview {
   organization: DashboardOrganization;
   statistics: DashboardStatistics;
+  industryMetrics: IndustryMetrics;
   trends: DashboardTrends;
   quickActions: QuickAction[];
   recentActivities: RecentActivityItem[];
@@ -133,16 +161,26 @@ const ACTIVITY_ENTITY_PERMISSIONS: Array<[RegExp, string[]]> = [
 @Injectable()
 export class DashboardService {
   private readonly logger = new Logger(DashboardService.name);
+  private static readonly CACHE_TTL = 30;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly redis: RedisService,
+  ) {}
 
   async getOverview(orgId: string, userId: string, permissions: string[]): Promise<DashboardOverview> {
     await this.validateOrgMembership(orgId, userId);
+
+    const cacheKey = this.redis.organizationKey(orgId, 'dashboard:overview');
+    const cached = await this.redis.get<DashboardOverview>(cacheKey);
+    if (cached) return cached;
 
     const hasAny = (...required: string[]) => required.some((permission) => permissions.includes(permission));
     const canFinance = hasAny(...FINANCE_PERMISSIONS);
     const canPayroll = hasAny('payroll.read');
     const canSales = hasAny('sales.read', 'invoices.read');
+    const canInventory = hasAny('inventory.read');
+    const canCustomers = hasAny('customers.read');
 
     const [
       organization,
@@ -160,6 +198,7 @@ export class DashboardService {
       pendingLeaves,
       monthlyPayroll,
       recentActivities,
+      industryMetrics,
     ] = await Promise.all([
       this.getOrganization(orgId),
       this.safeCount(this.prisma.user.count({ where: { organizationId: orgId } })),
@@ -176,6 +215,7 @@ export class DashboardService {
       this.getPendingLeavesCount(orgId),
       canPayroll ? this.getMonthlyPayroll(orgId) : Promise.resolve(0),
       this.getRecentActivities(orgId),
+      this.getIndustryMetrics(orgId, canSales, canInventory, canCustomers),
     ]);
 
     const layout = this.buildLayout(permissions);
@@ -200,9 +240,10 @@ export class DashboardService {
 
     const trends = await this.getTrends(orgId, canFinance, canSales);
 
-    return {
+    const overview: DashboardOverview = {
       organization,
       statistics,
+      industryMetrics,
       trends,
       quickActions,
       recentActivities: gatedActivities,
@@ -210,6 +251,10 @@ export class DashboardService {
       layout,
       aiInsights: this.buildAiInsights(statistics, layout),
     };
+
+    await this.redis.set(cacheKey, overview, { ttlSeconds: DashboardService.CACHE_TTL });
+
+    return overview;
   }
 
   private buildLayout(permissions: string[]): DashboardLayout {
@@ -324,16 +369,31 @@ export class DashboardService {
   }
 
   private async getOrganization(orgId: string): Promise<DashboardOrganization> {
-    const org = await this.prisma.organization.findUnique({
-      where: { id: orgId },
-      select: { id: true, name: true, logo: true, createdAt: true },
-    });
+    const [org, settings] = await Promise.all([
+      this.prisma.organization.findUnique({
+        where: { id: orgId },
+        select: { id: true, name: true, logo: true, createdAt: true },
+      }),
+      this.prisma.organizationSettings.findUnique({
+        where: { organizationId: orgId },
+        select: { settings: true },
+      }),
+    ]);
+
+    let industry: IndustryKey | null = null;
+    if (settings?.settings && typeof settings.settings === 'object') {
+      const raw = (settings.settings as Record<string, unknown>).industry;
+      if (typeof raw === 'string' && VALID_INDUSTRY_KEYS.has(raw)) {
+        industry = raw as IndustryKey;
+      }
+    }
 
     return {
       id: org?.id ?? '',
       name: org?.name ?? 'Unknown',
       logo: org?.logo ?? null,
       createdAt: org?.createdAt ?? new Date(),
+      industry,
     };
   }
 
@@ -349,6 +409,149 @@ export class DashboardService {
       return Number(rows[0]?.count ?? 0);
     } catch (error) {
       this.logger.error(`Low stock query failed: ${(error as Error).message}`);
+      return 0;
+    }
+  }
+
+  private async getIndustryMetrics(
+    orgId: string,
+    canSales: boolean,
+    canInventory: boolean,
+    canCustomers: boolean,
+  ): Promise<IndustryMetrics> {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const [
+      todaySalesRevenue,
+      todaySalesCount,
+      todayOrdersCount,
+      todayExpenseTotal,
+      pendingOrdersCount,
+      completedOrdersCount,
+      cancelledOrdersCount,
+      lowStockCount,
+      inventoryValue,
+      newCustomersThisMonth,
+      topSellingProducts,
+      recentOrders,
+    ] = await Promise.all([
+      canSales
+        ? this.safeNumber(this.prisma.invoice.aggregate({
+            where: { organizationId: orgId, type: 'SALES', paymentStatus: 'PAID', issueDate: { gte: startOfDay } },
+            _sum: { total: true },
+          }).then((r) => Number(r._sum.total ?? 0)))
+        : Promise.resolve(0),
+      canSales
+        ? this.safeCount(this.prisma.salesOrder.count({
+            where: { organizationId: orgId, orderDate: { gte: startOfDay } },
+          }))
+        : Promise.resolve(0),
+      this.safeCount(this.prisma.salesOrder.count({
+        where: { organizationId: orgId, orderDate: { gte: startOfDay } },
+      })),
+      canSales
+        ? this.safeNumber(this.prisma.purchaseOrder.aggregate({
+            where: { organizationId: orgId, orderDate: { gte: startOfDay }, status: { not: 'CANCELLED' } },
+            _sum: { total: true },
+          }).then((r) => Number(r._sum.total ?? 0)))
+        : Promise.resolve(0),
+      this.safeCount(this.prisma.salesOrder.count({
+        where: { organizationId: orgId, status: 'PENDING' },
+      })),
+      this.safeCount(this.prisma.salesOrder.count({
+        where: { organizationId: orgId, status: 'DELIVERED' },
+      })),
+      this.safeCount(this.prisma.salesOrder.count({
+        where: { organizationId: orgId, status: 'CANCELLED' },
+      })),
+      canInventory ? this.getLowStockCount(orgId) : Promise.resolve(0),
+      canInventory
+        ? this.safeNumber(this.prisma.inventory.aggregate({
+            where: { organizationId: orgId },
+            _sum: { quantity: true },
+          }).then((r) => Number(r._sum.quantity ?? 0)))
+        : Promise.resolve(0),
+      canCustomers
+        ? this.safeCount(this.prisma.customer.count({
+            where: { organizationId: orgId, createdAt: { gte: startOfMonth } },
+          }))
+        : Promise.resolve(0),
+      canSales ? this.getTopSellingProducts(orgId) : Promise.resolve([]),
+      canSales ? this.getRecentOrders(orgId) : Promise.resolve([]),
+    ]);
+
+    const averageOrderValue = todaySalesCount > 0 ? Math.round((todaySalesRevenue / todaySalesCount) * 100) / 100 : 0;
+
+    return {
+      todaySales: todaySalesCount,
+      todayOrders: todayOrdersCount,
+      todayRevenue: todaySalesRevenue,
+      todayExpenses: todayExpenseTotal,
+      pendingOrders: pendingOrdersCount,
+      completedOrders: completedOrdersCount,
+      cancelledOrders: cancelledOrdersCount,
+      averageOrderValue,
+      lowStockCount,
+      inventoryValue,
+      newCustomersThisMonth,
+      topSellingProducts,
+      recentOrders,
+    };
+  }
+
+  private async getTopSellingProducts(orgId: string): Promise<Array<{ name: string; quantity: number; revenue: number }>> {
+    try {
+      const rows = await this.prisma.$queryRaw<Array<{ name: string; quantity: bigint; revenue: number }>>`
+        SELECT p."name" as name,
+               SUM(COALESCE(soi.quantity, 0))::bigint as quantity,
+               SUM(COALESCE(soi."lineTotal", 0))::float8 as revenue
+        FROM "SalesOrderItem" soi
+        INNER JOIN "Product" p ON p.id = soi."productId"
+        INNER JOIN "SalesOrder" so ON so.id = soi."salesOrderId"
+        WHERE so."organizationId" = ${orgId}
+          AND so."status" <> 'CANCELLED'
+        GROUP BY p."name"
+        ORDER BY quantity DESC
+        LIMIT 5
+      `;
+      return rows.map((r) => ({ name: r.name, quantity: Number(r.quantity), revenue: Math.round(r.revenue * 100) / 100 }));
+    } catch (error) {
+      this.logger.error(`Top selling products query failed: ${(error as Error).message}`);
+      return [];
+    }
+  }
+
+  private async getRecentOrders(orgId: string): Promise<Array<{ id: string; number: string; total: number; status: string; date: Date }>> {
+    try {
+      const rows = await this.prisma.salesOrder.findMany({
+        where: { organizationId: orgId },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        select: { id: true, orderNumber: true, total: true, status: true, orderDate: true },
+      });
+      return rows.map((r) => ({
+        id: r.id,
+        number: r.orderNumber,
+        total: Number(r.total),
+        status: r.status,
+        date: r.orderDate,
+      }));
+    } catch (error) {
+      this.logger.error(`Recent orders query failed: ${(error as Error).message}`);
+      return [];
+    }
+  }
+
+  private async safeNumber(query: Promise<number>): Promise<number> {
+    try {
+      return await query;
+    } catch (error) {
+      this.logger.error(`Dashboard number query failed: ${(error as Error).message}`);
       return 0;
     }
   }

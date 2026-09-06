@@ -3,6 +3,23 @@ export interface DashboardOrganization {
   name: string;
   logo: string | null;
   createdAt: string;
+  industry: string | null;
+}
+
+export interface IndustryMetrics {
+  todaySales: number;
+  todayOrders: number;
+  todayRevenue: number;
+  todayExpenses: number;
+  pendingOrders: number;
+  completedOrders: number;
+  cancelledOrders: number;
+  averageOrderValue: number;
+  lowStockCount: number;
+  inventoryValue: number;
+  newCustomersThisMonth: number;
+  topSellingProducts: Array<{ name: string; quantity: number; revenue: number }>;
+  recentOrders: Array<{ id: string; number: string; total: number; status: string; date: string }>;
 }
 
 export interface DashboardStatistics {
@@ -83,6 +100,7 @@ export interface DashboardTrends {
 export interface DashboardOverview {
   organization: DashboardOrganization;
   statistics: DashboardStatistics;
+  industryMetrics: IndustryMetrics;
   trends: DashboardTrends;
   quickActions: QuickAction[];
   recentActivities: RecentActivityItem[];
