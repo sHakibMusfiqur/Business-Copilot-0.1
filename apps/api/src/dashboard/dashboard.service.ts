@@ -5,6 +5,7 @@ import { RedisService } from '../infrastructure/redis/redis.service';
 
 import { DEFAULT_QUICK_ACTIONS } from './quick-actions.config';
 import type { QuickAction } from './quick-actions.config';
+import { DashboardConfigService, type ResolvedDashboardConfig } from './dashboard-config.service';
 
 const VALID_INDUSTRY_KEYS = new Set([
   'restaurant', 'hospital', 'manufacturing', 'school', 'software',
@@ -112,6 +113,7 @@ export interface DashboardOverview {
   organization: DashboardOrganization;
   statistics: DashboardStatistics;
   industryMetrics: IndustryMetrics;
+  dashboardConfig: ResolvedDashboardConfig;
   trends: DashboardTrends;
   quickActions: QuickAction[];
   recentActivities: RecentActivityItem[];
@@ -126,6 +128,15 @@ export interface DashboardOverview {
  * hold any of these.
  */
 const FINANCE_PERMISSIONS = ['invoices.read', 'payments.read', 'accounting.read', 'reports.finance'];
+
+/** Org-level data that is the same for all users in an organization. Cached in Redis. */
+interface OrgLevelData {
+  organization: DashboardOrganization;
+  statistics: DashboardStatistics;
+  industryMetrics: IndustryMetrics;
+  trends: DashboardTrends;
+  recentActivities: RecentActivityItem[];
+}
 
 const PANEL_PERMISSIONS: Record<DashboardPanelKey, string[]> = {
   revenue: FINANCE_PERMISSIONS,
@@ -166,15 +177,46 @@ export class DashboardService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
+    private readonly configService: DashboardConfigService,
   ) {}
 
   async getOverview(orgId: string, userId: string, permissions: string[]): Promise<DashboardOverview> {
     await this.validateOrgMembership(orgId, userId);
 
-    const cacheKey = this.redis.organizationKey(orgId, 'dashboard:overview');
-    const cached = await this.redis.get<DashboardOverview>(cacheKey);
-    if (cached) return cached;
+    // Cache only org-level data (same for all users in the org).
+    // dashboardConfig is resolved per-request because it depends on user permissions.
+    const cacheKey = this.redis.organizationKey(orgId, 'dashboard:orgdata');
+    const cached = await this.redis.get<OrgLevelData>(cacheKey);
+    const orgData = cached ?? await this.fetchOrgLevelData(orgId, permissions);
 
+    if (!cached) {
+      await this.redis.set(cacheKey, orgData, { ttlSeconds: DashboardService.CACHE_TTL });
+    }
+
+    // Resolve dashboard config per-request (permission-filtered, org-overridden).
+    const dashboardConfig = await this.configService.resolveConfig(orgId, permissions);
+
+    const hasAny = (...required: string[]) => required.some((permission) => permissions.includes(permission));
+    const layout = this.buildLayout(permissions);
+    const gatedActivities = orgData.recentActivities.filter((activity) => this.canSeeActivity(activity.entity, permissions, hasAny));
+    const quickActions = DEFAULT_QUICK_ACTIONS.filter((action) => permissions.includes(action.permission));
+
+    return {
+      organization: orgData.organization,
+      statistics: orgData.statistics,
+      industryMetrics: orgData.industryMetrics,
+      dashboardConfig,
+      trends: orgData.trends,
+      quickActions,
+      recentActivities: gatedActivities,
+      permissions,
+      layout,
+      aiInsights: this.buildAiInsights(orgData.statistics, layout),
+    };
+  }
+
+  /** Fetch all org-level data in parallel (cached per org, not per user). */
+  private async fetchOrgLevelData(orgId: string, permissions: string[]): Promise<OrgLevelData> {
     const hasAny = (...required: string[]) => required.some((permission) => permissions.includes(permission));
     const canFinance = hasAny(...FINANCE_PERMISSIONS);
     const canPayroll = hasAny('payroll.read');
@@ -218,10 +260,6 @@ export class DashboardService {
       this.getIndustryMetrics(orgId, canSales, canInventory, canCustomers),
     ]);
 
-    const layout = this.buildLayout(permissions);
-    const gatedActivities = recentActivities.filter((activity) => this.canSeeActivity(activity.entity, permissions, hasAny));
-    const quickActions = DEFAULT_QUICK_ACTIONS.filter((action) => permissions.includes(action.permission));
-
     const statistics: DashboardStatistics = {
       totalUsers,
       totalCustomers,
@@ -240,21 +278,13 @@ export class DashboardService {
 
     const trends = await this.getTrends(orgId, canFinance, canSales);
 
-    const overview: DashboardOverview = {
+    return {
       organization,
       statistics,
       industryMetrics,
       trends,
-      quickActions,
-      recentActivities: gatedActivities,
-      permissions,
-      layout,
-      aiInsights: this.buildAiInsights(statistics, layout),
+      recentActivities,
     };
-
-    await this.redis.set(cacheKey, overview, { ttlSeconds: DashboardService.CACHE_TTL });
-
-    return overview;
   }
 
   private buildLayout(permissions: string[]): DashboardLayout {

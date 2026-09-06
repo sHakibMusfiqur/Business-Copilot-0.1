@@ -34,6 +34,7 @@ import { EmailSettingsDto } from './dto/email-settings.dto';
 import { BillingSettingsDto } from './dto/billing-settings.dto';
 import { PreferencesSettingsDto } from './dto/preferences-settings.dto';
 import { NotificationsSettingsDto } from './dto/notifications-settings.dto';
+import { DashboardSettingsDto } from './dto/dashboard-settings.dto';
 import { settingsMulterOptions } from './file-upload.config';
 import { SettingsService, type FileUploadInput } from './settings.service';
 
@@ -144,6 +145,20 @@ export class SettingsController {
   ) {
     const orgId = this.requireOrg(user);
     return this.settingsService.upsert(orgId, 'notifications', { ...dto });
+  }
+
+  @Put('dashboard')
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ description: 'Dashboard settings updated' })
+  @ApiBody({ type: DashboardSettingsDto })
+  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
+  @ApiForbiddenResponse({ description: 'User does not belong to an organization' })
+  async updateDashboard(
+    @Body() dto: DashboardSettingsDto,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    const orgId = this.requireOrg(user);
+    return this.settingsService.upsert(orgId, 'dashboard', { ...dto.dashboard });
   }
 
   @Post('files')

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { resolveWidgetData, emptyStatistics } from './widget-data';
-import type { DashboardOverview, DashboardStatistics, IndustryMetrics } from '@/components/dashboard/types';
+import type { DashboardOverview, DashboardStatistics, IndustryMetrics, DashboardConfig } from '@/components/dashboard/types';
 
 function makeStats(overrides: Partial<DashboardStatistics> = {}): DashboardStatistics {
   return { ...emptyStatistics(), ...overrides };
@@ -23,11 +23,23 @@ const EMPTY_INDUSTRY_METRICS: IndustryMetrics = {
   recentOrders: [],
 };
 
+const EMPTY_DASHBOARD_CONFIG: DashboardConfig = {
+  industry: 'general',
+  kpis: [],
+  charts: [],
+  secondary: [],
+  alerts: [],
+  insights: [],
+  bottom: [],
+  allWidgets: [],
+};
+
 function makeOverview(stats: DashboardStatistics, industryMetrics?: Partial<IndustryMetrics>): DashboardOverview {
   return {
     organization: { id: 'org-1', name: 'Test Org', logo: null, createdAt: '', industry: null },
     statistics: stats,
     industryMetrics: { ...EMPTY_INDUSTRY_METRICS, ...industryMetrics },
+    dashboardConfig: EMPTY_DASHBOARD_CONFIG,
     trends: { labels: [], revenue: [], expenses: [], sales: [], cashFlow: [] },
     quickActions: [],
     recentActivities: [],

@@ -7,6 +7,7 @@ const VALID_NAMESPACES = new Set([
   'billing',
   'preferences',
   'notifications',
+  'dashboard',
 ]);
 
 @Injectable()

@@ -97,10 +97,33 @@ export interface DashboardTrends {
   cashFlow: number[];
 }
 
+export interface DashboardWidgetConfig {
+  id: string;
+  source: string;
+  key: string;
+  zone: string;
+  span: number;
+  permission?: string[];
+  supported: boolean;
+  title?: string;
+}
+
+export interface DashboardConfig {
+  industry: string;
+  kpis: DashboardWidgetConfig[];
+  charts: DashboardWidgetConfig[];
+  secondary: DashboardWidgetConfig[];
+  alerts: DashboardWidgetConfig[];
+  insights: DashboardWidgetConfig[];
+  bottom: DashboardWidgetConfig[];
+  allWidgets: DashboardWidgetConfig[];
+}
+
 export interface DashboardOverview {
   organization: DashboardOrganization;
   statistics: DashboardStatistics;
   industryMetrics: IndustryMetrics;
+  dashboardConfig: DashboardConfig;
   trends: DashboardTrends;
   quickActions: QuickAction[];
   recentActivities: RecentActivityItem[];
