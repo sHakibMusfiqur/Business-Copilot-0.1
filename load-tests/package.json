@@ -1,0 +1,23 @@
+# load-tests/package.json
+{
+  "name": "business-copilot-load-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "k6 load testing infrastructure for Business Copilot ERP",
+  "scripts": {
+    "test:smoke": "k6 run scenarios/health.js",
+    "test:baseline": "k6 run scenarios/mixed-workload.js",
+    "test:load": "k6 run --vus 1000 --duration 20m scenarios/mixed-workload.js",
+    "test:stress": "k6 run --vus 3000 --duration 15m scenarios/mixed-workload.js",
+    "test:spike": "k6 run scenarios/mixed-workload.js",
+    "test:soak": "k6 run --vus 500 --duration 2h scenarios/mixed-workload.js",
+    "test:scale-3m": "k6 run scenarios/scale-3m.js",
+    "test:dashboard": "k6 run scenarios/dashboard.js",
+    "test:cache-race": "k6 run scenarios/dashboard-cache-race.js",
+    "test:mixed": "k6 run scenarios/mixed-workload.js",
+    "test:all": "npm run test:smoke && npm run test:baseline && npm run test:load && npm run test:stress"
+  },
+  "engines": {
+    "k6": ">=0.47.0"
+  }
+}

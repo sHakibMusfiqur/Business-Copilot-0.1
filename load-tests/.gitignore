@@ -1,0 +1,6 @@
+# load-tests/.gitignore
+reports/*.json
+reports/*.csv
+data/test-users.csv
+node_modules/
+*.log

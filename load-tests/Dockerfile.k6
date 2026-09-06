@@ -1,0 +1,26 @@
+# load-tests/Dockerfile.k6
+# Docker image for running k6 load tests.
+# Usage:
+#   docker build -f Dockerfile.k6 -t bc-loadtest .
+#   docker run --rm --network host bc-loadtest smoke
+#   docker run --rm bc-loadtest --env K6_BASE_URL=http://host.docker.internal:4000/api mixed
+
+FROM grafana/k6:0.47.0
+
+WORKDIR /scripts
+
+# Copy test files
+COPY config.js .
+COPY helpers/ ./helpers/
+COPY scenarios/ ./scenarios/
+COPY profiles/ ./profiles/
+COPY data/ ./data/
+COPY run-tests.sh .
+COPY LOAD_TESTING_GUIDE.md .
+
+# Make script executable
+RUN chmod +x run-tests.sh
+
+# Default to smoke test
+ENTRYPOINT ["k6"]
+CMD ["run", "scenarios/health.js"]
