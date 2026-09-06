@@ -25,6 +25,8 @@ const makeConfig = (overrides: Partial<DashboardConfig> = {}): DashboardConfig =
   insights: [],
   bottom: [],
   allWidgets: [],
+  requiredSources: [],
+  activeCapabilities: [],
   ...overrides,
 });
 

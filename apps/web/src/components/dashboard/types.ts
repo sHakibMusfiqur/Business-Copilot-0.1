@@ -89,6 +89,8 @@ export interface DashboardConfig {
   insights: DashboardWidgetConfig[];
   bottom: DashboardWidgetConfig[];
   allWidgets: DashboardWidgetConfig[];
+  requiredSources: string[];
+  activeCapabilities: string[];
 }
 
 export interface DashboardOverview {

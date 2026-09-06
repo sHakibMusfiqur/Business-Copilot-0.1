@@ -1,4 +1,4 @@
-
+import type { Capability } from './industry-capabilities';
 
 export type WidgetKey =
   | 'metric'
@@ -27,6 +27,7 @@ export interface WidgetConfig {
   zone: WidgetZone;
   span: WidgetSpan;
   permission?: string[];
+  capability?: Capability;
   supported: boolean;
   title?: string;
 }
@@ -61,8 +62,8 @@ const CUSTOMER_PERMS = ['customers.read'];
 const AUDIT_PERMS = ['audit.read'];
 
 const baseFinance: WidgetConfig[] = [
-  { id: 'revenueTrend', source: 'revenue', key: 'revenueTrend', zone: 'charts', span: 8, permission: FINANCE_PERMS, supported: true },
-  { id: 'cashFlow', source: 'cashFlow', key: 'cashFlow', zone: 'charts', span: 4, permission: FINANCE_PERMS, supported: true },
+  { id: 'revenueTrend', source: 'revenue', key: 'revenueTrend', zone: 'charts', span: 8, permission: FINANCE_PERMS, capability: 'accounting', supported: true },
+  { id: 'cashFlow', source: 'cashFlow', key: 'cashFlow', zone: 'charts', span: 4, permission: FINANCE_PERMS, capability: 'accounting', supported: true },
 ];
 
 const baseInsights: WidgetConfig[] = [
@@ -70,226 +71,223 @@ const baseInsights: WidgetConfig[] = [
 ];
 
 const baseBottom: WidgetConfig[] = [
-  { id: 'activity', source: 'activity', key: 'activity', zone: 'bottom', span: 7, permission: AUDIT_PERMS, supported: true },
+  { id: 'activity', source: 'activity', key: 'activity', zone: 'bottom', span: 7, permission: AUDIT_PERMS, capability: 'audit', supported: true },
   { id: 'quickActions', source: 'quickActions', key: 'quickActions', zone: 'bottom', span: 5, supported: true },
 ];
 
-// ─── Restaurant ───
+// ─── Restaurant ────────────────────────────────────────────────────────────────
+// Capabilities: sales, inventory, customers
+// NO: employees, payroll, accounting (finance charts still shown via baseFinance)
 const restaurantConfig: IndustryDashboardConfig = {
   industry: 'restaurant',
   kpis: [
-    { id: 'todaySales', source: 'todaySales', key: 'metricCurrency', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: "Today's Sales" },
-    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Orders Today' },
-    { id: 'averageTicket', source: 'averageTicket', key: 'metricCurrency', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Average Ticket' },
-    { id: 'pendingOrders', source: 'pendingOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Pending Orders' },
+    { id: 'todaySales', source: 'todaySales', key: 'metricCurrency', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: "Today's Sales" },
+    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Orders Today' },
+    { id: 'averageTicket', source: 'averageOrderValue', key: 'metricCurrency', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Average Ticket' },
+    { id: 'pendingOrders', source: 'pendingOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Pending Orders' },
   ],
-  charts: [
-    ...baseFinance,
-  ],
+  charts: [...baseFinance],
   secondary: [
-    { id: 'lowStock', source: 'lowStock', key: 'list', zone: 'side', span: 6, permission: INVENTORY_PERMS, supported: true, title: 'Low Stock Items' },
-    { id: 'recentOrders', source: 'recentOrders', key: 'list', zone: 'side', span: 6, permission: SALES_PERMS, supported: true, title: 'Recent Orders' },
+    { id: 'lowStock', source: 'lowStock', key: 'list', zone: 'side', span: 6, permission: INVENTORY_PERMS, capability: 'inventory', supported: true, title: 'Low Stock Items' },
+    { id: 'recentOrders', source: 'recentOrders', key: 'list', zone: 'side', span: 6, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Recent Orders' },
   ],
   alerts: [
-    { id: 'lowStockAlert', source: 'lowStock', key: 'metric', zone: 'side', span: 4, permission: INVENTORY_PERMS, supported: true, title: 'Low Stock Alert' },
+    { id: 'lowStockAlert', source: 'lowStock', key: 'metric', zone: 'side', span: 4, permission: INVENTORY_PERMS, capability: 'inventory', supported: true, title: 'Low Stock Alert' },
   ],
   insights: baseInsights,
   bottom: baseBottom,
 };
 
-// ─── Hospital ───
+// ─── Hospital ──────────────────────────────────────────────────────────────────
+// Capabilities: sales, inventory, customers, employees, payroll, leaves
+// NO: appointments, bed occupancy, medical records, prescriptions
 const hospitalConfig: IndustryDashboardConfig = {
   industry: 'hospital',
   kpis: [
-    { id: 'totalCustomers', source: 'totalCustomers', key: 'metric', zone: 'hero', span: 3, permission: CUSTOMER_PERMS, supported: true, title: 'Patients' },
-    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Orders Today' },
-    { id: 'pendingOrders', source: 'pendingOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Pending Orders' },
-    { id: 'todayRevenue', source: 'todayRevenue', key: 'metricCurrency', zone: 'hero', span: 3, permission: FINANCE_PERMS, supported: true, title: "Today's Revenue" },
+    { id: 'totalCustomers', source: 'totalCustomers', key: 'metric', zone: 'hero', span: 3, permission: CUSTOMER_PERMS, capability: 'customers', supported: true, title: 'Patients' },
+    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Orders Today' },
+    { id: 'pendingOrders', source: 'pendingOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Pending Orders' },
+    { id: 'todayRevenue', source: 'todayRevenue', key: 'metricCurrency', zone: 'hero', span: 3, permission: FINANCE_PERMS, capability: 'sales', supported: true, title: "Today's Revenue" },
   ],
-  charts: [
-    ...baseFinance,
-  ],
+  charts: [...baseFinance],
   secondary: [
-    { id: 'newCustomers', source: 'newCustomersThisMonth', key: 'metric', zone: 'side', span: 6, permission: CUSTOMER_PERMS, supported: true, title: 'New Patients This Month' },
-    { id: 'lowStock', source: 'lowStock', key: 'list', zone: 'side', span: 6, permission: INVENTORY_PERMS, supported: true, title: 'Low Stock Items' },
+    { id: 'totalEmployees', source: 'totalEmployees', key: 'metric', zone: 'side', span: 6, permission: EMPLOYEE_PERMS, capability: 'employees', supported: true, title: 'Staff Count' },
+    { id: 'pendingLeaves', source: 'pendingLeaves', key: 'metric', zone: 'side', span: 6, permission: EMPLOYEE_PERMS, capability: 'leaves', supported: true, title: 'Pending Leaves' },
   ],
   alerts: [],
   insights: baseInsights,
   bottom: baseBottom,
 };
 
-// ─── Manufacturing ───
+// ─── Manufacturing ─────────────────────────────────────────────────────────────
+// Capabilities: sales, purchasing, inventory, customers
+// NO: production output, work orders, machine utilization
 const manufacturingConfig: IndustryDashboardConfig = {
   industry: 'manufacturing',
   kpis: [
-    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Orders Today' },
-    { id: 'completedOrders', source: 'completedOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Completed Orders' },
-    { id: 'pendingOrders', source: 'pendingOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Pending Orders' },
-    { id: 'todayRevenue', source: 'todayRevenue', key: 'metricCurrency', zone: 'hero', span: 3, permission: FINANCE_PERMS, supported: true, title: "Today's Revenue" },
+    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Orders Today' },
+    { id: 'completedOrders', source: 'completedOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Completed Orders' },
+    { id: 'pendingOrders', source: 'pendingOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Pending Orders' },
+    { id: 'todayRevenue', source: 'todayRevenue', key: 'metricCurrency', zone: 'hero', span: 3, permission: FINANCE_PERMS, capability: 'sales', supported: true, title: "Today's Revenue" },
   ],
-  charts: [
-    ...baseFinance,
-  ],
+  charts: [...baseFinance],
   secondary: [
-    { id: 'lowStock', source: 'lowStock', key: 'list', zone: 'side', span: 6, permission: INVENTORY_PERMS, supported: true, title: 'Low Stock Items' },
-    { id: 'recentOrders', source: 'recentOrders', key: 'list', zone: 'side', span: 6, permission: SALES_PERMS, supported: true, title: 'Recent Orders' },
+    { id: 'lowStock', source: 'lowStock', key: 'list', zone: 'side', span: 6, permission: INVENTORY_PERMS, capability: 'inventory', supported: true, title: 'Low Stock Items' },
+    { id: 'recentOrders', source: 'recentOrders', key: 'list', zone: 'side', span: 6, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Recent Orders' },
   ],
   alerts: [
-    { id: 'lowStockAlert', source: 'lowStock', key: 'metric', zone: 'side', span: 4, permission: INVENTORY_PERMS, supported: true, title: 'Low Stock Alert' },
+    { id: 'lowStockAlert', source: 'lowStock', key: 'metric', zone: 'side', span: 4, permission: INVENTORY_PERMS, capability: 'inventory', supported: true, title: 'Low Stock Alert' },
   ],
   insights: baseInsights,
   bottom: baseBottom,
 };
 
-// ─── School ───
+// ─── School ────────────────────────────────────────────────────────────────────
+// Capabilities: sales, customers, employees, payroll, leaves
+// NO: enrollment, attendance, academic calendar
 const schoolConfig: IndustryDashboardConfig = {
   industry: 'school',
   kpis: [
-    { id: 'totalCustomers', source: 'totalCustomers', key: 'metric', zone: 'hero', span: 3, permission: CUSTOMER_PERMS, supported: true, title: 'Students' },
-    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Orders Today' },
-    { id: 'todayRevenue', source: 'todayRevenue', key: 'metricCurrency', zone: 'hero', span: 3, permission: FINANCE_PERMS, supported: true, title: "Today's Revenue" },
-    { id: 'pendingOrders', source: 'pendingOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Pending Orders' },
+    { id: 'totalCustomers', source: 'totalCustomers', key: 'metric', zone: 'hero', span: 3, permission: CUSTOMER_PERMS, capability: 'customers', supported: true, title: 'Students' },
+    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Orders Today' },
+    { id: 'todayRevenue', source: 'todayRevenue', key: 'metricCurrency', zone: 'hero', span: 3, permission: FINANCE_PERMS, capability: 'sales', supported: true, title: "Today's Revenue" },
+    { id: 'pendingOrders', source: 'pendingOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Pending Orders' },
   ],
-  charts: [
-    ...baseFinance,
-  ],
+  charts: [...baseFinance],
   secondary: [
-    { id: 'totalEmployees', source: 'totalEmployees', key: 'metric', zone: 'side', span: 6, permission: EMPLOYEE_PERMS, supported: true, title: 'Staff Count' },
-    { id: 'recentOrders', source: 'recentOrders', key: 'list', zone: 'side', span: 6, permission: SALES_PERMS, supported: true, title: 'Recent Orders' },
+    { id: 'totalEmployees', source: 'totalEmployees', key: 'metric', zone: 'side', span: 6, permission: EMPLOYEE_PERMS, capability: 'employees', supported: true, title: 'Staff Count' },
+    { id: 'pendingLeaves', source: 'pendingLeaves', key: 'metric', zone: 'side', span: 6, permission: EMPLOYEE_PERMS, capability: 'leaves', supported: true, title: 'Pending Leaves' },
   ],
   alerts: [],
   insights: baseInsights,
   bottom: baseBottom,
 };
 
-// ─── Software ───
+// ─── Software ──────────────────────────────────────────────────────────────────
+// Capabilities: sales, customers, employees, payroll, leaves
+// NO: projects, sprints, pull requests, deployments
 const softwareConfig: IndustryDashboardConfig = {
   industry: 'software',
   kpis: [
-    { id: 'todayRevenue', source: 'todayRevenue', key: 'metricCurrency', zone: 'hero', span: 3, permission: FINANCE_PERMS, supported: true, title: "Today's Revenue" },
-    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Orders Today' },
-    { id: 'totalCustomers', source: 'totalCustomers', key: 'metric', zone: 'hero', span: 3, permission: CUSTOMER_PERMS, supported: true, title: 'Customers' },
-    { id: 'newCustomers', source: 'newCustomersThisMonth', key: 'metric', zone: 'hero', span: 3, permission: CUSTOMER_PERMS, supported: true, title: 'New Clients' },
+    { id: 'todayRevenue', source: 'todayRevenue', key: 'metricCurrency', zone: 'hero', span: 3, permission: FINANCE_PERMS, capability: 'sales', supported: true, title: "Today's Revenue" },
+    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Orders Today' },
+    { id: 'totalCustomers', source: 'totalCustomers', key: 'metric', zone: 'hero', span: 3, permission: CUSTOMER_PERMS, capability: 'customers', supported: true, title: 'Customers' },
+    { id: 'newCustomers', source: 'newCustomersThisMonth', key: 'metric', zone: 'hero', span: 3, permission: CUSTOMER_PERMS, capability: 'customers', supported: true, title: 'New Clients' },
   ],
-  charts: [
-    ...baseFinance,
-  ],
+  charts: [...baseFinance],
   secondary: [
-    { id: 'recentOrders', source: 'recentOrders', key: 'list', zone: 'side', span: 6, permission: SALES_PERMS, supported: true, title: 'Recent Orders' },
-    { id: 'lowStock', source: 'lowStock', key: 'list', zone: 'side', span: 6, permission: INVENTORY_PERMS, supported: true, title: 'Low Stock Items' },
+    { id: 'totalEmployees', source: 'totalEmployees', key: 'metric', zone: 'side', span: 6, permission: EMPLOYEE_PERMS, capability: 'employees', supported: true, title: 'Team Size' },
+    { id: 'recentOrders', source: 'recentOrders', key: 'list', zone: 'side', span: 6, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Recent Orders' },
   ],
   alerts: [],
   insights: baseInsights,
   bottom: baseBottom,
 };
 
-// ─── Retail ───
+// ─── Retail ────────────────────────────────────────────────────────────────────
+// Capabilities: sales, inventory, customers
 const retailConfig: IndustryDashboardConfig = {
   industry: 'retail',
   kpis: [
-    { id: 'todaySales', source: 'todaySales', key: 'metricCurrency', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: "Today's Sales" },
-    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Transactions' },
-    { id: 'averageTicket', source: 'averageTicket', key: 'metricCurrency', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Avg Order Value' },
-    { id: 'pendingOrders', source: 'pendingOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Pending Orders' },
+    { id: 'todaySales', source: 'todaySales', key: 'metricCurrency', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: "Today's Sales" },
+    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Transactions' },
+    { id: 'averageTicket', source: 'averageOrderValue', key: 'metricCurrency', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Avg Order Value' },
+    { id: 'pendingOrders', source: 'pendingOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Pending Orders' },
   ],
-  charts: [
-    ...baseFinance,
-  ],
+  charts: [...baseFinance],
   secondary: [
-    { id: 'lowStock', source: 'lowStock', key: 'list', zone: 'side', span: 6, permission: INVENTORY_PERMS, supported: true, title: 'Low Stock Items' },
-    { id: 'recentOrders', source: 'recentOrders', key: 'list', zone: 'side', span: 6, permission: SALES_PERMS, supported: true, title: 'Recent Orders' },
+    { id: 'lowStock', source: 'lowStock', key: 'list', zone: 'side', span: 6, permission: INVENTORY_PERMS, capability: 'inventory', supported: true, title: 'Low Stock Items' },
+    { id: 'recentOrders', source: 'recentOrders', key: 'list', zone: 'side', span: 6, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Recent Orders' },
   ],
   alerts: [
-    { id: 'lowStockAlert', source: 'lowStock', key: 'metric', zone: 'side', span: 4, permission: INVENTORY_PERMS, supported: true, title: 'Low Stock Alert' },
+    { id: 'lowStockAlert', source: 'lowStock', key: 'metric', zone: 'side', span: 4, permission: INVENTORY_PERMS, capability: 'inventory', supported: true, title: 'Low Stock Alert' },
   ],
   insights: baseInsights,
   bottom: baseBottom,
 };
 
-// ─── Pharmacy ───
+// ─── Pharmacy ──────────────────────────────────────────────────────────────────
+// Capabilities: sales, inventory, customers
+// NO: prescriptions (no Prescription model in Prisma)
 const pharmacyConfig: IndustryDashboardConfig = {
   industry: 'pharmacy',
   kpis: [
-    { id: 'todaySales', source: 'todaySales', key: 'metricCurrency', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: "Today's Sales" },
-    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Prescriptions Today' },
-    { id: 'pendingOrders', source: 'pendingOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Pending Orders' },
-    { id: 'todayRevenue', source: 'todayRevenue', key: 'metricCurrency', zone: 'hero', span: 3, permission: FINANCE_PERMS, supported: true, title: "Today's Revenue" },
+    { id: 'todaySales', source: 'todaySales', key: 'metricCurrency', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: "Today's Sales" },
+    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Orders Today' },
+    { id: 'pendingOrders', source: 'pendingOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Pending Orders' },
+    { id: 'todayRevenue', source: 'todayRevenue', key: 'metricCurrency', zone: 'hero', span: 3, permission: FINANCE_PERMS, capability: 'sales', supported: true, title: "Today's Revenue" },
   ],
-  charts: [
-    ...baseFinance,
-  ],
+  charts: [...baseFinance],
   secondary: [
-    { id: 'lowStock', source: 'lowStock', key: 'list', zone: 'side', span: 12, permission: INVENTORY_PERMS, supported: true, title: 'Low Stock Items' },
+    { id: 'lowStock', source: 'lowStock', key: 'list', zone: 'side', span: 12, permission: INVENTORY_PERMS, capability: 'inventory', supported: true, title: 'Low Stock Items' },
   ],
   alerts: [
-    { id: 'lowStockAlert', source: 'lowStock', key: 'metric', zone: 'side', span: 4, permission: INVENTORY_PERMS, supported: true, title: 'Low Stock Alert' },
+    { id: 'lowStockAlert', source: 'lowStock', key: 'metric', zone: 'side', span: 4, permission: INVENTORY_PERMS, capability: 'inventory', supported: true, title: 'Low Stock Alert' },
   ],
   insights: baseInsights,
   bottom: baseBottom,
 };
 
-// ─── Garments ───
+// ─── Garments ──────────────────────────────────────────────────────────────────
+// Capabilities: sales, purchasing, inventory, customers
 const garmentsConfig: IndustryDashboardConfig = {
   industry: 'garments',
   kpis: [
-    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Orders Today' },
-    { id: 'pendingOrders', source: 'pendingOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Pending Delivery' },
-    { id: 'completedOrders', source: 'completedOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Completed Orders' },
-    { id: 'todayRevenue', source: 'todayRevenue', key: 'metricCurrency', zone: 'hero', span: 3, permission: FINANCE_PERMS, supported: true, title: "Today's Revenue" },
+    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Orders Today' },
+    { id: 'pendingOrders', source: 'pendingOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Pending Delivery' },
+    { id: 'completedOrders', source: 'completedOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Completed Orders' },
+    { id: 'todayRevenue', source: 'todayRevenue', key: 'metricCurrency', zone: 'hero', span: 3, permission: FINANCE_PERMS, capability: 'sales', supported: true, title: "Today's Revenue" },
   ],
-  charts: [
-    ...baseFinance,
-  ],
+  charts: [...baseFinance],
   secondary: [
-    { id: 'lowStock', source: 'lowStock', key: 'list', zone: 'side', span: 6, permission: INVENTORY_PERMS, supported: true, title: 'Low Stock Items' },
-    { id: 'recentOrders', source: 'recentOrders', key: 'list', zone: 'side', span: 6, permission: SALES_PERMS, supported: true, title: 'Recent Orders' },
+    { id: 'lowStock', source: 'lowStock', key: 'list', zone: 'side', span: 6, permission: INVENTORY_PERMS, capability: 'inventory', supported: true, title: 'Low Stock Items' },
+    { id: 'recentOrders', source: 'recentOrders', key: 'list', zone: 'side', span: 6, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Recent Orders' },
   ],
   alerts: [
-    { id: 'lowStockAlert', source: 'lowStock', key: 'metric', zone: 'side', span: 4, permission: INVENTORY_PERMS, supported: true, title: 'Low Stock Alert' },
+    { id: 'lowStockAlert', source: 'lowStock', key: 'metric', zone: 'side', span: 4, permission: INVENTORY_PERMS, capability: 'inventory', supported: true, title: 'Low Stock Alert' },
   ],
   insights: baseInsights,
   bottom: baseBottom,
 };
 
-// ─── IT Services ───
+// ─── IT Services ───────────────────────────────────────────────────────────────
+// Capabilities: sales, customers, employees, payroll, leaves
+// NO: tickets, projects
 const itServicesConfig: IndustryDashboardConfig = {
   industry: 'it-services',
   kpis: [
-    { id: 'todayRevenue', source: 'todayRevenue', key: 'metricCurrency', zone: 'hero', span: 3, permission: FINANCE_PERMS, supported: true, title: "Today's Revenue" },
-    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Orders Today' },
-    { id: 'totalCustomers', source: 'totalCustomers', key: 'metric', zone: 'hero', span: 3, permission: CUSTOMER_PERMS, supported: true, title: 'Customers' },
-    { id: 'newCustomers', source: 'newCustomersThisMonth', key: 'metric', zone: 'hero', span: 3, permission: CUSTOMER_PERMS, supported: true, title: 'New Clients' },
+    { id: 'todayRevenue', source: 'todayRevenue', key: 'metricCurrency', zone: 'hero', span: 3, permission: FINANCE_PERMS, capability: 'sales', supported: true, title: "Today's Revenue" },
+    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Orders Today' },
+    { id: 'totalCustomers', source: 'totalCustomers', key: 'metric', zone: 'hero', span: 3, permission: CUSTOMER_PERMS, capability: 'customers', supported: true, title: 'Customers' },
+    { id: 'newCustomers', source: 'newCustomersThisMonth', key: 'metric', zone: 'hero', span: 3, permission: CUSTOMER_PERMS, capability: 'customers', supported: true, title: 'New Clients' },
   ],
-  charts: [
-    ...baseFinance,
-  ],
+  charts: [...baseFinance],
   secondary: [
-    { id: 'recentOrders', source: 'recentOrders', key: 'list', zone: 'side', span: 6, permission: SALES_PERMS, supported: true, title: 'Recent Orders' },
-    { id: 'lowStock', source: 'lowStock', key: 'list', zone: 'side', span: 6, permission: INVENTORY_PERMS, supported: true, title: 'Low Stock Items' },
+    { id: 'totalEmployees', source: 'totalEmployees', key: 'metric', zone: 'side', span: 6, permission: EMPLOYEE_PERMS, capability: 'employees', supported: true, title: 'Team Size' },
+    { id: 'recentOrders', source: 'recentOrders', key: 'list', zone: 'side', span: 6, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Recent Orders' },
   ],
   alerts: [],
   insights: baseInsights,
   bottom: baseBottom,
 };
 
-// ─── General (fallback) ───
+// ─── General (fallback) ────────────────────────────────────────────────────────
+// All capabilities
 const generalConfig: IndustryDashboardConfig = {
   industry: 'general',
   kpis: [
-    { id: 'todaySales', source: 'todaySales', key: 'metricCurrency', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: "Today's Sales" },
-    { id: 'totalCustomers', source: 'totalCustomers', key: 'metric', zone: 'hero', span: 3, permission: CUSTOMER_PERMS, supported: true, title: 'Customers' },
-    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Orders Today' },
-    { id: 'totalEmployees', source: 'totalEmployees', key: 'metric', zone: 'hero', span: 3, permission: EMPLOYEE_PERMS, supported: true, title: 'Employees' },
+    { id: 'todaySales', source: 'todaySales', key: 'metricCurrency', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: "Today's Sales" },
+    { id: 'totalCustomers', source: 'totalCustomers', key: 'metric', zone: 'hero', span: 3, permission: CUSTOMER_PERMS, capability: 'customers', supported: true, title: 'Customers' },
+    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Orders Today' },
+    { id: 'totalEmployees', source: 'totalEmployees', key: 'metric', zone: 'hero', span: 3, permission: EMPLOYEE_PERMS, capability: 'employees', supported: true, title: 'Employees' },
   ],
-  charts: [
-    ...baseFinance,
-  ],
+  charts: [...baseFinance],
   secondary: [
-    { id: 'lowStock', source: 'lowStock', key: 'list', zone: 'side', span: 6, permission: INVENTORY_PERMS, supported: true, title: 'Low Stock Items' },
-    { id: 'recentOrders', source: 'recentOrders', key: 'list', zone: 'side', span: 6, permission: SALES_PERMS, supported: true, title: 'Recent Orders' },
+    { id: 'lowStock', source: 'lowStock', key: 'list', zone: 'side', span: 6, permission: INVENTORY_PERMS, capability: 'inventory', supported: true, title: 'Low Stock Items' },
+    { id: 'recentOrders', source: 'recentOrders', key: 'list', zone: 'side', span: 6, permission: SALES_PERMS, capability: 'sales', supported: true, title: 'Recent Orders' },
   ],
   alerts: [
-    { id: 'lowStockAlert', source: 'lowStock', key: 'metric', zone: 'side', span: 4, permission: INVENTORY_PERMS, supported: true, title: 'Low Stock Alert' },
+    { id: 'lowStockAlert', source: 'lowStock', key: 'metric', zone: 'side', span: 4, permission: INVENTORY_PERMS, capability: 'inventory', supported: true, title: 'Low Stock Alert' },
   ],
   insights: baseInsights,
   bottom: baseBottom,

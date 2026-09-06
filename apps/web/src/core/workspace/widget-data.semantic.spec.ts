@@ -32,6 +32,8 @@ const EMPTY_DASHBOARD_CONFIG: DashboardConfig = {
   insights: [],
   bottom: [],
   allWidgets: [],
+  requiredSources: [],
+  activeCapabilities: [],
 };
 
 function makeOverview(stats: DashboardStatistics, industryMetrics?: Partial<IndustryMetrics>): DashboardOverview {

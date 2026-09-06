@@ -131,11 +131,16 @@ export class DashboardService {
     private readonly configService: DashboardConfigService,
   ) {}
 
-  async getOverview(orgId: string, userId: string, permissions: string[]): Promise<DashboardOverview> {
+  async getOverview(
+    orgId: string,
+    userId: string,
+    permissions: string[],
+    enabledModules: string[] = [],
+  ): Promise<DashboardOverview> {
     await this.validateOrgMembership(orgId, userId);
 
     // Cache only org-level data (same for all users in the org).
-    // dashboardConfig is resolved per-request because it depends on user permissions.
+    // dashboardConfig is resolved per-request because it depends on user permissions + modules.
     const cacheKey = this.redis.organizationKey(orgId, 'dashboard:orgdata');
     const cached = await this.redis.get<OrgLevelData>(cacheKey);
     const orgData = cached ?? await this.fetchOrgLevelData(orgId, permissions);
@@ -144,8 +149,12 @@ export class DashboardService {
       await this.redis.set(cacheKey, orgData, { ttlSeconds: DashboardService.CACHE_TTL });
     }
 
-    // Resolve dashboard config per-request (permission-filtered, org-overridden).
-    const dashboardConfig = await this.configService.resolveConfig(orgId, permissions);
+    // Resolve dashboard config per-request (permission-filtered, capability-filtered, org-overridden).
+    const dashboardConfig = await this.configService.resolveConfig(orgId, permissions, enabledModules);
+
+    this.logger.debug(
+      `Dashboard resolved: industry=${dashboardConfig.industry} widgets=${dashboardConfig.allWidgets.length} sources=[${dashboardConfig.requiredSources.join(',')}]`,
+    );
 
     const hasAny = (...required: string[]) => required.some((permission) => permissions.includes(permission));
     const gatedActivities = orgData.recentActivities.filter((activity) => this.canSeeActivity(activity.entity, permissions, hasAny));

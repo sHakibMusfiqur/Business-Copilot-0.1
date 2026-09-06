@@ -9,8 +9,13 @@ import {
   type IndustryKey,
   getIndustryConfig,
   VALID_INDUSTRY_KEYS,
-  VALID_WIDGET_SOURCES,
 } from './industry-configs';
+import {
+  type Capability,
+  getCapabilities,
+  isSourceSupported,
+  filterByModules,
+} from './industry-capabilities';
 
 /** Resolved dashboard configuration sent to the frontend. */
 export interface ResolvedDashboardConfig {
@@ -22,6 +27,10 @@ export interface ResolvedDashboardConfig {
   insights: WidgetConfig[];
   bottom: WidgetConfig[];
   allWidgets: WidgetConfig[];
+  /** Unique source keys required by the resolved widgets (for query optimization). */
+  requiredSources: string[];
+  /** Capabilities active after module filtering. */
+  activeCapabilities: Capability[];
 }
 
 /** User-facing dashboard config override stored in OrganizationSettings.settings.dashboard. */
@@ -41,25 +50,49 @@ export class DashboardConfigService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  
+  /**
+   * Resolve the final dashboard configuration for an organization + user.
+   *
+   * Resolution order:
+   * 1. Industry defaults
+   * 2. Organization overrides from settings.dashboard
+   * 3. Capability filtering (industry capabilities → module filtering)
+   * 4. Permission filtering
+   * 5. Source validation (only real backend sources with matching capability)
+   */
   async resolveConfig(
     orgId: string,
     permissions: string[],
+    enabledModules: string[] = [],
   ): Promise<ResolvedDashboardConfig> {
     const { industry, orgOverride } = await this.getOrgSettings(orgId);
     const industryConfig = getIndustryConfig(industry);
 
+    // Step 1: Get industry capabilities, then filter by enabled modules
+    const industryCapabilities = getCapabilities(industry ?? 'general');
+    const activeCapabilities = enabledModules.length > 0
+      ? filterByModules(industryCapabilities, enabledModules)
+      : [...industryCapabilities];
+
+    const hasCapability = (cap: Capability): boolean => activeCapabilities.includes(cap);
+
     const hasPermission = (...required: string[]): boolean =>
       required.some((p) => permissions.includes(p));
+
+    // Step 2: Filter by capability — widget's source must be supported for this industry+modules
+    const filterByCapability = (widgets: WidgetConfig[]): WidgetConfig[] =>
+      widgets.filter((w) => {
+        // If widget declares a capability, check it's active
+        if (w.capability && !hasCapability(w.capability)) return false;
+        // Also check the source is supported for this industry
+        return isSourceSupported(w.source, industry ?? 'general');
+      });
 
     const filterByPermission = (widgets: WidgetConfig[]): WidgetConfig[] =>
       widgets.filter((w) => {
         if (!w.permission || w.permission.length === 0) return true;
         return hasPermission(...w.permission);
       });
-
-    const filterBySource = (widgets: WidgetConfig[]): WidgetConfig[] =>
-      widgets.filter((w) => VALID_WIDGET_SOURCES.has(w.source));
 
     const filterByHidden = (widgets: WidgetConfig[]): WidgetConfig[] =>
       widgets.filter((w) => !(orgOverride?.hiddenWidgets ?? []).includes(w.id));
@@ -82,7 +115,7 @@ export class DashboardConfigService {
     };
 
     const processZone = (widgets: WidgetConfig[]): WidgetConfig[] =>
-      applyOrder(filterByHidden(filterByPermission(filterBySource(widgets))));
+      applyOrder(filterByHidden(filterByPermission(filterByCapability(widgets))));
 
     const kpis = processZone(
       orgOverride?.kpis
@@ -122,12 +155,13 @@ export class DashboardConfigService {
       for (const widgetId of orgOverride.enabledWidgets) {
         if (!allWidgetIds.has(widgetId)) {
           const widget = this.findWidgetInAllConfigs(widgetId, industryConfig);
-          if (widget && VALID_WIDGET_SOURCES.has(widget.source)) {
-            const permitted =
+          if (widget && isSourceSupported(widget.source, industry ?? 'general')) {
+            const capOk = !widget.capability || hasCapability(widget.capability);
+            const permOk =
               !widget.permission ||
               widget.permission.length === 0 ||
               hasPermission(...widget.permission);
-            if (permitted) {
+            if (capOk && permOk) {
               extraWidgets.push({ ...widget, supported: true });
               allWidgetIds.add(widgetId);
             }
@@ -146,6 +180,9 @@ export class DashboardConfigService {
       ...extraWidgets,
     ];
 
+    // Collect unique source keys for query optimization
+    const requiredSources = [...new Set(allWidgets.map((w) => w.source))];
+
     return {
       industry: (industry as IndustryKey) ?? 'general',
       kpis,
@@ -155,6 +192,8 @@ export class DashboardConfigService {
       insights,
       bottom,
       allWidgets,
+      requiredSources,
+      activeCapabilities,
     };
   }
 
