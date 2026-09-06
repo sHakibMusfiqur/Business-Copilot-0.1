@@ -1,4 +1,6 @@
+
 // ─── Query Groups ─────────────────────────────────────────────────────────────
+
 export type QueryGroup =
   | 'sales'
   | 'inventory'
@@ -27,18 +29,19 @@ export interface QueryPlan {
 
 // ─── Source → Group Mapping ────────────────────────────────────────────────────
 
+
 const SOURCE_TO_GROUP: Record<string, QueryGroup> = {
   // ─── Sales ───
   todaySales: 'sales',
   todayOrders: 'sales',
   todayRevenue: 'sales',
-  todayExpenses: 'sales',
   pendingOrders: 'sales',
   completedOrders: 'sales',
   cancelledOrders: 'sales',
   averageOrderValue: 'sales',
   recentOrders: 'sales',
   topSellingProducts: 'sales',
+  salesTrend: 'sales',
 
   // ─── Inventory ───
   lowStock: 'inventory',
@@ -57,18 +60,20 @@ const SOURCE_TO_GROUP: Record<string, QueryGroup> = {
   // ─── Payroll ───
   monthlyPayroll: 'payroll',
 
-  // ─── Finance ───
+  // ─── Finance (includes purchasing expense metrics) ───
   monthlyRevenue: 'finance',
+  todayExpenses: 'finance',
   revenue: 'finance',
   cashFlow: 'finance',
+  expenseTrend: 'finance',
 
   // ─── Audit ───
   activity: 'audit',
-
-
 };
 
 // ─── Permission → Group Mapping ────────────────────────────────────────────────
+
+
 const GROUP_PERMISSIONS: Record<QueryGroup, string[]> = {
   sales:     ['sales.read', 'invoices.read'],
   inventory: ['inventory.read'],
@@ -76,31 +81,11 @@ const GROUP_PERMISSIONS: Record<QueryGroup, string[]> = {
   employees: ['employees.read'],
   leaves:    ['employees.read'],
   payroll:   ['payroll.read'],
-  finance:   ['invoices.read', 'payments.read', 'accounting.read', 'reports.finance'],
+  finance:   ['invoices.read', 'payments.read', 'accounting.read', 'reports.finance', 'purchase.read'],
   audit:     ['audit.read'],
 };
 
-// ─── Deduplication: Shared Aggregates ──────────────────────────────────────────
-
-
-export const SALES_DEDUP_GROUP = 'salesAggregate';
-
-const DEDUP_GROUPS: Record<string, string[]> = {
-  [SALES_DEDUP_GROUP]: ['todaySales', 'todayRevenue', 'averageOrderValue', 'topSellingProducts'],
-};
-
-/** Get the dedup group for a source, or null if no dedup. */
-export function getDedupGroup(source: string): string | null {
-  for (const [group, sources] of Object.entries(DEDUP_GROUPS)) {
-    if (sources.includes(source)) return group;
-  }
-  return null;
-}
-
 // ─── Plan Builder ──────────────────────────────────────────────────────────────
-
-/** Warn about unknown sources (once per source). */
-const warnedSources = new Set<string>();
 
 
 export function buildQueryPlan(
@@ -134,14 +119,7 @@ export function buildQueryPlan(
 
   for (const source of requiredSources) {
     const group = SOURCE_TO_GROUP[source];
-
-    if (!group) {
-      if (!warnedSources.has(source)) {
-        warnedSources.add(source);
-        // Warning logged by caller — planner stays pure
-      }
-      continue;
-    }
+    if (!group) continue;
 
     // Check permission for this group
     const groupPerms = GROUP_PERMISSIONS[group];
@@ -160,10 +138,7 @@ export function buildQueryPlan(
   return plan;
 }
 
-
-export function getUnknownSources(sources: string[]): string[] {
-  return sources.filter((s) => !(s in SOURCE_TO_GROUP) && !Object.values(DEDUP_GROUPS).some((g) => g.includes(s)));
-}
+// ─── Validation Helpers ────────────────────────────────────────────────────────
 
 /** Get all valid source keys (for validation). */
 export function getValidSourceKeys(): string[] {
@@ -173,4 +148,14 @@ export function getValidSourceKeys(): string[] {
 /** Get all query groups. */
 export function getAllQueryGroups(): QueryGroup[] {
   return ['sales', 'inventory', 'customers', 'employees', 'leaves', 'payroll', 'finance', 'audit'];
+}
+
+/** Get the group for a source, or null if unknown. */
+export function getSourceGroup(source: string): QueryGroup | null {
+  return SOURCE_TO_GROUP[source] ?? null;
+}
+
+/** Get the permissions for a group. */
+export function getGroupPermissions(group: QueryGroup): string[] {
+  return GROUP_PERMISSIONS[group] ?? [];
 }

@@ -2,11 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildQueryPlan,
-  getUnknownSources,
   getValidSourceKeys,
   getAllQueryGroups,
-  getDedupGroup,
-  SALES_DEDUP_GROUP,
+  getSourceGroup,
+  getGroupPermissions,
 } from './dashboard-query-planner';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -21,6 +20,7 @@ const SALES_ONLY = ['sales.read', 'invoices.read'];
 const SALES_ONLY_NO_INVOICES = ['sales.read'];
 const INVENTORY_ONLY = ['inventory.read'];
 const FINANCE_ONLY = ['invoices.read', 'payments.read', 'accounting.read', 'reports.finance'];
+const PURCHASE_ONLY = ['purchase.read'];
 const EMPLOYEE_ONLY = ['employees.read', 'payroll.read'];
 const AUDIT_ONLY = ['audit.read'];
 const NO_PERMISSIONS: string[] = [];
@@ -83,6 +83,28 @@ describe('buildQueryPlan', () => {
       const plan = buildQueryPlan(['activity'], AUDIT_ONLY);
       expect(plan.audit).toBe(true);
       expect(plan.activeGroupCount).toBe(1);
+    });
+  });
+
+  describe('todayExpenses semantic (purchasing metric in finance group)', () => {
+    it('maps todayExpenses to finance group', () => {
+      expect(getSourceGroup('todayExpenses')).toBe('finance');
+    });
+
+    it('enables finance group for purchase.read permission', () => {
+      const plan = buildQueryPlan(['todayExpenses'], PURCHASE_ONLY);
+      expect(plan.finance).toBe(true);
+      expect(plan.activeGroupCount).toBe(1);
+    });
+
+    it('does NOT enable finance group for todayExpenses without purchase.read or finance perms', () => {
+      const plan = buildQueryPlan(['todayExpenses'], SALES_ONLY_NO_INVOICES);
+      expect(plan.finance).toBe(false);
+    });
+
+    it('todayExpenses does NOT activate sales group', () => {
+      const plan = buildQueryPlan(['todayExpenses'], PURCHASE_ONLY);
+      expect(plan.sales).toBe(false);
     });
   });
 
@@ -220,48 +242,41 @@ describe('buildQueryPlan', () => {
   });
 });
 
-// ─── getDedupGroup ────────────────────────────────────────────────────────────
+// ─── getSourceGroup ───────────────────────────────────────────────────────────
 
-describe('getDedupGroup', () => {
-  it('returns SALES_DEDUP_GROUP for todaySales', () => {
-    expect(getDedupGroup('todaySales')).toBe(SALES_DEDUP_GROUP);
+describe('getSourceGroup', () => {
+  it('returns correct group for each source category', () => {
+    expect(getSourceGroup('todaySales')).toBe('sales');
+    expect(getSourceGroup('todayOrders')).toBe('sales');
+    expect(getSourceGroup('lowStock')).toBe('inventory');
+    expect(getSourceGroup('totalCustomers')).toBe('customers');
+    expect(getSourceGroup('totalEmployees')).toBe('employees');
+    expect(getSourceGroup('pendingLeaves')).toBe('leaves');
+    expect(getSourceGroup('monthlyPayroll')).toBe('payroll');
+    expect(getSourceGroup('monthlyRevenue')).toBe('finance');
+    expect(getSourceGroup('todayExpenses')).toBe('finance');
+    expect(getSourceGroup('activity')).toBe('audit');
   });
 
-  it('returns SALES_DEDUP_GROUP for todayRevenue', () => {
-    expect(getDedupGroup('todayRevenue')).toBe(SALES_DEDUP_GROUP);
-  });
-
-  it('returns SALES_DEDUP_GROUP for averageOrderValue', () => {
-    expect(getDedupGroup('averageOrderValue')).toBe(SALES_DEDUP_GROUP);
-  });
-
-  it('returns SALES_DEDUP_GROUP for topSellingProducts', () => {
-    expect(getDedupGroup('topSellingProducts')).toBe(SALES_DEDUP_GROUP);
-  });
-
-  it('returns null for non-deduped sources', () => {
-    expect(getDedupGroup('lowStock')).toBeNull();
-    expect(getDedupGroup('totalCustomers')).toBeNull();
-    expect(getDedupGroup('activity')).toBeNull();
+  it('returns null for unknown sources', () => {
+    expect(getSourceGroup('fakeSource')).toBeNull();
   });
 });
 
-// ─── getUnknownSources ────────────────────────────────────────────────────────
+// ─── getGroupPermissions ──────────────────────────────────────────────────────
 
-describe('getUnknownSources', () => {
-  it('returns empty array for all known sources', () => {
-    const known = getValidSourceKeys();
-    expect(getUnknownSources(known)).toHaveLength(0);
+describe('getGroupPermissions', () => {
+  it('finance group includes purchase.read', () => {
+    const perms = getGroupPermissions('finance');
+    expect(perms).toContain('purchase.read');
+    expect(perms).toContain('invoices.read');
+    expect(perms).toContain('accounting.read');
   });
 
-  it('filters out unknown sources', () => {
-    const result = getUnknownSources(['todaySales', 'fakeSource', 'lowStock']);
-    expect(result).toEqual(['fakeSource']);
-  });
-
-  it('returns all sources when all are unknown', () => {
-    const result = getUnknownSources(['foo', 'bar']);
-    expect(result).toEqual(['foo', 'bar']);
+  it('sales group includes invoices.read', () => {
+    const perms = getGroupPermissions('sales');
+    expect(perms).toContain('sales.read');
+    expect(perms).toContain('invoices.read');
   });
 });
 
@@ -282,6 +297,7 @@ describe('getValidSourceKeys', () => {
     expect(keys).toContain('pendingLeaves');
     expect(keys).toContain('monthlyPayroll');
     expect(keys).toContain('monthlyRevenue');
+    expect(keys).toContain('todayExpenses');
     expect(keys).toContain('activity');
   });
 });

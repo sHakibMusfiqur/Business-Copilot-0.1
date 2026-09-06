@@ -9,12 +9,8 @@ import { DashboardConfigService, type ResolvedDashboardConfig } from './dashboar
 import {
   buildQueryPlan,
   type QueryPlan,
+  type QueryGroup,
 } from './dashboard-query-planner';
-
-const VALID_INDUSTRY_KEYS = new Set([
-  'restaurant', 'hospital', 'manufacturing', 'school', 'software',
-  'retail', 'pharmacy', 'garments', 'it-services', 'general',
-]);
 
 export type IndustryKey =
   | 'restaurant' | 'hospital' | 'manufacturing' | 'school' | 'software'
@@ -104,15 +100,6 @@ export interface DashboardOverview {
  */
 const FINANCE_PERMISSIONS = ['invoices.read', 'payments.read', 'accounting.read', 'reports.finance'];
 
-/** Org-level data that is the same for all users in an organization. Cached in Redis. */
-interface OrgLevelData {
-  organization: DashboardOrganization;
-  statistics: DashboardStatistics;
-  industryMetrics: IndustryMetrics;
-  trends: DashboardTrends;
-  recentActivities: RecentActivityItem[];
-}
-
 const ACTIVITY_ENTITY_PERMISSIONS: Array<[RegExp, string[]]> = [
   [/invoice|payment|account|journal|receivable|payable/i, FINANCE_PERMISSIONS],
   [/customer|lead/i, ['customers.read', 'crm.read']],
@@ -123,6 +110,51 @@ const ACTIVITY_ENTITY_PERMISSIONS: Array<[RegExp, string[]]> = [
   [/user|role|invitation|organization/i, ['users.read', 'organization.manage']],
   [/employee|leave|payroll|department/i, ['employees.read', 'payroll.read']],
 ];
+
+// ─── Per-Group Cached Data ─────────────────────────────────────────────────────
+
+/**
+ * Partial data structure for a single cached group.
+ * Each group stores only the fields it owns.
+ */
+interface CachedGroupData {
+  // Sales group
+  totalSalesOrders?: number;
+  todaySales?: number;
+  todayOrders?: number;
+  todayRevenue?: number;
+  pendingOrders?: number;
+  completedOrders?: number;
+  cancelledOrders?: number;
+  averageOrderValue?: number;
+  topSellingProducts?: Array<{ name: string; quantity: number; revenue: number }>;
+  recentOrders?: Array<{ id: string; number: string; total: number; status: string; date: Date }>;
+  salesTrend?: number[];
+  // Inventory group
+  totalProducts?: number;
+  lowStockProducts?: number;
+  lowStockCount?: number;
+  inventoryValue?: number;
+  // Customers group
+  totalCustomers?: number;
+  newCustomersThisMonth?: number;
+  // Employees group
+  totalEmployees?: number;
+  // Leaves group
+  pendingLeaves?: number;
+  // Payroll group
+  monthlyPayroll?: number;
+  // Finance group
+  totalInvoices?: number;
+  totalPurchaseOrders?: number;
+  monthlyRevenue?: number;
+  monthlyExpense?: number;
+  todayExpenses?: number;
+  revenueTrend?: number[];
+  expenseTrend?: number[];
+  // Audit group
+  recentActivities?: RecentActivityItem[];
+}
 
 @Injectable()
 export class DashboardService {
@@ -157,106 +189,325 @@ export class DashboardService {
         .join(', ')}]`,
     );
 
-    // Cache only org-level data (same for all users in the org).
-    // dashboardConfig is resolved per-request because it depends on user permissions + modules.
-    const cacheKey = this.redis.organizationKey(orgId, 'dashboard:orgdata');
-    const cached = await this.redis.get<OrgLevelData>(cacheKey);
-    const orgData = cached ?? await this.fetchOrgLevelData(orgId, permissions, queryPlan);
+    // Fetch organization metadata (always safe, always cached).
+    const organization = await this.getOrganization(orgId, dashboardConfig.industry);
 
-    if (!cached) {
-      await this.redis.set(cacheKey, orgData, { ttlSeconds: DashboardService.CACHE_TTL });
-    }
+    // Fetch each active group from cache or DB, respecting permissions.
+    const groupData = await this.fetchActiveGroups(orgId, permissions, queryPlan);
+
+    // Assemble the full response from cached group data.
+    const statistics = this.assembleStatistics(groupData);
+    const industryMetrics = this.assembleIndustryMetrics(groupData);
+    const trends = this.assembleTrends(groupData, queryPlan);
+    const recentActivities = groupData.recentActivities ?? [];
 
     const hasAny = (...required: string[]) => required.some((permission) => permissions.includes(permission));
-    const gatedActivities = orgData.recentActivities.filter((activity) => this.canSeeActivity(activity.entity, permissions, hasAny));
+    const gatedActivities = recentActivities.filter((activity) => this.canSeeActivity(activity.entity, permissions, hasAny));
     const quickActions = DEFAULT_QUICK_ACTIONS.filter((action) => permissions.includes(action.permission));
-
-    return {
-      organization: orgData.organization,
-      statistics: orgData.statistics,
-      industryMetrics: orgData.industryMetrics,
-      dashboardConfig,
-      trends: orgData.trends,
-      quickActions,
-      recentActivities: gatedActivities,
-      permissions,
-      aiInsights: this.buildAiInsights(orgData.statistics, dashboardConfig),
-    };
-  }
-
-  /** Fetch org-level data, respecting the query plan. Only active groups are queried. */
-  private async fetchOrgLevelData(orgId: string, permissions: string[], plan: QueryPlan): Promise<OrgLevelData> {
-    const hasAny = (...required: string[]) => required.some((permission) => permissions.includes(permission));
-    const canFinance = hasAny(...FINANCE_PERMISSIONS);
-
-    // ── Organization (always queried) ──────────────────────────────────────────
-    const organization = await this.getOrganization(orgId);
-
-    // ── Statistics: basic counts are always queried (cheap), extended stats are plan-gated ──
-    const [
-      totalUsers,
-      totalCustomers,
-      totalProducts,
-      totalSuppliers,
-      totalInvoices,
-      totalPurchaseOrders,
-      totalSalesOrders,
-    ] = await Promise.all([
-      this.safeCount(this.prisma.user.count({ where: { organizationId: orgId } })),
-      this.safeCount(this.prisma.customer.count({ where: { organizationId: orgId } })),
-      this.safeCount(this.prisma.product.count({ where: { organizationId: orgId } })),
-      this.safeCount(this.prisma.supplier.count({ where: { organizationId: orgId } })),
-      this.safeCount(this.prisma.invoice.count({ where: { organizationId: orgId } })),
-      this.safeCount(this.prisma.purchaseOrder.count({ where: { organizationId: orgId } })),
-      this.safeCount(this.prisma.salesOrder.count({ where: { organizationId: orgId } })),
-    ]);
-
-    // Extended stats — only query if the relevant group is active
-    const [lowStockProducts, monthlyRevenue, monthlyExpense, totalEmployees, pendingLeaves, monthlyPayroll] =
-      await Promise.all([
-        plan.inventory ? this.getLowStockCount(orgId) : Promise.resolve(0),
-        plan.finance && canFinance ? this.getMonthlyRevenue(orgId) : Promise.resolve(0),
-        plan.finance && canFinance ? this.getMonthlyExpense(orgId) : Promise.resolve(0),
-        plan.employees ? this.safeCount(this.prisma.employee.count({ where: { organizationId: orgId } })) : Promise.resolve(0),
-        plan.leaves ? this.getPendingLeavesCount(orgId) : Promise.resolve(0),
-        plan.payroll ? this.getMonthlyPayroll(orgId) : Promise.resolve(0),
-      ]);
-
-    const statistics: DashboardStatistics = {
-      totalUsers,
-      totalCustomers,
-      totalProducts,
-      totalSuppliers,
-      totalInvoices,
-      totalPurchaseOrders,
-      totalSalesOrders,
-      lowStockProducts,
-      monthlyRevenue,
-      monthlyExpense,
-      totalEmployees,
-      pendingLeaves,
-      monthlyPayroll,
-    };
-
-    // ── Industry metrics: only query groups that are active in the plan ─────────
-    const industryMetrics = await this.getIndustryMetricsByPlan(orgId, plan);
-
-    // ── Trends: only query finance/sales trends if their groups are active ──────
-    const trends = await this.getTrendsByPlan(orgId, plan, canFinance);
-
-    // ── Recent activities: only query if audit group is active ──────────────────
-    const recentActivities = plan.audit
-      ? await this.getRecentActivities(orgId)
-      : [];
 
     return {
       organization,
       statistics,
       industryMetrics,
+      dashboardConfig,
       trends,
-      recentActivities,
+      quickActions,
+      recentActivities: gatedActivities,
+      permissions,
+      aiInsights: this.buildAiInsights(statistics, dashboardConfig, permissions),
     };
   }
+
+  // ─── Per-Group Cache + Fetch ────────────────────────────────────────────────
+
+  /**
+   * Fetch data for each active group, using cache where possible.
+   * Only groups that are both active in the plan AND authorized by permissions are fetched.
+   * Returns a merged CachedGroupData with all fetched fields.
+   */
+  private async fetchActiveGroups(
+    orgId: string,
+    permissions: string[],
+    plan: QueryPlan,
+  ): Promise<CachedGroupData> {
+    const hasAny = (...required: string[]): boolean =>
+      required.some((p) => permissions.includes(p));
+
+    const result: CachedGroupData = {};
+    const fetchedGroups: string[] = [];
+    const cachedGroups: string[] = [];
+
+    // Define which groups are permission-gated and their required permissions
+    const groupAuth: Record<QueryGroup, string[]> = {
+      sales:     ['sales.read', 'invoices.read'],
+      inventory: ['inventory.read'],
+      customers: ['customers.read'],
+      employees: ['employees.read'],
+      leaves:    ['employees.read'],
+      payroll:   ['payroll.read'],
+      finance:   ['invoices.read', 'payments.read', 'accounting.read', 'reports.finance', 'purchase.read'],
+      audit:     ['audit.read'],
+    };
+
+    const fetchGroup = async (group: QueryGroup): Promise<void> => {
+      // Check if group is active in plan
+      if (!plan[group]) return;
+
+      // Check permission
+      const perms = groupAuth[group];
+      if (perms.length > 0 && !hasAny(...perms)) return;
+
+      // Check cache
+      const cacheKey = this.redis.organizationKey(orgId, `dashboard:${group}`);
+      const cached = await this.redis.get<CachedGroupData>(cacheKey);
+
+      if (cached) {
+        Object.assign(result, cached);
+        cachedGroups.push(group);
+        return;
+      }
+
+      // Cache miss — fetch from DB
+      const data = await this.fetchGroupData(orgId, group);
+      if (data && Object.keys(data).length > 0) {
+        await this.redis.set(cacheKey, data, { ttlSeconds: DashboardService.CACHE_TTL });
+        Object.assign(result, data);
+        fetchedGroups.push(group);
+      }
+    };
+
+    // Fetch all active groups in parallel
+    const allGroups: QueryGroup[] = ['sales', 'inventory', 'customers', 'employees', 'leaves', 'payroll', 'finance', 'audit'];
+    await Promise.all(allGroups.map((g) => fetchGroup(g)));
+
+    this.logger.debug(
+      `Dashboard cache: fetched=[${fetchedGroups.join(',')}] cached=[${cachedGroups.join(',')}]`,
+    );
+
+    return result;
+  }
+
+  /**
+   * Fetch data for a single query group from the database.
+   * Returns only the fields owned by that group.
+   */
+  private async fetchGroupData(orgId: string, group: QueryGroup): Promise<CachedGroupData> {
+    switch (group) {
+      case 'sales':     return this.fetchSalesGroup(orgId);
+      case 'inventory': return this.fetchInventoryGroup(orgId);
+      case 'customers': return this.fetchCustomersGroup(orgId);
+      case 'employees': return this.fetchEmployeesGroup(orgId);
+      case 'leaves':    return this.fetchLeavesGroup(orgId);
+      case 'payroll':   return this.fetchPayrollGroup(orgId);
+      case 'finance':   return this.fetchFinanceGroup(orgId);
+      case 'audit':     return this.fetchAuditGroup(orgId);
+      default:          return {};
+    }
+  }
+
+  // ─── Group Fetchers ─────────────────────────────────────────────────────────
+
+  private async fetchSalesGroup(orgId: string): Promise<CachedGroupData> {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const [
+      todaySalesRevenue,
+      todaySalesCount,
+      todayOrdersCount,
+      pendingOrdersCount,
+      completedOrdersCount,
+      cancelledOrdersCount,
+      topSellingProducts,
+      recentOrders,
+      totalSalesOrders,
+      salesTrend,
+    ] = await Promise.all([
+      this.safeNumber(this.prisma.invoice.aggregate({
+        where: { organizationId: orgId, type: 'SALES', paymentStatus: 'PAID', issueDate: { gte: startOfDay } },
+        _sum: { total: true },
+      }).then((r) => Number(r._sum.total ?? 0))),
+      this.safeCount(this.prisma.salesOrder.count({
+        where: { organizationId: orgId, orderDate: { gte: startOfDay } },
+      })),
+      this.safeCount(this.prisma.salesOrder.count({
+        where: { organizationId: orgId, orderDate: { gte: startOfDay } },
+      })),
+      this.safeCount(this.prisma.salesOrder.count({
+        where: { organizationId: orgId, status: 'PENDING' },
+      })),
+      this.safeCount(this.prisma.salesOrder.count({
+        where: { organizationId: orgId, status: 'DELIVERED' },
+      })),
+      this.safeCount(this.prisma.salesOrder.count({
+        where: { organizationId: orgId, status: 'CANCELLED' },
+      })),
+      this.getTopSellingProducts(orgId),
+      this.getRecentOrders(orgId),
+      this.safeCount(this.prisma.salesOrder.count({ where: { organizationId: orgId } })),
+      this.safeTrend(() => this.salesTrend(orgId)),
+    ]);
+
+    const averageOrderValue = todaySalesCount > 0
+      ? Math.round((todaySalesRevenue / todaySalesCount) * 100) / 100
+      : 0;
+
+    return {
+      totalSalesOrders,
+      todaySales: todaySalesCount,
+      todayOrders: todayOrdersCount,
+      todayRevenue: todaySalesRevenue,
+      pendingOrders: pendingOrdersCount,
+      completedOrders: completedOrdersCount,
+      cancelledOrders: cancelledOrdersCount,
+      averageOrderValue,
+      topSellingProducts,
+      recentOrders,
+      salesTrend,
+    };
+  }
+
+  private async fetchInventoryGroup(orgId: string): Promise<CachedGroupData> {
+    const [lowStockProducts, lowStockCount, inventoryValue, totalProducts] = await Promise.all([
+      this.getLowStockCount(orgId),
+      this.getLowStockCount(orgId),
+      this.safeNumber(this.prisma.inventory.aggregate({
+        where: { organizationId: orgId },
+        _sum: { quantity: true },
+      }).then((r) => Number(r._sum.quantity ?? 0))),
+      this.safeCount(this.prisma.product.count({ where: { organizationId: orgId } })),
+    ]);
+
+    return { totalProducts, lowStockProducts, lowStockCount, inventoryValue };
+  }
+
+  private async fetchCustomersGroup(orgId: string): Promise<CachedGroupData> {
+    const startOfMonth = new Date();
+    startOfMonth.setDate(1);
+    startOfMonth.setHours(0, 0, 0, 0);
+
+    const [totalCustomers, newCustomersThisMonth] = await Promise.all([
+      this.safeCount(this.prisma.customer.count({ where: { organizationId: orgId } })),
+      this.safeCount(this.prisma.customer.count({
+        where: { organizationId: orgId, createdAt: { gte: startOfMonth } },
+      })),
+    ]);
+
+    return { totalCustomers, newCustomersThisMonth };
+  }
+
+  private async fetchEmployeesGroup(orgId: string): Promise<CachedGroupData> {
+    const totalEmployees = await this.safeCount(
+      this.prisma.employee.count({ where: { organizationId: orgId } }),
+    );
+    return { totalEmployees };
+  }
+
+  private async fetchLeavesGroup(orgId: string): Promise<CachedGroupData> {
+    const pendingLeaves = await this.getPendingLeavesCount(orgId);
+    return { pendingLeaves };
+  }
+
+  private async fetchPayrollGroup(orgId: string): Promise<CachedGroupData> {
+    const monthlyPayroll = await this.getMonthlyPayroll(orgId);
+    return { monthlyPayroll };
+  }
+
+  private async fetchFinanceGroup(orgId: string): Promise<CachedGroupData> {
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const [
+      totalInvoices,
+      totalPurchaseOrders,
+      monthlyRevenue,
+      monthlyExpense,
+      todayExpenses,
+      revenueTrend,
+      expenseTrend,
+    ] = await Promise.all([
+      this.safeCount(this.prisma.invoice.count({ where: { organizationId: orgId } })),
+      this.safeCount(this.prisma.purchaseOrder.count({ where: { organizationId: orgId } })),
+      this.getMonthlyRevenue(orgId),
+      this.getMonthlyExpense(orgId),
+      this.safeNumber(this.prisma.purchaseOrder.aggregate({
+        where: { organizationId: orgId, orderDate: { gte: startOfDay }, status: { not: 'CANCELLED' } },
+        _sum: { total: true },
+      }).then((r) => Number(r._sum.total ?? 0))),
+      this.safeTrend(() => this.revenueTrend(orgId)),
+      this.safeTrend(() => this.expenseTrend(orgId)),
+    ]);
+
+    return {
+      totalInvoices,
+      totalPurchaseOrders,
+      monthlyRevenue,
+      monthlyExpense,
+      todayExpenses,
+      revenueTrend,
+      expenseTrend,
+    };
+  }
+
+  private async fetchAuditGroup(orgId: string): Promise<CachedGroupData> {
+    const recentActivities = await this.getRecentActivities(orgId);
+    return { recentActivities };
+  }
+
+  // ─── Response Assembly ──────────────────────────────────────────────────────
+
+  /** Assemble DashboardStatistics from cached group data. Fields default to 0. */
+  private assembleStatistics(data: CachedGroupData): DashboardStatistics {
+    return {
+      totalUsers: 0, // No widget currently requires this; always 0
+      totalCustomers: data.totalCustomers ?? 0,
+      totalProducts: data.totalProducts ?? 0,
+      totalSuppliers: 0, // No widget currently requires this; always 0
+      totalInvoices: data.totalInvoices ?? 0,
+      totalPurchaseOrders: data.totalPurchaseOrders ?? 0,
+      totalSalesOrders: data.totalSalesOrders ?? 0,
+      lowStockProducts: data.lowStockProducts ?? 0,
+      monthlyRevenue: data.monthlyRevenue ?? 0,
+      monthlyExpense: data.monthlyExpense ?? 0,
+      totalEmployees: data.totalEmployees ?? 0,
+      pendingLeaves: data.pendingLeaves ?? 0,
+      monthlyPayroll: data.monthlyPayroll ?? 0,
+    };
+  }
+
+  /** Assemble IndustryMetrics from cached group data. Fields default to 0/[]. */
+  private assembleIndustryMetrics(data: CachedGroupData): IndustryMetrics {
+    return {
+      todaySales: data.todaySales ?? 0,
+      todayOrders: data.todayOrders ?? 0,
+      todayRevenue: data.todayRevenue ?? 0,
+      todayExpenses: data.todayExpenses ?? 0,
+      pendingOrders: data.pendingOrders ?? 0,
+      completedOrders: data.completedOrders ?? 0,
+      cancelledOrders: data.cancelledOrders ?? 0,
+      averageOrderValue: data.averageOrderValue ?? 0,
+      lowStockCount: data.lowStockCount ?? 0,
+      inventoryValue: data.inventoryValue ?? 0,
+      newCustomersThisMonth: data.newCustomersThisMonth ?? 0,
+      topSellingProducts: data.topSellingProducts ?? [],
+      recentOrders: data.recentOrders ?? [],
+    };
+  }
+
+  /** Assemble DashboardTrends from cached group data. Fields default to zeros. */
+  private assembleTrends(data: CachedGroupData, plan: QueryPlan): DashboardTrends {
+    const labels = this.trendLabels();
+    const zeros = labels.map(() => 0);
+
+    const revenue = plan.finance ? (data.revenueTrend ?? zeros) : zeros;
+    const expenses = plan.finance ? (data.expenseTrend ?? zeros) : zeros;
+    const sales = plan.sales ? (data.salesTrend ?? zeros) : zeros;
+    const cashFlow = revenue.map((value, index) => Math.round((value - expenses[index]) * 100) / 100);
+
+    return { labels, revenue, expenses, sales, cashFlow };
+  }
+
+  // ─── Activity Permission Check ──────────────────────────────────────────────
 
   private canSeeActivity(
     entity: string | null,
@@ -272,46 +523,72 @@ export class DashboardService {
     return hasAny('audit.read');
   }
 
-  private buildAiInsights(statistics: DashboardStatistics, config: ResolvedDashboardConfig): DashboardAiInsight[] {
+  // ─── AI Insights (Permission-Gated) ─────────────────────────────────────────
+
+  /**
+   * Build AI insights. Each insight is only generated if:
+   * 1. The relevant widget ID is in the dashboard config, AND
+   * 2. The user has permission to see the underlying data (field was queried).
+   *
+   * Fields that were not queried (group inactive) default to 0, so insights
+   * that check `> 0` naturally won't fire for unauthorized data.
+   */
+  private buildAiInsights(
+    statistics: DashboardStatistics,
+    config: ResolvedDashboardConfig,
+    permissions: string[],
+  ): DashboardAiInsight[] {
     const insights: DashboardAiInsight[] = [];
     const widgetIds = new Set(config.allWidgets.map((w) => w.id));
+    const has = (...perms: string[]): boolean => perms.some((p) => permissions.includes(p));
 
-    if (widgetIds.has('revenueTrend')) {
+    // Revenue insight — only if user has finance permissions AND revenue was queried
+    if (widgetIds.has('revenueTrend') && has(...FINANCE_PERMISSIONS) && statistics.monthlyRevenue > 0) {
       insights.push({
         id: 'revenue',
         icon: 'Zap',
         text: `Monthly revenue totals ${this.formatCurrency(statistics.monthlyRevenue)}. Track the trend chart to monitor this period's performance.`,
       });
     }
-    if (statistics.totalInvoices > 0) {
+
+    // Invoice insight — only if user has finance permissions AND invoices were queried
+    if (has(...FINANCE_PERMISSIONS) && statistics.totalInvoices > 0) {
       insights.push({
         id: 'invoices',
         icon: 'BarChart3',
         text: `${statistics.totalInvoices} total invoices on record. Consider automating reminders for overdue payments.`,
       });
     }
-    if (widgetIds.has('lowStock') && statistics.lowStockProducts > 0) {
+
+    // Low stock insight — only if user has inventory permissions AND low stock was queried
+    if (widgetIds.has('lowStock') && has('inventory.read') && statistics.lowStockProducts > 0) {
       insights.push({
         id: 'lowStock',
         icon: 'AlertTriangle',
         text: `${statistics.lowStockProducts} products running low on stock. Restock alerts are ready for review.`,
       });
     }
-    if (statistics.totalCustomers > 0) {
+
+    // Customer insight — only if user has customer permissions AND customers were queried
+    if (has('customers.read') && statistics.totalCustomers > 0) {
       insights.push({
         id: 'customers',
         icon: 'ArrowUpRight',
         text: `${statistics.totalCustomers} customers on record. Reference the customer module for segment and contact details.`,
       });
     }
-    if (statistics.monthlyPayroll > 0) {
+
+    // Payroll insight — only if user has payroll permissions AND payroll was queried
+    if (has('payroll.read') && statistics.monthlyPayroll > 0) {
       insights.push({
         id: 'payroll',
         icon: 'Wallet',
         text: `Monthly payroll totals ${this.formatCurrency(statistics.monthlyPayroll)}. Review scheduled payments before month-end.`,
       });
     }
-    if (statistics.totalPurchaseOrders > 0) {
+
+    // Purchase insight — only if user has purchase permissions AND purchases were queried
+    if (has('purchase.read') && statistics.totalPurchaseOrders > 0) {
       insights.push({
         id: 'purchases',
         icon: 'ShoppingBag',
@@ -334,6 +611,8 @@ export class DashboardService {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
   }
 
+  // ─── Organization (reads settings once, reuses industry from config) ────────
+
   private async validateOrgMembership(orgId: string, userId: string): Promise<void> {
     const org = await this.prisma.organization.findUnique({
       where: { id: orgId },
@@ -354,25 +633,15 @@ export class DashboardService {
     }
   }
 
-  private async getOrganization(orgId: string): Promise<DashboardOrganization> {
-    const [org, settings] = await Promise.all([
-      this.prisma.organization.findUnique({
-        where: { id: orgId },
-        select: { id: true, name: true, logo: true, createdAt: true },
-      }),
-      this.prisma.organizationSettings.findUnique({
-        where: { organizationId: orgId },
-        select: { settings: true },
-      }),
-    ]);
-
-    let industry: IndustryKey | null = null;
-    if (settings?.settings && typeof settings.settings === 'object') {
-      const raw = (settings.settings as Record<string, unknown>).industry;
-      if (typeof raw === 'string' && VALID_INDUSTRY_KEYS.has(raw)) {
-        industry = raw as IndustryKey;
-      }
-    }
+  /**
+   * Get organization metadata. Accepts pre-resolved industry to avoid
+   * duplicate OrganizationSettings query (DashboardConfigService already read it).
+   */
+  private async getOrganization(orgId: string, industry: IndustryKey | null): Promise<DashboardOrganization> {
+    const org = await this.prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { id: true, name: true, logo: true, createdAt: true },
+    });
 
     return {
       id: org?.id ?? '',
@@ -382,6 +651,8 @@ export class DashboardService {
       industry,
     };
   }
+
+  // ─── Individual Query Helpers ───────────────────────────────────────────────
 
   private async getLowStockCount(orgId: string): Promise<number> {
     try {
@@ -397,87 +668,6 @@ export class DashboardService {
       this.logger.error(`Low stock query failed: ${(error as Error).message}`);
       return 0;
     }
-  }
-
-  /** Build industry metrics by querying only the groups active in the plan. */
-  private async getIndustryMetricsByPlan(orgId: string, plan: QueryPlan): Promise<IndustryMetrics> {
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-
-    const startOfMonth = new Date();
-    startOfMonth.setDate(1);
-    startOfMonth.setHours(0, 0, 0, 0);
-
-    // ── Sales group queries ────────────────────────────────────────────────────
-    const [todaySalesRevenue, todaySalesCount, todayOrdersCount, todayExpenseTotal,
-      pendingOrdersCount, completedOrdersCount, cancelledOrdersCount,
-      topSellingProducts, recentOrders] = plan.sales
-      ? await Promise.all([
-          this.safeNumber(this.prisma.invoice.aggregate({
-            where: { organizationId: orgId, type: 'SALES', paymentStatus: 'PAID', issueDate: { gte: startOfDay } },
-            _sum: { total: true },
-          }).then((r) => Number(r._sum.total ?? 0))),
-          this.safeCount(this.prisma.salesOrder.count({
-            where: { organizationId: orgId, orderDate: { gte: startOfDay } },
-          })),
-          this.safeCount(this.prisma.salesOrder.count({
-            where: { organizationId: orgId, orderDate: { gte: startOfDay } },
-          })),
-          this.safeNumber(this.prisma.purchaseOrder.aggregate({
-            where: { organizationId: orgId, orderDate: { gte: startOfDay }, status: { not: 'CANCELLED' } },
-            _sum: { total: true },
-          }).then((r) => Number(r._sum.total ?? 0))),
-          this.safeCount(this.prisma.salesOrder.count({
-            where: { organizationId: orgId, status: 'PENDING' },
-          })),
-          this.safeCount(this.prisma.salesOrder.count({
-            where: { organizationId: orgId, status: 'DELIVERED' },
-          })),
-          this.safeCount(this.prisma.salesOrder.count({
-            where: { organizationId: orgId, status: 'CANCELLED' },
-          })),
-          this.getTopSellingProducts(orgId),
-          this.getRecentOrders(orgId),
-        ])
-      : [0, 0, 0, 0, 0, 0, 0, [], []];
-
-    // ── Inventory group queries ────────────────────────────────────────────────
-    const [lowStockCount, inventoryValue] = plan.inventory
-      ? await Promise.all([
-          this.getLowStockCount(orgId),
-          this.safeNumber(this.prisma.inventory.aggregate({
-            where: { organizationId: orgId },
-            _sum: { quantity: true },
-          }).then((r) => Number(r._sum.quantity ?? 0))),
-        ])
-      : [0, 0];
-
-    // ── Customers group queries ────────────────────────────────────────────────
-    const newCustomersThisMonth = plan.customers
-      ? await this.safeCount(this.prisma.customer.count({
-          where: { organizationId: orgId, createdAt: { gte: startOfMonth } },
-        }))
-      : 0;
-
-    const averageOrderValue = todaySalesCount > 0
-      ? Math.round((todaySalesRevenue / todaySalesCount) * 100) / 100
-      : 0;
-
-    return {
-      todaySales: todaySalesCount,
-      todayOrders: todayOrdersCount,
-      todayRevenue: todaySalesRevenue,
-      todayExpenses: todayExpenseTotal,
-      pendingOrders: pendingOrdersCount,
-      completedOrders: completedOrdersCount,
-      cancelledOrders: cancelledOrdersCount,
-      averageOrderValue,
-      lowStockCount,
-      inventoryValue,
-      newCustomersThisMonth,
-      topSellingProducts,
-      recentOrders,
-    };
   }
 
   private async getTopSellingProducts(orgId: string): Promise<Array<{ name: string; quantity: number; revenue: number }>> {
@@ -684,24 +874,6 @@ export class DashboardService {
       this.logger.error(`Dashboard trend query failed: ${(error as Error).message}`);
       return this.zeros();
     }
-  }
-
-  /** Build trends by querying only the groups active in the plan. */
-  private async getTrendsByPlan(orgId: string, plan: QueryPlan, canFinance: boolean): Promise<DashboardTrends> {
-    const [revenue, expenses, sales] = await Promise.all([
-      plan.finance && canFinance ? this.safeTrend(() => this.revenueTrend(orgId)) : Promise.resolve(this.zeros()),
-      plan.finance && canFinance ? this.safeTrend(() => this.expenseTrend(orgId)) : Promise.resolve(this.zeros()),
-      plan.sales ? this.safeTrend(() => this.salesTrend(orgId)) : Promise.resolve(this.zeros()),
-    ]);
-    const cashFlow = revenue.map((value, index) => Math.round((value - expenses[index]) * 100) / 100);
-
-    return {
-      labels: this.trendLabels(),
-      revenue,
-      expenses,
-      sales,
-      cashFlow,
-    };
   }
 
   private async getRecentActivities(orgId: string): Promise<RecentActivityItem[]> {
