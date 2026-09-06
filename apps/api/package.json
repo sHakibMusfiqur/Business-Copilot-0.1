@@ -75,7 +75,8 @@
       "/node_modules/",
       "dashboard/industry-capabilities\\.spec\\.ts$",
       "dashboard/dashboard-query-planner\\.spec\\.ts$",
-      "dashboard/dashboard-data-dependencies\\.spec\\.ts$"
+      "dashboard/dashboard-data-dependencies\\.spec\\.ts$",
+      "dashboard/dashboard-isolation\\.spec\\.ts$"
     ],
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"

@@ -314,7 +314,6 @@ export class DashboardService {
     const [
       todaySalesRevenue,
       todaySalesCount,
-      todayOrdersCount,
       pendingOrdersCount,
       completedOrdersCount,
       cancelledOrdersCount,
@@ -327,9 +326,6 @@ export class DashboardService {
         where: { organizationId: orgId, type: 'SALES', paymentStatus: 'PAID', issueDate: { gte: startOfDay } },
         _sum: { total: true },
       }).then((r) => Number(r._sum.total ?? 0))),
-      this.safeCount(this.prisma.salesOrder.count({
-        where: { organizationId: orgId, orderDate: { gte: startOfDay } },
-      })),
       this.safeCount(this.prisma.salesOrder.count({
         where: { organizationId: orgId, orderDate: { gte: startOfDay } },
       })),
@@ -355,7 +351,7 @@ export class DashboardService {
     return {
       totalSalesOrders,
       todaySales: todaySalesCount,
-      todayOrders: todayOrdersCount,
+      todayOrders: todaySalesCount,
       todayRevenue: todaySalesRevenue,
       pendingOrders: pendingOrdersCount,
       completedOrders: completedOrdersCount,
@@ -368,8 +364,7 @@ export class DashboardService {
   }
 
   private async fetchInventoryGroup(orgId: string): Promise<CachedGroupData> {
-    const [lowStockProducts, lowStockCount, inventoryValue, totalProducts] = await Promise.all([
-      this.getLowStockCount(orgId),
+    const [lowStockCount, inventoryValue, totalProducts] = await Promise.all([
       this.getLowStockCount(orgId),
       this.safeNumber(this.prisma.inventory.aggregate({
         where: { organizationId: orgId },
@@ -378,7 +373,7 @@ export class DashboardService {
       this.safeCount(this.prisma.product.count({ where: { organizationId: orgId } })),
     ]);
 
-    return { totalProducts, lowStockProducts, lowStockCount, inventoryValue };
+    return { totalProducts, lowStockProducts: lowStockCount, lowStockCount, inventoryValue };
   }
 
   private async fetchCustomersGroup(orgId: string): Promise<CachedGroupData> {
