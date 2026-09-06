@@ -66,34 +66,6 @@ export interface RecentActivityItem {
   user: { id: string; name: string; email: string } | null;
 }
 
-export type DashboardPanelKey =
-  | 'revenue'
-  | 'expenses'
-  | 'netProfit'
-  | 'customers'
-  | 'sales'
-  | 'employees'
-  | 'payroll'
-  | 'revenueTrend'
-  | 'cashFlow'
-  | 'salesTrend'
-  | 'invoices'
-  | 'products'
-  | 'suppliers'
-  | 'users'
-  | 'pendingLeaves'
-  | 'lowStock'
-  | 'purchaseOrders';
-
-export interface DashboardLayout {
-  kpis: DashboardPanelKey[];
-  charts: DashboardPanelKey[];
-  secondary: DashboardPanelKey[];
-  alerts: DashboardPanelKey[];
-  activity: boolean;
-  aiCopilot: boolean;
-}
-
 export interface DashboardAiInsight {
   id: string;
   icon: string;
@@ -118,7 +90,6 @@ export interface DashboardOverview {
   quickActions: QuickAction[];
   recentActivities: RecentActivityItem[];
   permissions: string[];
-  layout: DashboardLayout;
   aiInsights: DashboardAiInsight[];
 }
 
@@ -137,26 +108,6 @@ interface OrgLevelData {
   trends: DashboardTrends;
   recentActivities: RecentActivityItem[];
 }
-
-const PANEL_PERMISSIONS: Record<DashboardPanelKey, string[]> = {
-  revenue: FINANCE_PERMISSIONS,
-  expenses: FINANCE_PERMISSIONS,
-  netProfit: FINANCE_PERMISSIONS,
-  revenueTrend: FINANCE_PERMISSIONS,
-  cashFlow: FINANCE_PERMISSIONS,
-  customers: ['customers.read'],
-  sales: ['sales.read'],
-  salesTrend: ['sales.read'],
-  employees: ['employees.read'],
-  pendingLeaves: ['employees.read'],
-  payroll: ['payroll.read'],
-  invoices: ['invoices.read'],
-  products: ['products.read'],
-  suppliers: ['suppliers.read'],
-  users: ['users.read'],
-  lowStock: ['inventory.read'],
-  purchaseOrders: ['purchase.read'],
-};
 
 const ACTIVITY_ENTITY_PERMISSIONS: Array<[RegExp, string[]]> = [
   [/invoice|payment|account|journal|receivable|payable/i, FINANCE_PERMISSIONS],
@@ -197,7 +148,6 @@ export class DashboardService {
     const dashboardConfig = await this.configService.resolveConfig(orgId, permissions);
 
     const hasAny = (...required: string[]) => required.some((permission) => permissions.includes(permission));
-    const layout = this.buildLayout(permissions);
     const gatedActivities = orgData.recentActivities.filter((activity) => this.canSeeActivity(activity.entity, permissions, hasAny));
     const quickActions = DEFAULT_QUICK_ACTIONS.filter((action) => permissions.includes(action.permission));
 
@@ -210,8 +160,7 @@ export class DashboardService {
       quickActions,
       recentActivities: gatedActivities,
       permissions,
-      layout,
-      aiInsights: this.buildAiInsights(orgData.statistics, layout),
+      aiInsights: this.buildAiInsights(orgData.statistics, dashboardConfig),
     };
   }
 
@@ -287,22 +236,6 @@ export class DashboardService {
     };
   }
 
-  private buildLayout(permissions: string[]): DashboardLayout {
-    const hasAny = (...required: string[]) => required.some((permission) => permissions.includes(permission));
-
-    const filterPanels = (keys: DashboardPanelKey[]): DashboardPanelKey[] =>
-      keys.filter((key) => hasAny(...PANEL_PERMISSIONS[key]));
-
-    return {
-      kpis: filterPanels(['revenue', 'expenses', 'netProfit', 'customers', 'sales', 'employees', 'payroll']),
-      charts: filterPanels(['revenueTrend', 'cashFlow', 'salesTrend']),
-      secondary: filterPanels(['invoices', 'products', 'suppliers', 'users', 'pendingLeaves']),
-      alerts: filterPanels(['lowStock', 'purchaseOrders']),
-      activity: hasAny('audit.read'),
-      aiCopilot: hasAny('ai.read'),
-    };
-  }
-
   private canSeeActivity(
     entity: string | null,
     permissions: string[],
@@ -317,45 +250,46 @@ export class DashboardService {
     return hasAny('audit.read');
   }
 
-  private buildAiInsights(statistics: DashboardStatistics, layout: DashboardLayout): DashboardAiInsight[] {
+  private buildAiInsights(statistics: DashboardStatistics, config: ResolvedDashboardConfig): DashboardAiInsight[] {
     const insights: DashboardAiInsight[] = [];
+    const widgetIds = new Set(config.allWidgets.map((w) => w.id));
 
-    if (layout.kpis.includes('revenue')) {
+    if (widgetIds.has('revenueTrend')) {
       insights.push({
         id: 'revenue',
         icon: 'Zap',
         text: `Monthly revenue totals ${this.formatCurrency(statistics.monthlyRevenue)}. Track the trend chart to monitor this period's performance.`,
       });
     }
-    if (layout.secondary.includes('invoices')) {
+    if (statistics.totalInvoices > 0) {
       insights.push({
         id: 'invoices',
         icon: 'BarChart3',
         text: `${statistics.totalInvoices} total invoices on record. Consider automating reminders for overdue payments.`,
       });
     }
-    if (layout.alerts.includes('lowStock') && statistics.lowStockProducts > 0) {
+    if (widgetIds.has('lowStock') && statistics.lowStockProducts > 0) {
       insights.push({
         id: 'lowStock',
         icon: 'AlertTriangle',
         text: `${statistics.lowStockProducts} products running low on stock. Restock alerts are ready for review.`,
       });
     }
-    if (layout.kpis.includes('customers')) {
+    if (statistics.totalCustomers > 0) {
       insights.push({
         id: 'customers',
         icon: 'ArrowUpRight',
         text: `${statistics.totalCustomers} customers on record. Reference the customer module for segment and contact details.`,
       });
     }
-    if (layout.kpis.includes('payroll')) {
+    if (statistics.monthlyPayroll > 0) {
       insights.push({
         id: 'payroll',
         icon: 'Wallet',
         text: `Monthly payroll totals ${this.formatCurrency(statistics.monthlyPayroll)}. Review scheduled payments before month-end.`,
       });
     }
-    if (layout.alerts.includes('purchaseOrders') && statistics.totalPurchaseOrders > 0) {
+    if (statistics.totalPurchaseOrders > 0) {
       insights.push({
         id: 'purchases',
         icon: 'ShoppingBag',

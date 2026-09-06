@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { CalendarDays } from 'lucide-react';
 
@@ -11,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { useAuthStore } from '@/store/auth-store';
 import { spanTokens } from '@/core/dashboard/widget-layout';
 import { useWorkspace } from '@/core/workspace/workspace-context';
+import { configToWidgets, buildZonesFromWidgets } from '@/core/dashboard/config-to-widgets';
 import type { DashboardWidget } from '@/core/dashboard/widget-types';
 
 function getFormattedDate(): string {
@@ -27,16 +29,26 @@ interface ExecutiveWorkspaceProps {
 }
 
 /**
- * Dumb renderer over the Dashboard Engine output. All widget selection,
- * ordering, visibility and layout are resolved by the engine; this component
- * only maps the resolved manifest to the rendering layer.
+ * Config-driven renderer. Widget selection, ordering, visibility and layout
+ * are all resolved by the backend DashboardConfigService. This component
+ * converts the backend config into DashboardWidget[] and renders zones.
  */
 export function ExecutiveWorkspace({ overview, onCommand }: ExecutiveWorkspaceProps) {
-  const { manifest, context } = useDashboard();
+  const { context } = useDashboard();
   const { resolved } = useWorkspace();
   const user = useAuthStore((s) => s.user);
   const firstName = user?.name?.split(' ')[0];
   const manifestData = resolved.manifest;
+
+  const accent = resolved.manifest?.industry
+    ? (document.documentElement.classList.contains('dark') ? '#6366f1' : '#3B82F6')
+    : '#3B82F6';
+
+  const zones = useMemo(() => {
+    if (!overview?.dashboardConfig) return [];
+    const widgets = configToWidgets(overview.dashboardConfig, accent);
+    return buildZonesFromWidgets(widgets);
+  }, [overview?.dashboardConfig, accent]);
 
   return (
     <motion.div
@@ -72,8 +84,8 @@ export function ExecutiveWorkspace({ overview, onCommand }: ExecutiveWorkspacePr
         <AlertsBanner overview={overview} />
       </div>
 
-      {/* Engine-resolved widget zones */}
-      {manifest.layout.zones.map((zone) => (
+      {/* Backend-config-driven widget zones */}
+      {zones.map((zone) => (
         <section key={zone.zone} className="grid grid-cols-12 gap-5">
           {zone.widgets.map((widget, index) => (
             <motion.div

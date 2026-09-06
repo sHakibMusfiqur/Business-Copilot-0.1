@@ -44,7 +44,6 @@ function makeOverview(stats: DashboardStatistics, industryMetrics?: Partial<Indu
     quickActions: [],
     recentActivities: [],
     permissions: [],
-    layout: { kpis: [], charts: [], secondary: [], alerts: [], activity: false, aiCopilot: false },
     aiInsights: [],
   };
 }

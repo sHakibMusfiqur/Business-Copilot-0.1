@@ -101,9 +101,9 @@ const restaurantConfig: IndustryDashboardConfig = {
 const hospitalConfig: IndustryDashboardConfig = {
   industry: 'hospital',
   kpis: [
-    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Appointments Today' },
-    { id: 'pendingOrders', source: 'pendingOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Pending Cases' },
-    { id: 'completedOrders', source: 'completedOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Completed Today' },
+    { id: 'totalCustomers', source: 'totalCustomers', key: 'metric', zone: 'hero', span: 3, permission: CUSTOMER_PERMS, supported: true, title: 'Patients' },
+    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Orders Today' },
+    { id: 'pendingOrders', source: 'pendingOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Pending Orders' },
     { id: 'todayRevenue', source: 'todayRevenue', key: 'metricCurrency', zone: 'hero', span: 3, permission: FINANCE_PERMS, supported: true, title: "Today's Revenue" },
   ],
   charts: [
@@ -146,16 +146,16 @@ const schoolConfig: IndustryDashboardConfig = {
   industry: 'school',
   kpis: [
     { id: 'totalCustomers', source: 'totalCustomers', key: 'metric', zone: 'hero', span: 3, permission: CUSTOMER_PERMS, supported: true, title: 'Students' },
-    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Transactions Today' },
-    { id: 'todayRevenue', source: 'todayRevenue', key: 'metricCurrency', zone: 'hero', span: 3, permission: FINANCE_PERMS, supported: true, title: 'Fees Collected Today' },
-    { id: 'pendingOrders', source: 'pendingOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Pending Dues' },
+    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Orders Today' },
+    { id: 'todayRevenue', source: 'todayRevenue', key: 'metricCurrency', zone: 'hero', span: 3, permission: FINANCE_PERMS, supported: true, title: "Today's Revenue" },
+    { id: 'pendingOrders', source: 'pendingOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Pending Orders' },
   ],
   charts: [
     ...baseFinance,
   ],
   secondary: [
     { id: 'totalEmployees', source: 'totalEmployees', key: 'metric', zone: 'side', span: 6, permission: EMPLOYEE_PERMS, supported: true, title: 'Staff Count' },
-    { id: 'recentOrders', source: 'recentOrders', key: 'list', zone: 'side', span: 6, permission: SALES_PERMS, supported: true, title: 'Recent Transactions' },
+    { id: 'recentOrders', source: 'recentOrders', key: 'list', zone: 'side', span: 6, permission: SALES_PERMS, supported: true, title: 'Recent Orders' },
   ],
   alerts: [],
   insights: baseInsights,
@@ -167,8 +167,8 @@ const softwareConfig: IndustryDashboardConfig = {
   industry: 'software',
   kpis: [
     { id: 'todayRevenue', source: 'todayRevenue', key: 'metricCurrency', zone: 'hero', span: 3, permission: FINANCE_PERMS, supported: true, title: "Today's Revenue" },
-    { id: 'pendingOrders', source: 'pendingOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Open Projects' },
-    { id: 'completedOrders', source: 'completedOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Completed Tasks' },
+    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Orders Today' },
+    { id: 'totalCustomers', source: 'totalCustomers', key: 'metric', zone: 'hero', span: 3, permission: CUSTOMER_PERMS, supported: true, title: 'Customers' },
     { id: 'newCustomers', source: 'newCustomersThisMonth', key: 'metric', zone: 'hero', span: 3, permission: CUSTOMER_PERMS, supported: true, title: 'New Clients' },
   ],
   charts: [
@@ -256,8 +256,8 @@ const itServicesConfig: IndustryDashboardConfig = {
   industry: 'it-services',
   kpis: [
     { id: 'todayRevenue', source: 'todayRevenue', key: 'metricCurrency', zone: 'hero', span: 3, permission: FINANCE_PERMS, supported: true, title: "Today's Revenue" },
-    { id: 'pendingOrders', source: 'pendingOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Open Tickets' },
-    { id: 'completedOrders', source: 'completedOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Resolved Today' },
+    { id: 'todayOrders', source: 'todayOrders', key: 'metric', zone: 'hero', span: 3, permission: SALES_PERMS, supported: true, title: 'Orders Today' },
+    { id: 'totalCustomers', source: 'totalCustomers', key: 'metric', zone: 'hero', span: 3, permission: CUSTOMER_PERMS, supported: true, title: 'Customers' },
     { id: 'newCustomers', source: 'newCustomersThisMonth', key: 'metric', zone: 'hero', span: 3, permission: CUSTOMER_PERMS, supported: true, title: 'New Clients' },
   ],
   charts: [

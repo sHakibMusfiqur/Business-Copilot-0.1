@@ -41,22 +41,13 @@ export class DashboardConfigService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  /**
-   * Resolve the final dashboard configuration for an organization + user.
-   *
-   * Resolution order:
-   * 1. Industry defaults
-   * 2. Organization overrides from settings.dashboard
-   * 3. Permission filtering
-   * 4. Validation (only real backend sources)
-   */
+  
   async resolveConfig(
     orgId: string,
     permissions: string[],
   ): Promise<ResolvedDashboardConfig> {
-    const industry = await this.getIndustry(orgId);
+    const { industry, orgOverride } = await this.getOrgSettings(orgId);
     const industryConfig = getIndustryConfig(industry);
-    const orgOverride = await this.getOrgOverride(orgId);
 
     const hasPermission = (...required: string[]): boolean =>
       required.some((p) => permissions.includes(p));
@@ -167,51 +158,35 @@ export class DashboardConfigService {
     };
   }
 
-  /** Read industry from OrganizationSettings.settings.industry. */
-  private async getIndustry(orgId: string): Promise<string | null> {
-    try {
-      const settings = await this.prisma.organizationSettings.findUnique({
-        where: { organizationId: orgId },
-        select: { settings: true },
-      });
-
-      if (settings?.settings && typeof settings.settings === 'object') {
-        const raw = (settings.settings as Record<string, unknown>).industry;
-        if (typeof raw === 'string' && VALID_INDUSTRY_KEYS.has(raw)) {
-          return raw;
-        }
-      }
-    } catch (error) {
-      this.logger.error(
-        `Failed to read industry for org ${orgId}: ${(error as Error).message}`,
-      );
-    }
-    return null;
-  }
-
-  /** Read dashboard override from OrganizationSettings.settings.dashboard. */
-  private async getOrgOverride(
+  /** Single query to read both industry and dashboard override from OrganizationSettings. */
+  private async getOrgSettings(
     orgId: string,
-  ): Promise<OrgDashboardOverride | null> {
+  ): Promise<{ industry: string | null; orgOverride: OrgDashboardOverride | null }> {
     try {
       const settings = await this.prisma.organizationSettings.findUnique({
         where: { organizationId: orgId },
         select: { settings: true },
       });
 
-      if (settings?.settings && typeof settings.settings === 'object') {
-        const dashboard = (settings.settings as Record<string, unknown>)
-          .dashboard;
-        if (dashboard && typeof dashboard === 'object') {
-          return dashboard as OrgDashboardOverride;
-        }
+      if (!settings?.settings || typeof settings.settings !== 'object') {
+        return { industry: null, orgOverride: null };
       }
+
+      const raw = settings.settings as Record<string, unknown>;
+      const industryValue = typeof raw.industry === 'string' && VALID_INDUSTRY_KEYS.has(raw.industry)
+        ? raw.industry
+        : null;
+      const dashboardValue = raw.dashboard && typeof raw.dashboard === 'object'
+        ? (raw.dashboard as OrgDashboardOverride)
+        : null;
+
+      return { industry: industryValue, orgOverride: dashboardValue };
     } catch (error) {
       this.logger.error(
-        `Failed to read dashboard override for org ${orgId}: ${(error as Error).message}`,
+        `Failed to read settings for org ${orgId}: ${(error as Error).message}`,
       );
+      return { industry: null, orgOverride: null };
     }
-    return null;
   }
 
   /** Remap a widget list to only include IDs from the override, preserving industry config data. */

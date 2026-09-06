@@ -55,34 +55,6 @@ export interface RecentActivityItem {
   createdAt: string;
 }
 
-export type DashboardPanelKey =
-  | 'revenue'
-  | 'expenses'
-  | 'netProfit'
-  | 'customers'
-  | 'sales'
-  | 'employees'
-  | 'payroll'
-  | 'revenueTrend'
-  | 'cashFlow'
-  | 'salesTrend'
-  | 'invoices'
-  | 'products'
-  | 'suppliers'
-  | 'users'
-  | 'pendingLeaves'
-  | 'lowStock'
-  | 'purchaseOrders';
-
-export interface DashboardLayout {
-  kpis: DashboardPanelKey[];
-  charts: DashboardPanelKey[];
-  secondary: DashboardPanelKey[];
-  alerts: DashboardPanelKey[];
-  activity: boolean;
-  aiCopilot: boolean;
-}
-
 export interface DashboardAiInsight {
   id: string;
   icon: string;
@@ -128,6 +100,5 @@ export interface DashboardOverview {
   quickActions: QuickAction[];
   recentActivities: RecentActivityItem[];
   permissions: string[];
-  layout: DashboardLayout;
   aiInsights: DashboardAiInsight[];
 }
