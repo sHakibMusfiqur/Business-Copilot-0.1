@@ -15,12 +15,6 @@ import type { QueryGroup } from './dashboard-query-planner';
 // ─── Permission Isolation Tests ──────────────────────────────────────────────
 
 describe('Permission Isolation', () => {
-  const ALL_PERMISSIONS = [
-    'sales.read', 'invoices.read', 'payments.read', 'accounting.read', 'reports.finance',
-    'inventory.read', 'customers.read', 'suppliers.read', 'purchase.read',
-    'employees.read', 'payroll.read', 'audit.read',
-  ];
-
   describe('group permission mapping', () => {
     it('sales group requires sales.read OR invoices.read', () => {
       const perms = getGroupPermissions('sales');
@@ -212,7 +206,7 @@ describe('Tenant Isolation', () => {
       const allFields = new Set<string>();
       const duplicateFields: string[] = [];
 
-      for (const [group, fields] of Object.entries(GROUP_DATA_FIELDS)) {
+      for (const [, fields] of Object.entries(GROUP_DATA_FIELDS)) {
         for (const field of fields) {
           if (allFields.has(field)) {
             duplicateFields.push(field);
@@ -260,7 +254,7 @@ describe('Tenant Isolation', () => {
     });
 
     it('unknown field returns null owner', () => {
-      expect(fieldOwnerGroup('nonexistent' as any)).toBeNull();
+      expect(fieldOwnerGroup('nonexistent' as never)).toBeNull();
     });
   });
 });
