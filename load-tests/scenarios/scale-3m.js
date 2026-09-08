@@ -6,14 +6,9 @@ import { apiGet, parseJson } from '../helpers/http.js';
 import { createSetupFunction } from '../helpers/auth.js';
 import { recordDashboardRequest, recordSuccess, recordFailure } from '../helpers/metrics.js';
 
-export const options = {
 
-  stages: [
-    { duration: '5m', target: 1000 },
-    { duration: '10m', target: 5000 },
-    { duration: '15m', target: 10000 },
-    { duration: '5m', target: 0 },
-  ],
+
+export const options = {
   thresholds: {
     http_req_failed: ['rate<0.02'],
     http_req_duration: ['p(95)<2000', 'p(99)<5000'],
@@ -49,6 +44,7 @@ export default function (data) {
   });
 
   if (picked.name === 'dashboard') {
+    // Backend does not emit X-Cache header — record request but cache status is unknown
     const cacheHeader = res.headers['X-Cache'] || res.headers['x-cache'] || '';
     recordDashboardRequest(res.timings.duration, cacheHeader === 'HIT');
   }

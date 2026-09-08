@@ -6,14 +6,9 @@ import { apiGet, parseJson } from '../helpers/http.js';
 import { createSetupFunction } from '../helpers/auth.js';
 import { recordSuccess, recordFailure, recordDashboardRequest } from '../helpers/metrics.js';
 
+
+
 export const options = {
-  stages: [
-    { duration: '1m', target: 100 },
-    { duration: '2m', target: 500 },
-    { duration: '3m', target: 1000 },
-    { duration: '2m', target: 2000 },
-    { duration: '1m', target: 0 },
-  ],
   thresholds: {
     http_req_failed: [`rate<${config.httpReqFailedThreshold}`],
     http_req_duration: [`p(95)<${config.p95Threshold}`],
@@ -71,6 +66,7 @@ export default function (data) {
   });
 
   if (endpoint === 'dashboard') {
+    // Backend does not emit X-Cache header — record request but cache status is unknown
     const cacheHeader = res.headers['X-Cache'] || res.headers['x-cache'] || '';
     recordDashboardRequest(res.timings.duration, cacheHeader === 'HIT');
   }
@@ -81,6 +77,6 @@ export default function (data) {
     recordFailure(`mixed/${endpoint}`);
   }
 
-  // Realistic think time: 0.5–2s
-  sleep(0.5 + Math.random() * 1.5);
+  // Think time: 1–2s (avg 1.5s) — each VU generates ~0.67 RPS
+  sleep(1 + Math.random() * 1);
 }

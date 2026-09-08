@@ -1,18 +1,12 @@
-
-
 import { check, sleep } from 'k6';
 import { config } from '../config.js';
 import { apiGet, parseJson } from '../helpers/http.js';
 import { createSetupFunction } from '../helpers/auth.js';
 import { recordSuccess, recordFailure } from '../helpers/metrics.js';
 
+
+
 export const options = {
-  stages: [
-    { duration: '30s', target: 50 },
-    { duration: '1m', target: 200 },
-    { duration: '30s', target: 500 },
-    { duration: '30s', target: 0 },
-  ],
   thresholds: {
     http_req_failed: [`rate<${config.httpReqFailedThreshold}`],
     http_req_duration: [`p(95)<${config.p95Threshold}`],

@@ -7,8 +7,9 @@ export const loginSuccess = new Counter('login_success');
 export const loginFail = new Counter('login_fail');
 export const loginThrottled = new Counter('login_throttled');
 export const dashboardRequests = new Counter('dashboard_requests');
-export const dashboardCacheHits = new Counter('dashboard_cache_hits');
-export const dashboardCacheMisses = new Counter('dashboard_cache_misses');
+
+export const dashboardCacheHits = new Counter('dashboard_cache_header_hit');
+export const dashboardCacheMisses = new Counter('dashboard_cache_header_miss_or_absent');
 export const tenantIsolationViolations = new Counter('tenant_isolation_violations');
 export const apiErrors = new Counter('api_errors');
 
@@ -21,9 +22,7 @@ export const loginDuration = new Trend('login_duration', true);
 export const dashboardDuration = new Trend('dashboard_duration', true);
 export const permissionCheckDuration = new Trend('permission_check_duration', true);
 
-/**
- * Record a successful API call.
- */
+
 export function recordSuccess(name, duration) {
   successRate.add(true);
   if (name) {
@@ -36,6 +35,7 @@ export function recordFailure(name) {
   errorRate.add(true);
   apiErrors.add(1);
 }
+
 
 
 export function recordDashboardRequest(durationMs, cacheHit) {

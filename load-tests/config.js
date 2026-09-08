@@ -1,6 +1,4 @@
-// load-tests/config.js
-// Central configuration for all load tests.
-// All values are read from environment variables with sensible defaults.
+
 
 export const config = {
   // ─── Target ────────────────────────────────────────────────────────────────
@@ -8,8 +6,9 @@ export const config = {
   apiUrl: __ENV.K6_API_URL || 'http://localhost:4000/api',
 
   // ─── Test User Pool ────────────────────────────────────────────────────────
-  testUserEmail: __ENV.K6_TEST_USERS || 'admin@business-copilot.com',
-  testUserPassword: __ENV.K6_TEST_PASSWORD || 'Admin123!',
+  
+  testUserEmail: __ENV.K6_TEST_USERS || '',
+  testUserPassword: __ENV.K6_TEST_PASSWORD || '',
   testOrgId: __ENV.K6_TEST_ORG_ID || '',
 
   // ─── Thresholds ────────────────────────────────────────────────────────────

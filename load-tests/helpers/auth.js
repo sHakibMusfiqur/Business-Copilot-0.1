@@ -48,9 +48,19 @@ export function authenticateTestUser() {
 
 export function createSetupFunction(email, password) {
   return function setup() {
-    const tokens = login(email || config.testUserEmail, password || config.testUserPassword);
+    const userEmail = email || config.testUserEmail;
+    const userPassword = password || config.testUserPassword;
+
+    if (!userEmail || !userPassword) {
+      throw new Error(
+        'Missing required test credentials. ' +
+        'Set K6_TEST_USERS and K6_TEST_PASSWORD environment variables before running load tests.'
+      );
+    }
+
+    const tokens = login(userEmail, userPassword);
     if (!tokens || !tokens.accessToken) {
-      throw new Error(`Failed to authenticate: ${email || config.testUserEmail}`);
+      throw new Error(`Failed to authenticate: ${userEmail}`);
     }
     return { token: tokens.accessToken, refreshToken: tokens.refreshToken };
   };

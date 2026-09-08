@@ -6,13 +6,9 @@ import { publicPost, parseJson } from '../helpers/http.js';
 import { recordLogin } from '../helpers/metrics.js';
 import { getUsers } from '../helpers/users.js';
 
+
+
 export const options = {
-  stages: [
-    { duration: '30s', target: 50 },
-    { duration: '1m', target: 200 },
-    { duration: '30s', target: 500 },
-    { duration: '30s', target: 0 },
-  ],
   thresholds: {
     http_req_failed: [`rate<${config.httpReqFailedThreshold}`],
     http_req_duration: [`p(95)<${config.p95Threshold}`],

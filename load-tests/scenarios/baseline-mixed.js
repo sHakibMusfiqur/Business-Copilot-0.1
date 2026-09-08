@@ -7,6 +7,7 @@ import { createSetupFunction } from '../helpers/auth.js';
 import { recordSuccess, recordFailure, recordDashboardRequest } from '../helpers/metrics.js';
 
 
+
 export const options = {
   stages: [
     { duration: '30s', target: 5 },
@@ -69,6 +70,7 @@ export default function (data) {
   });
 
   if (endpoint === 'dashboard') {
+    // Backend does not emit X-Cache header — record request but cache status is unknown
     const cacheHeader = res.headers['X-Cache'] || res.headers['x-cache'] || '';
     recordDashboardRequest(res.timings.duration, cacheHeader === 'HIT');
   }
@@ -79,6 +81,6 @@ export default function (data) {
     recordFailure(`mixed/${endpoint}`);
   }
 
-
+  // Baseline think time: 1–2s (avg 1.5s) → ~0.67 RPS per VU
   sleep(1 + Math.random() * 1);
 }

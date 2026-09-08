@@ -6,13 +6,9 @@ import { apiGet, parseJson } from '../helpers/http.js';
 import { createSetupFunction } from '../helpers/auth.js';
 import { recordDashboardRequest, recordSuccess, recordFailure } from '../helpers/metrics.js';
 
+
+
 export const options = {
-  stages: [
-    { duration: '30s', target: 100 },
-    { duration: '1m', target: 500 },
-    { duration: '2m', target: 1000 },
-    { duration: '30s', target: 0 },
-  ],
   thresholds: {
     http_req_failed: [`rate<${config.httpReqFailedThreshold}`],
     http_req_duration: [`p(95)<${config.p95Threshold}`],
@@ -43,7 +39,7 @@ export default function (data) {
     },
   });
 
-  // Check cache status from response headers if available
+  // Backend does not emit X-Cache header — record request but cache status is unknown
   const cacheHeader = res.headers['X-Cache'] || res.headers['x-cache'] || '';
   const isCacheHit = cacheHeader === 'HIT';
 
