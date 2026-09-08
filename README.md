@@ -89,7 +89,3 @@ scopes queries by `organizationId` (see `common/tenant/tenant-scope.service.ts`)
 (`packages/db/prisma/phase1-rls/migration.sql`) with a compatibility flag that
 keeps legacy behavior until RLS is enabled.
 
-## Phase plan
-
-See `docs/onboarding/phases/phase1-core.md` for the Phase 1 (1A) scope:
-what the core formalizes and what is explicitly out of scope.
