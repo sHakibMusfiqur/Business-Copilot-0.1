@@ -1,4 +1,3 @@
-# load-tests/run-tests.sh
 #!/bin/bash
 # Run load tests with k6.
 # Usage:

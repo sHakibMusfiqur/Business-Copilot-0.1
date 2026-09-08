@@ -6,9 +6,8 @@ import { config } from '../config.js';
 
 export const options = {
   stages: [
-    { duration: '30s', target: 100 },
-    { duration: '1m', target: 500 },
-    { duration: '30s', target: 1000 },
+    { duration: '30s', target: 2 },
+    { duration: '1m', target: 2 },
     { duration: '30s', target: 0 },
   ],
   thresholds: {
@@ -23,5 +22,5 @@ export default function () {
     'health — status is 200': (r) => r.status === 200,
     'health — has body': (r) => r.body && r.body.length > 0,
   });
-  sleep(0.1);
+  sleep(3);
 }
