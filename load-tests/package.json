@@ -5,7 +5,7 @@
   "description": "k6 load testing infrastructure for Business Copilot ERP",
   "scripts": {
     "test:smoke": "k6 run scenarios/health.js",
-    "test:baseline": "k6 run scenarios/mixed-workload.js",
+    "test:baseline": "k6 run scenarios/baseline-mixed.js",
     "test:load": "k6 run --vus 1000 --duration 20m scenarios/mixed-workload.js",
     "test:stress": "k6 run --vus 3000 --duration 15m scenarios/mixed-workload.js",
     "test:spike": "k6 run scenarios/mixed-workload.js",

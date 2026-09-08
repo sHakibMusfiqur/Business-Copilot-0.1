@@ -8,8 +8,8 @@ export const config = {
   apiUrl: __ENV.K6_API_URL || 'http://localhost:4000/api',
 
   // ─── Test User Pool ────────────────────────────────────────────────────────
-  testUserEmail: __ENV.K6_TEST_USERS || 'admin@businesscopilot.local',
-  testUserPassword: __ENV.K6_TEST_PASSWORD || 'Admin@123',
+  testUserEmail: __ENV.K6_TEST_USERS || 'admin@business-copilot.com',
+  testUserPassword: __ENV.K6_TEST_PASSWORD || 'Admin123!',
   testOrgId: __ENV.K6_TEST_ORG_ID || '',
 
   // ─── Thresholds ────────────────────────────────────────────────────────────
