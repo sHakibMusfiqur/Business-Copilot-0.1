@@ -18,6 +18,14 @@ function redact(value) {
   return value.substring(0, 2) + '****' + value.substring(value.length - 2);
 }
 
+function getHeaderCaseInsensitive(headers, name) {
+  const target = name.toLowerCase();
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === target) return value;
+  }
+  return null;
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 export default function () {
@@ -130,9 +138,9 @@ export default function () {
   }
 
   // ── 7. Throttle override check ───────────────────────────────────────────
-  const shortLimit = dashRes.headers['x-ratelimit-limit-short'];
-  const mediumLimit = dashRes.headers['x-ratelimit-limit-medium'];
-  const longLimit = dashRes.headers['x-ratelimit-limit-long'];
+  const shortLimit = getHeaderCaseInsensitive(dashRes.headers, 'x-ratelimit-limit-short');
+  const mediumLimit = getHeaderCaseInsensitive(dashRes.headers, 'x-ratelimit-limit-medium');
+  const longLimit = getHeaderCaseInsensitive(dashRes.headers, 'x-ratelimit-limit-long');
 
   const shortOk = shortLimit && parseInt(shortLimit) > 10;
   const mediumOk = mediumLimit && parseInt(mediumLimit) > 50;
