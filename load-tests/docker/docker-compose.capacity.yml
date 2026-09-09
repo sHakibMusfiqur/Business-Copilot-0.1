@@ -1,0 +1,11 @@
+
+
+services:
+  api:
+ 
+    # ───────────────────────────────────────────────────────────────────────────
+    environment:
+      CAPACITY_TEST: "true"
+      THROTTLE_SHORT_LIMIT: "100"
+      THROTTLE_MEDIUM_LIMIT: "1000"
+      THROTTLE_LONG_LIMIT: "5000"
