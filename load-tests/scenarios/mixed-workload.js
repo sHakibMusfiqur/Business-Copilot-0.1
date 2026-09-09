@@ -3,7 +3,7 @@
 import { check, sleep, group } from 'k6';
 import { config, totalWeight } from '../config.js';
 import { apiGet, parseJson } from '../helpers/http.js';
-import { createSetupFunction } from '../helpers/auth.js';
+import { createSetupFunction, ensureFreshToken } from '../helpers/auth.js';
 import { recordSuccess, recordFailure, recordDashboardRequest } from '../helpers/metrics.js';
 
 
@@ -57,9 +57,13 @@ function hitEndpoint(name, token) {
 }
 
 export default function (data) {
+  // Ensure the VU has a valid (non-expired) access token before making requests.
+  // This transparently handles refresh/re-login when the JWT approaches expiry.
+  const token = ensureFreshToken(data);
+
   const endpoint = pickEndpoint(__VU);
 
-  const res = hitEndpoint(endpoint, data.token);
+  const res = hitEndpoint(endpoint, token);
 
   const ok = check(res, {
     [`mixed/${endpoint} — status is 2xx`]: (r) => r.status >= 200 && r.status < 300,
