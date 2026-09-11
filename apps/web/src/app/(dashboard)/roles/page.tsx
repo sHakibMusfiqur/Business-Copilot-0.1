@@ -16,11 +16,9 @@ import { RoleFormModal } from '@/components/rbac/role-form-modal';
 import { RoleTable } from '@/components/rbac/role-table';
 import type { Role, GroupedPermissions } from '@/components/rbac/rbac-types';
 import { Button } from '@/components/ui/button';
-import { useToast } from '@/components/ui/use-toast';
 import { usePermissions } from '@/hooks/use-permissions';
 import {
   getRoles,
-  getRoleById,
   getPermissionsGrouped,
   getOrganizationUsers,
   assignUserRoles,
@@ -28,7 +26,6 @@ import {
 
 export default function RolesPage() {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
   const { hasPermission, permissions, isLoaded } = usePermissions();
   const canManageRoles = isLoaded ? hasPermission('organization.manage') : true;
 
@@ -75,21 +72,16 @@ export default function RolesPage() {
     setFormOpen(true);
   }, []);
 
-  const openEditModal = useCallback(async (role: Role) => {
-    try {
-      const details = await getRoleById(role.id);
-      setEditRole({
-        id: details.id,
-        name: details.name,
-        description: details.description,
-        isSystem: details.isSystem,
-        permissions: details.permissions,
-      });
-      setFormOpen(true);
-    } catch {
-      toast({ title: 'Error', description: 'Failed to load role details.', variant: 'destructive' });
-    }
-  }, [toast]);
+  const openEditModal = useCallback((role: Role) => {
+    setEditRole({
+      id: role.id,
+      name: role.name,
+      description: role.description,
+      isSystem: role.isSystem,
+      permissions: (role.permissions ?? []).map((name) => ({ name })),
+    });
+    setFormOpen(true);
+  }, []);
 
   if (isLoaded && !hasPermission('organization.manage')) {
     return (
