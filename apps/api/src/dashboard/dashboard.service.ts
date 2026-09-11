@@ -154,6 +154,9 @@ interface CachedGroupData {
   expenseTrend?: number[];
   // Audit group
   recentActivities?: RecentActivityItem[];
+  // People group
+  totalUsers?: number;
+  totalSuppliers?: number;
 }
 
 @Injectable()
@@ -180,6 +183,13 @@ export class DashboardService {
 
     // Build query plan from resolved config — only groups with active sources are queried.
     const queryPlan = buildQueryPlan(dashboardConfig.requiredSources, permissions);
+
+    // Always activate the people group for basic org stats (users, suppliers)
+    // when the user has the required permission.
+    if (!queryPlan.people && permissions.includes('users.read')) {
+      queryPlan.people = true;
+      queryPlan.activeGroupCount++;
+    }
 
     this.logger.debug(
       `Dashboard plan: industry=${dashboardConfig.industry} widgets=${dashboardConfig.allWidgets.length} ` +
@@ -247,6 +257,7 @@ export class DashboardService {
       payroll:   ['payroll.read'],
       finance:   ['invoices.read', 'payments.read', 'accounting.read', 'reports.finance', 'purchase.read'],
       audit:     ['audit.read'],
+      people:    ['users.read'],
     };
 
     const fetchGroup = async (group: QueryGroup): Promise<void> => {
@@ -277,7 +288,7 @@ export class DashboardService {
     };
 
     // Fetch all active groups in parallel
-    const allGroups: QueryGroup[] = ['sales', 'inventory', 'customers', 'employees', 'leaves', 'payroll', 'finance', 'audit'];
+    const allGroups: QueryGroup[] = ['sales', 'inventory', 'customers', 'employees', 'leaves', 'payroll', 'finance', 'audit', 'people'];
     await Promise.all(allGroups.map((g) => fetchGroup(g)));
 
     this.logger.debug(
@@ -301,6 +312,7 @@ export class DashboardService {
       case 'payroll':   return this.fetchPayrollGroup(orgId);
       case 'finance':   return this.fetchFinanceGroup(orgId);
       case 'audit':     return this.fetchAuditGroup(orgId);
+      case 'people':    return this.fetchPeopleGroup(orgId);
       default:          return {};
     }
   }
@@ -449,15 +461,23 @@ export class DashboardService {
     return { recentActivities };
   }
 
+  private async fetchPeopleGroup(orgId: string): Promise<CachedGroupData> {
+    const [totalUsers, totalSuppliers] = await Promise.all([
+      this.safeCount(this.prisma.user.count({ where: { organizationId: orgId } })),
+      this.safeCount(this.prisma.supplier.count({ where: { organizationId: orgId, isActive: true, deletedAt: null } })),
+    ]);
+    return { totalUsers, totalSuppliers };
+  }
+
   // ─── Response Assembly ──────────────────────────────────────────────────────
 
   /** Assemble DashboardStatistics from cached group data. Fields default to 0. */
   private assembleStatistics(data: CachedGroupData): DashboardStatistics {
     return {
-      totalUsers: 0, // No widget currently requires this; always 0
+      totalUsers: data.totalUsers ?? 0,
       totalCustomers: data.totalCustomers ?? 0,
       totalProducts: data.totalProducts ?? 0,
-      totalSuppliers: 0, // No widget currently requires this; always 0
+      totalSuppliers: data.totalSuppliers ?? 0,
       totalInvoices: data.totalInvoices ?? 0,
       totalPurchaseOrders: data.totalPurchaseOrders ?? 0,
       totalSalesOrders: data.totalSalesOrders ?? 0,

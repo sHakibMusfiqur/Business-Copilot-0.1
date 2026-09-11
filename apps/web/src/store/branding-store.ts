@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-import { getSettings } from '@/lib/api';
+import { getCurrentOrganization, getSettings } from '@/lib/api';
 import {
   DEFAULT_BRANDING,
   normalizeBranding,
@@ -57,7 +57,13 @@ export const useBrandingStore = create<BrandingState>((set, get) => ({
 
     try {
       const raw = await getSettings<Record<string, unknown>>('branding');
-      const brand = normalizeBranding(raw);
+      let brand = normalizeBranding(raw);
+      if (brand.brandName === DEFAULT_BRANDING.brandName) {
+        const org = await getCurrentOrganization();
+        if (org?.name) {
+          brand = { ...brand, brandName: org.name };
+        }
+      }
       writeBrandCache(orgId, brand);
       writeStoredBrand(orgId, brand);
       set({ brand, status: 'loaded' });
@@ -74,7 +80,13 @@ export const useBrandingStore = create<BrandingState>((set, get) => ({
 
     try {
       const raw = await getSettings<Record<string, unknown>>('branding');
-      const brand = normalizeBranding(raw);
+      let brand = normalizeBranding(raw);
+      if (brand.brandName === DEFAULT_BRANDING.brandName) {
+        const org = await getCurrentOrganization();
+        if (org?.name) {
+          brand = { ...brand, brandName: org.name };
+        }
+      }
       writeBrandCache(orgId, brand);
       writeStoredBrand(orgId, brand);
       set({ brand, status: 'loaded' });

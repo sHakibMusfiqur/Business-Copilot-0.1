@@ -142,4 +142,14 @@ export class OrganizationService {
     const brand = await this.settingsService.getBranding(org.id);
     return { id: org.id, slug: org.slug, name: org.name, brand };
   }
+
+ 
+  async findPublicById(orgId: string) {
+    const org = await this.prisma.organization.findUnique({
+      where: { id: orgId },
+      select: { id: true, name: true, logo: true },
+    });
+    if (!org) return null;
+    return org;
+  }
 }

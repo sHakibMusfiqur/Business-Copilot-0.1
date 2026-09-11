@@ -15,6 +15,7 @@ export const API_ROUTES = {
   },
   ORGANIZATIONS: {
     ROOT: '/organizations',
+    CURRENT: '/organizations/current',
     BY_SLUG: '/organizations/by-slug/{slug}',
     BY_EMAIL: '/organizations/by-email',
   },

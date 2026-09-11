@@ -9,7 +9,8 @@ export type QueryGroup =
   | 'leaves'
   | 'payroll'
   | 'finance'
-  | 'audit';
+  | 'audit'
+  | 'people';
 
 /** The query plan: which groups must be loaded. */
 export interface QueryPlan {
@@ -21,6 +22,7 @@ export interface QueryPlan {
   payroll: boolean;
   finance: boolean;
   audit: boolean;
+  people: boolean;
   /** Count of groups that will be queried (for observability). */
   activeGroupCount: number;
   /** The sources that caused each group to be active (for observability). */
@@ -69,6 +71,10 @@ const SOURCE_TO_GROUP: Record<string, QueryGroup> = {
 
   // ─── Audit ───
   activity: 'audit',
+
+  // ─── People ───
+  totalUsers: 'people',
+  totalSuppliers: 'people',
 };
 
 // ─── Permission → Group Mapping ────────────────────────────────────────────────
@@ -83,6 +89,7 @@ const GROUP_PERMISSIONS: Record<QueryGroup, string[]> = {
   payroll:   ['payroll.read'],
   finance:   ['invoices.read', 'payments.read', 'accounting.read', 'reports.finance', 'purchase.read'],
   audit:     ['audit.read'],
+  people:    ['users.read'],
 };
 
 // ─── Plan Builder ──────────────────────────────────────────────────────────────
@@ -101,6 +108,7 @@ export function buildQueryPlan(
     payroll: false,
     finance: false,
     audit: false,
+    people: false,
     activeGroupCount: 0,
     activeSourcesByGroup: {
       sales: [],
@@ -111,6 +119,7 @@ export function buildQueryPlan(
       payroll: [],
       finance: [],
       audit: [],
+      people: [],
     },
   };
 
@@ -147,7 +156,7 @@ export function getValidSourceKeys(): string[] {
 
 /** Get all query groups. */
 export function getAllQueryGroups(): QueryGroup[] {
-  return ['sales', 'inventory', 'customers', 'employees', 'leaves', 'payroll', 'finance', 'audit'];
+  return ['sales', 'inventory', 'customers', 'employees', 'leaves', 'payroll', 'finance', 'audit', 'people'];
 }
 
 /** Get the group for a source, or null if unknown. */

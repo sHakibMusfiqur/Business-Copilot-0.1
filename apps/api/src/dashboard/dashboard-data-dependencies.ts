@@ -93,6 +93,10 @@ export const GROUP_DATA_FIELDS: Record<QueryGroup, DataField[]> = {
   audit: [
     'recentActivities',
   ],
+  people: [
+    'totalUsers',
+    'totalSuppliers',
+  ],
 };
 
 // ─── Source → Data Fields ──────────────────────────────────────────────────────
@@ -139,6 +143,10 @@ export const SOURCE_DATA_DEPENDENCIES: Record<string, DataField[]> = {
   // ─── Audit group ───
   activity:             ['recentActivities'],
 
+  // ─── People group ───
+  totalUsers:           ['totalUsers'],
+  totalSuppliers:       ['totalSuppliers'],
+
   // ─── No DB query required ───
   aiInsights:           [],
   quickActions:         [],
@@ -147,7 +155,7 @@ export const SOURCE_DATA_DEPENDENCIES: Record<string, DataField[]> = {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Always-query fields that are not gated by any group (org metadata, computed). */
-export const ALWAYS_QUERY_FIELDS: DataField[] = ['organization'];
+export const ALWAYS_QUERY_FIELDS: DataField[] = ['organization', 'totalUsers', 'totalSuppliers'];
 
 
 export function requiredDataFields(sources: string[]): Set<DataField> {

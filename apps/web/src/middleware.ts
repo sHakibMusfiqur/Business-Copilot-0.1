@@ -23,7 +23,6 @@ const ORG_ROUTE_PREFIXES = [
   '/crm',
   '/sales',
   '/purchases',
-  '/invoices',
   '/accounting',
   '/departments',
   '/employees',
@@ -33,7 +32,9 @@ const ORG_ROUTE_PREFIXES = [
   '/roles',
   '/audit',
   '/reports',
-  '/copilot',
+  '/settings',
+  '/billing',
+  '/organization',
 ];
 
 function isOrgRoute(pathname: string): boolean {

@@ -14,6 +14,4 @@ export const MODULE_CATEGORIES: readonly ModuleCategory[] = [
 /** Modules that surface at the top of the sidebar as favorites. */
 export const DEFAULT_FAVORITES: readonly string[] = [
   'dashboard',
-  'customers',
-  'accounting',
 ];

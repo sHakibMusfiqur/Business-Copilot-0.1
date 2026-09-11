@@ -1,8 +1,10 @@
 import {
+  ArrowUpRight,
   Banknote,
   BarChart3,
   BookOpen,
   Bot,
+  Building,
   Building2,
   Calculator,
   CalendarDays,
@@ -13,6 +15,7 @@ import {
   LayoutDashboard,
   Package,
   Scale,
+  Settings,
   Shield,
   ShoppingBag,
   ShoppingCart,
@@ -199,7 +202,7 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
   {
     id: 'payables',
     name: 'Payables',
-    icon: CreditCard,
+    icon: ArrowUpRight,
     category: 'Finance',
     route: '/accounting/payables',
     permissions: ['accounting.payables.read'],
@@ -220,7 +223,7 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
   {
     id: 'departments',
     name: 'Departments',
-    icon: Building2,
+    icon: Building,
     category: 'People',
     route: '/departments',
     permissions: ['users.read'],
@@ -295,6 +298,16 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     route: '/billing',
     permissions: ['billing.read'],
     capabilities: ['administration', 'platform'],
+    status: 'stable',
+  },
+  {
+    id: 'settings',
+    name: 'Settings',
+    icon: Settings,
+    category: 'Administration',
+    route: '/settings',
+    permissions: ['settings.manage'],
+    capabilities: ['administration'],
     status: 'stable',
   },
   {

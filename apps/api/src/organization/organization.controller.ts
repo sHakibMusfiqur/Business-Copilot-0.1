@@ -9,6 +9,7 @@ import {
   HttpStatus,
   NotFoundException,
   Res,
+  ForbiddenException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -78,6 +79,17 @@ export class OrganizationController {
       organization,
       ...tokens,
     };
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Get('current')
+  @ApiBearerAuth('access-token')
+  @ApiOkResponse({ description: 'Current user organization info' })
+  async getCurrent(@CurrentUser() user: CurrentUserPayload) {
+    if (!user.organizationId) {
+      throw new ForbiddenException('User is not a member of any organization');
+    }
+    return this.organizationService.findPublicById(user.organizationId);
   }
 
   @Public()

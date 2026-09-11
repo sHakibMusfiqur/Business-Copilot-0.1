@@ -8,9 +8,24 @@ export interface PublicOrganization {
   brand: Record<string, unknown>;
 }
 
+export interface CurrentOrganization {
+  id: string;
+  name: string;
+  logo: string | null;
+}
+
 export interface EmailLookupResult {
   found: boolean;
   organization?: PublicOrganization;
+}
+
+/** Returns basic info for the current user's authenticated organization. */
+export async function getCurrentOrganization(signal?: AbortSignal): Promise<CurrentOrganization | null> {
+  const response = await api.get<CurrentOrganization | null>(
+    API_ROUTES.ORGANIZATIONS.CURRENT,
+    { signal },
+  );
+  return response.data;
 }
 
 /** Resolves an organization's identity + branding by slug (subdomain or /company/:slug). */
