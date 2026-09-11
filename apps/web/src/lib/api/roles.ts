@@ -25,6 +25,11 @@ export async function deleteRole(id: string) {
   await api.delete(`${API_ROUTES.ROLES.ROOT}/${id}`);
 }
 
+export async function updateRole(id: string, data: { name?: string; description?: string }) {
+  const response = await api.patch(`${API_ROUTES.ROLES.ROOT}/${id}`, data);
+  return response.data;
+}
+
 export async function getPermissionsGrouped(signal?: AbortSignal) {
   const response = await api.get(API_ROUTES.ROLES.PERMISSIONS_GROUPED, { signal });
   return response.data;

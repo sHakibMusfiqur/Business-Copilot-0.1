@@ -106,6 +106,13 @@ export class RbacService {
             rolePermissions: true,
           },
         },
+        rolePermissions: {
+          select: {
+            permission: {
+              select: { name: true },
+            },
+          },
+        },
       },
     });
 
@@ -119,6 +126,7 @@ export class RbacService {
       updatedAt: role.updatedAt,
       userCount: role._count.userAssignments,
       permissionCount: role._count.rolePermissions,
+      permissions: role.rolePermissions.map((rp) => rp.permission.name),
     }));
   }
 

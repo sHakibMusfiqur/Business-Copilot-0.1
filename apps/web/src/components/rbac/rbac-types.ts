@@ -18,6 +18,7 @@ export interface Role {
   updatedAt: string;
   userCount: number;
   permissionCount: number;
+  permissions?: string[];
 }
 
 export interface RoleDetails {
