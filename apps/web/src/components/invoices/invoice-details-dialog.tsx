@@ -128,8 +128,8 @@ export function InvoiceDetailsDialog({ invoice, open, onClose }: InvoiceDetailsD
                       </td>
                       <td className="p-3 text-sm text-right">{item.quantity}</td>
                       <td className="p-3 text-sm text-right">{formatCurrency(Number(item.unitPrice))}</td>
-                      <td className="p-3 text-sm text-right">{Number(item.discount) > 0 ? `${item.discount}%` : '\u2014'}</td>
-                      <td className="p-3 text-sm text-right">{Number(item.taxRate) > 0 ? `${item.taxRate}%` : '\u2014'}</td>
+                      <td className="p-3 text-sm text-right">{Number(item.discount) > 0 ? formatCurrency(Number(item.discount)) : '\u2014'}</td>
+                      <td className="p-3 text-sm text-right">{Number(item.taxAmount) > 0 ? formatCurrency(Number(item.taxAmount)) : '\u2014'}</td>
                       <td className="p-3 text-sm text-right font-medium">{formatCurrency(Number(item.total))}</td>
                     </tr>
                   ))}
