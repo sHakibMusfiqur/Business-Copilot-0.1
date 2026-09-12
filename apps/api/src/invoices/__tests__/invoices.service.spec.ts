@@ -33,8 +33,14 @@ const mockPrismaService = () => {
     findFirst: jest.fn(),
   };
 
+  const $executeRaw = jest.fn().mockResolvedValue(undefined);
+  const $transaction = jest.fn().mockImplementation(async (fn: (tx: Record<string, unknown>) => Promise<unknown>) => {
+    const txClient = { invoice, $executeRaw };
+    return fn(txClient);
+  });
+
   return {
-    prisma: { invoice, customer, product, salesOrder } as unknown as PrismaService,
+    prisma: { invoice, customer, product, salesOrder, $transaction, $executeRaw } as unknown as PrismaService,
     invoice,
     customer,
     product,

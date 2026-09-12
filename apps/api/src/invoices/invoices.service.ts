@@ -243,7 +243,7 @@ export class InvoicesService {
   }
 
   async createFromOrder(orgId: string, userId: string, salesOrderId: string) {
-    // Load SalesOrder with items, scoped to org
+    // Load SalesOrder with items, scoped to org — outside transaction, read-only
     const sale = await this.prisma.salesOrder.findFirst({
       where: { id: salesOrderId, organizationId: orgId, deletedAt: null },
       include: {
@@ -288,96 +288,71 @@ export class InvoicesService {
     const dueDate = new Date(sale.orderDate);
     dueDate.setDate(dueDate.getDate() + 30);
 
-    // Generate invoice number with retry
-    let invoice: Prisma.InvoiceGetPayload<{ include: { items: true; customer: true; salesOrder: true } }>;
+    // Advisory lock serializes invoice number generation + creation per-org.
+    // This eliminates the read-then-write race in generateInvoiceNumber().
+    const lockKey = this.computeAdvisoryLockKey(orgId);
 
-    const MAX_RETRIES = 20;
+    const invoice = await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey})`;
 
-    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
-      try {
-        // Idempotency check inside retry loop to handle concurrent requests
-        const existingInvoice = await this.prisma.invoice.findFirst({
-          where: { salesOrderId: sale.id, organizationId: orgId },
-        });
-        if (existingInvoice) {
-          throw new ConflictException(
-            `Invoice ${existingInvoice.invoiceNumber} already exists for this sales order`,
-          );
-        }
-
-        const invoiceNumber = await this.generateInvoiceNumber(orgId);
-        invoice = await this.prisma.invoice.create({
-          data: {
-            invoiceNumber,
-            organizationId: orgId,
-            type: 'SALES',
-            customerId: sale.customerId,
-            salesOrderId: sale.id,
-            issueDate: new Date(),
-            dueDate,
-            status: 'DRAFT',
-            paymentStatus: 'PENDING',
-            subtotal,
-            taxTotal,
-            discountTotal,
-            total,
-            paidAmount: 0,
-            notes: `Invoice for ${sale.orderNumber}`,
-            createdById: userId,
-            items: {
-              create: invoiceItems,
-            },
-          },
-          include: {
-            items: true,
-            customer: true,
-            salesOrder: true,
-          },
-        });
-
-        await this.auditService.record({
-          userId,
-          organizationId: orgId,
-          action: 'INVOICE_CREATED',
-          entity: 'Invoice',
-          entityId: invoice.id,
-          status: 'SUCCESS',
-          metadata: {
-            invoiceNumber: invoice.invoiceNumber,
-            salesOrderId: sale.id,
-            salesOrderNumber: sale.orderNumber,
-            customerId: sale.customerId,
-          },
-        });
-
-        return invoice;
-      } catch (error) {
-        // ConflictException from idempotency check — rethrow immediately
-        if (error instanceof ConflictException) {
-          throw error;
-        }
-        if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === 'P2002'
-        ) {
-          // Check if the P2002 is from the salesOrderId constraint (idempotency)
-          const existingForSale = await this.prisma.invoice.findFirst({
-            where: { salesOrderId: sale.id, organizationId: orgId },
-          });
-          if (existingForSale) {
-            throw new ConflictException(
-              `Invoice ${existingForSale.invoiceNumber} already exists for this sales order`,
-            );
-          }
-          // Otherwise it's an invoiceNumber collision — retry with a new number
-          continue;
-        }
-        throw error;
+      // Idempotency check — inside lock so concurrent requests see the same state
+      const existingInvoice = await tx.invoice.findFirst({
+        where: { salesOrderId: sale.id, organizationId: orgId },
+      });
+      if (existingInvoice) {
+        throw new ConflictException(
+          `Invoice ${existingInvoice.invoiceNumber} already exists for this sales order`,
+        );
       }
-    }
 
-    this.logger.error(`Failed to generate unique invoice number after ${MAX_RETRIES} attempts`);
-    throw new InternalServerErrorException('Failed to generate unique invoice number');
+      const invoiceNumber = await this.generateInvoiceNumber(orgId, tx);
+      return tx.invoice.create({
+        data: {
+          invoiceNumber,
+          organizationId: orgId,
+          type: 'SALES',
+          customerId: sale.customerId,
+          salesOrderId: sale.id,
+          issueDate: new Date(),
+          dueDate,
+          status: 'DRAFT',
+          paymentStatus: 'PENDING',
+          subtotal,
+          taxTotal,
+          discountTotal,
+          total,
+          paidAmount: 0,
+          notes: `Invoice for ${sale.orderNumber}`,
+          createdById: userId,
+          items: {
+            create: invoiceItems,
+          },
+        },
+        include: {
+          items: true,
+          customer: true,
+          salesOrder: true,
+        },
+      });
+    });
+
+    // Audit log outside transaction — only written on success
+    await this.auditService.record({
+      userId,
+      organizationId: orgId,
+      action: 'INVOICE_CREATED',
+      entity: 'Invoice',
+      entityId: invoice.id,
+      status: 'SUCCESS',
+      metadata: {
+        invoiceNumber: invoice.invoiceNumber,
+        salesOrderId: sale.id,
+        salesOrderNumber: sale.orderNumber,
+        customerId: sale.customerId,
+      },
+    });
+
+    return invoice;
   }
 
   async update(orgId: string, userId: string, invoiceId: string, dto: UpdateInvoiceDto) {
@@ -468,11 +443,22 @@ export class InvoicesService {
     return { id: invoiceId, message: 'Invoice deleted successfully' };
   }
 
-  private async generateInvoiceNumber(orgId: string): Promise<string> {
+  private computeAdvisoryLockKey(orgId: string): number {
+    let hash = 0;
+    for (let i = 0; i < orgId.length; i++) {
+      hash = ((hash << 5) - hash + orgId.charCodeAt(i)) | 0;
+    }
+    return (hash & 0x7fffffff) || 1;
+  }
+
+  private async generateInvoiceNumber(
+    orgId: string,
+    client?: Prisma.TransactionClient,
+  ): Promise<string> {
     const year = new Date().getFullYear();
     const prefix = `INV-${year}-`;
 
-    const lastInvoice = await this.prisma.invoice.findFirst({
+    const lastInvoice = await (client ?? this.prisma).invoice.findFirst({
       where: { organizationId: orgId, invoiceNumber: { startsWith: prefix } },
       orderBy: { invoiceNumber: 'desc' },
       select: { invoiceNumber: true },
