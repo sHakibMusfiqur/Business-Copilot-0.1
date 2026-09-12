@@ -6,10 +6,12 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DashboardError } from '@/components/dashboard/dashboard-error';
 import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 import { InvoiceTable } from '@/components/invoices/invoices-table';
+import { InvoiceDetailsDialog } from '@/components/invoices/invoice-details-dialog';
+import { EditInvoiceDialog } from '@/components/invoices/edit-invoice-dialog';
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
 import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { usePermissions } from '@/hooks/use-permissions';
-import { INVOICES_READ, INVOICES_DELETE } from '@/lib/permissions';
+import { INVOICES_READ, INVOICES_UPDATE, INVOICES_DELETE } from '@/lib/permissions';
 import { getInvoices, deleteInvoice } from '@/lib/api';
 import type { Invoice, InvoiceMeta, InvoiceListResponse } from '@/components/invoices/invoices-types';
 
@@ -18,6 +20,7 @@ export default function InvoicesPage() {
   const { hasPermission, isLoaded } = usePermissions();
 
   const canRead = isLoaded && hasPermission(INVOICES_READ);
+  const canUpdate = isLoaded && hasPermission(INVOICES_UPDATE);
   const canDelete = isLoaded && hasPermission(INVOICES_DELETE);
 
   const [search, setSearch] = useState('');
@@ -27,6 +30,8 @@ export default function InvoicesPage() {
   const limit = 10;
 
   const [deleteTarget, setDeleteTarget] = useState<Invoice | null>(null);
+  const [viewInvoice, setViewInvoice] = useState<Invoice | null>(null);
+  const [editInvoice, setEditInvoice] = useState<Invoice | null>(null);
 
   const invoicesQuery = useQuery<InvoiceListResponse>({
     queryKey: ['invoices', { page, limit, search, sortBy, sortOrder }],
@@ -96,6 +101,8 @@ export default function InvoicesPage() {
         onSearchChange={handleSearch}
         onPageChange={setPage}
         onSort={handleSort}
+        onView={setViewInvoice}
+        onEdit={canUpdate ? setEditInvoice : undefined}
         onDelete={canDelete ? setDeleteTarget : undefined}
       />
 
@@ -113,6 +120,19 @@ export default function InvoicesPage() {
           if (!deleteTarget) throw new Error('No invoice selected');
           return deleteInvoice(deleteTarget.id);
         }}
+      />
+
+      <InvoiceDetailsDialog
+        invoice={viewInvoice}
+        open={viewInvoice !== null}
+        onClose={() => setViewInvoice(null)}
+      />
+
+      <EditInvoiceDialog
+        invoice={editInvoice}
+        open={editInvoice !== null}
+        onClose={() => setEditInvoice(null)}
+        onUpdated={invalidate}
       />
     </div>
   );
