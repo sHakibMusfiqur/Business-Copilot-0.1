@@ -13,11 +13,12 @@ import { CreateSaleDialog } from '@/components/sales/create-sale-dialog';
 import { EditSaleDialog } from '@/components/sales/edit-sale-dialog';
 import { SaleDetailsDialog } from '@/components/sales/sale-details-dialog';
 import { DeliverSaleDialog } from '@/components/sales/deliver-sale-dialog';
+import { CreateInvoiceFromOrderDialog } from '@/components/invoices/create-invoice-from-order-dialog';
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
 import { RequirePermission } from '@/components/rbac/require-permission';
 import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { usePermissions } from '@/hooks/use-permissions';
-import { SALES_READ, SALES_CREATE, SALES_UPDATE, SALES_DELETE, SALES_APPROVE, SALES_DELIVER } from '@/lib/permissions';
+import { SALES_READ, SALES_CREATE, SALES_UPDATE, SALES_DELETE, SALES_APPROVE, SALES_DELIVER, INVOICES_CREATE } from '@/lib/permissions';
 import { deleteSale as deleteSaleRequest, getSales, confirmSale } from '@/lib/api';
 import type { Sale, SaleMeta, SaleListResponse } from '@/components/sales/sales-types';
 
@@ -31,6 +32,7 @@ export default function SalesPage() {
   const canDelete = isLoaded && hasPermission(SALES_DELETE);
   const canApprove = isLoaded && hasPermission(SALES_APPROVE);
   const canDeliver = isLoaded && hasPermission(SALES_DELIVER);
+  const canCreateInvoice = isLoaded && hasPermission(INVOICES_CREATE);
 
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
@@ -43,6 +45,7 @@ export default function SalesPage() {
   const [viewSale, setViewSale] = useState<Sale | null>(null);
   const [deleteSale, setDeleteSale] = useState<Sale | null>(null);
   const [deliverSale, setDeliverSale] = useState<Sale | null>(null);
+  const [createInvoiceTarget, setCreateInvoiceTarget] = useState<Sale | null>(null);
 
   const salesQuery = useQuery<SaleListResponse>({
     queryKey: ['sales', { page, limit, search, sortBy, sortOrder }],
@@ -143,6 +146,7 @@ export default function SalesPage() {
         onDelete={canDelete ? setDeleteSale : undefined}
         onConfirm={canApprove ? handleConfirm : undefined}
         onDeliver={canDeliver ? setDeliverSale : undefined}
+        onCreateInvoice={canCreateInvoice ? setCreateInvoiceTarget : undefined}
       />
 
       <CreateSaleDialog
@@ -185,6 +189,16 @@ export default function SalesPage() {
         open={deliverSale !== null}
         onClose={() => setDeliverSale(null)}
         onDelivered={invalidate}
+      />
+
+      <CreateInvoiceFromOrderDialog
+        sale={createInvoiceTarget}
+        open={createInvoiceTarget !== null}
+        onClose={() => setCreateInvoiceTarget(null)}
+        onCreated={() => {
+          queryClient.invalidateQueries({ queryKey: ['invoices'] });
+          invalidate();
+        }}
       />
     </div>
   );

@@ -43,6 +43,7 @@ interface SaleTableProps {
   onDelete?: (sale: Sale) => void;
   onConfirm?: (sale: Sale) => void;
   onDeliver?: (sale: Sale) => void;
+  onCreateInvoice?: (sale: Sale) => void;
 }
 
 const statusStyle: Record<SalesStatus, string> = {
@@ -104,6 +105,7 @@ export function SaleTable({
   onDelete,
   onConfirm,
   onDeliver,
+  onCreateInvoice,
 }: SaleTableProps) {
   const [searchInput, setSearchInput] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -230,6 +232,11 @@ export function SaleTable({
                             {onDeliver && sale.status === 'CONFIRMED' && (
                               <DropdownMenuItem onClick={() => onDeliver(sale)}>
                                 Deliver
+                              </DropdownMenuItem>
+                            )}
+                            {onCreateInvoice && sale.status === 'DELIVERED' && (
+                              <DropdownMenuItem onClick={() => onCreateInvoice(sale)}>
+                                Create Invoice
                               </DropdownMenuItem>
                             )}
                             {onDelete && sale.status === 'DRAFT' && (
