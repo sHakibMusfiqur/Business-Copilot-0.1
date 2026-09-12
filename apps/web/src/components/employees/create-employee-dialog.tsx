@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { X, Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { createEmployee } from '@/lib/api/employees';
+import { getDepartments, type Department } from '@/lib/api/departments';
 
 interface CreateEmployeeDialogProps {
   open: boolean;
@@ -28,6 +29,12 @@ export function CreateEmployeeDialog({ open, onClose, onCreated }: CreateEmploye
   const [position, setPosition] = useState('');
   const [salary, setSalary] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const departmentsQuery = useQuery<Department[]>({
+    queryKey: ['departments'],
+    queryFn: () => getDepartments(),
+    enabled: open,
+  });
 
   const createMutation = useMutation({
     mutationFn: () => createEmployee({
@@ -181,6 +188,23 @@ export function CreateEmployeeDialog({ open, onClose, onCreated }: CreateEmploye
                 placeholder="Software Engineer"
               />
             </div>
+          </div>
+
+          <div>
+            <Label htmlFor="departmentId">Department</Label>
+            <select
+              id="departmentId"
+              value={departmentId}
+              onChange={(e) => setDepartmentId(e.target.value)}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">No Department</option>
+              {departmentsQuery.data?.map((dept) => (
+                <option key={dept.id} value={dept.id}>
+                  {dept.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div>

@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { updateEmployee, getEmployee, type Employee, type EmployeeDetail } from '@/lib/api/employees';
+import { getDepartments, type Department } from '@/lib/api/departments';
 
 interface EditEmployeeDialogProps {
   employee: Employee | null;
@@ -23,6 +24,7 @@ export function EditEmployeeDialog({ employee, open, onClose, onUpdated }: EditE
   const [lastName, setLastName] = useState('');
   const [phone, setPhone] = useState('');
   const [gender, setGender] = useState('');
+  const [departmentId, setDepartmentId] = useState('');
   const [position, setPosition] = useState('');
   const [salary, setSalary] = useState('');
   const [isActive, setIsActive] = useState(true);
@@ -34,12 +36,19 @@ export function EditEmployeeDialog({ employee, open, onClose, onUpdated }: EditE
     enabled: open && !!employee?.id,
   });
 
+  const departmentsQuery = useQuery<Department[]>({
+    queryKey: ['departments'],
+    queryFn: () => getDepartments(),
+    enabled: open,
+  });
+
   useEffect(() => {
     if (fullEmployee) {
       setFirstName(fullEmployee.firstName);
       setLastName(fullEmployee.lastName);
       setPhone(fullEmployee.phone ?? '');
       setGender(fullEmployee.gender ?? '');
+      setDepartmentId(fullEmployee.departmentId ?? '');
       setPosition(fullEmployee.position ?? '');
       setSalary(fullEmployee.salary?.toString() ?? '');
       setIsActive(fullEmployee.isActive);
@@ -52,6 +61,7 @@ export function EditEmployeeDialog({ employee, open, onClose, onUpdated }: EditE
       lastName: lastName.trim(),
       phone: phone || undefined,
       gender: gender || undefined,
+      departmentId: departmentId || undefined,
       position: position || undefined,
       salary: salary ? parseFloat(salary) : undefined,
       isActive,
@@ -173,6 +183,23 @@ export function EditEmployeeDialog({ employee, open, onClose, onUpdated }: EditE
                 placeholder="0"
               />
             </div>
+          </div>
+
+          <div>
+            <Label htmlFor="departmentId">Department</Label>
+            <select
+              id="departmentId"
+              value={departmentId}
+              onChange={(e) => setDepartmentId(e.target.value)}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="">No Department</option>
+              {departmentsQuery.data?.map((dept) => (
+                <option key={dept.id} value={dept.id}>
+                  {dept.name}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="flex items-center gap-2">

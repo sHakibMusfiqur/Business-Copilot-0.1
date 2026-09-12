@@ -7,11 +7,12 @@ import { DashboardError } from '@/components/dashboard/dashboard-error';
 import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 import { EmployeeTable } from '@/components/employees/employees-table';
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
+import { StatusToggleDialog } from '@/components/ui/status-toggle-dialog';
 import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { RequirePermission } from '@/components/rbac/require-permission';
 import { usePermissions } from '@/hooks/use-permissions';
 import { EMPLOYEES_READ, EMPLOYEES_CREATE, EMPLOYEES_UPDATE, EMPLOYEES_DELETE } from '@/lib/permissions';
-import { getEmployees, deleteEmployee, type Employee, type EmployeeListResponse } from '@/lib/api/employees';
+import { getEmployees, deleteEmployee, updateEmployeeStatus, type Employee, type EmployeeListResponse } from '@/lib/api/employees';
 import { CreateEmployeeDialog } from '@/components/employees/create-employee-dialog';
 import { EditEmployeeDialog } from '@/components/employees/edit-employee-dialog';
 
@@ -33,6 +34,7 @@ export default function EmployeesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editEmployee, setEditEmployee] = useState<Employee | null>(null);
   const [deleteEmployeeTarget, setDeleteEmployeeTarget] = useState<Employee | null>(null);
+  const [statusEmployee, setStatusEmployee] = useState<Employee | null>(null);
 
   const employeesQuery = useQuery<EmployeeListResponse>({
     queryKey: ['employees', { page, limit, search, sortBy, sortOrder, isActive: statusFilter }],
@@ -144,6 +146,7 @@ export default function EmployeesPage() {
         onSort={handleSort}
         onEdit={canUpdate ? setEditEmployee : undefined}
         onDelete={canDelete ? setDeleteEmployeeTarget : undefined}
+        onToggleStatus={canUpdate ? setStatusEmployee : undefined}
       />
 
       <CreateEmployeeDialog
@@ -170,6 +173,18 @@ export default function EmployeesPage() {
         onClose={() => setDeleteEmployeeTarget(null)}
         onDeleted={invalidate}
         deleteFn={() => deleteEmployeeTarget ? deleteEmployee(deleteEmployeeTarget.id) : Promise.resolve()}
+      />
+
+      <StatusToggleDialog
+        entity={statusEmployee ? { ...statusEmployee, name: `${statusEmployee.firstName} ${statusEmployee.lastName}` } : null}
+        entityLabel="Employee"
+        open={statusEmployee !== null}
+        onClose={() => setStatusEmployee(null)}
+        onToggled={invalidate}
+        updateStatus={updateEmployeeStatus}
+        activateDescription={(name) => `Activate ${name}? They will be visible and usable across the system.`}
+        deactivateDescription={(name) => `Deactivate ${name}? They will be hidden from most views until reactivated.`}
+        errorFallback="Failed to update employee status."
       />
     </div>
   );

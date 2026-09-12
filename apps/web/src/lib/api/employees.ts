@@ -79,3 +79,8 @@ export async function updateEmployee(id: string, data: UpdateEmployeeData): Prom
 export async function deleteEmployee(id: string): Promise<void> {
   await api.delete(`${API_ROUTES.EMPLOYEES.ROOT}/${id}`);
 }
+
+export async function updateEmployeeStatus(id: string, isActive: boolean): Promise<Employee> {
+  const response = await api.patch<Employee>(`${API_ROUTES.EMPLOYEES.ROOT}/${id}`, { isActive });
+  return response.data;
+}

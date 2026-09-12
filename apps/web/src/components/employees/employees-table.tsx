@@ -41,6 +41,7 @@ interface EmployeeTableProps {
   onSort: (field: string) => void;
   onEdit?: (employee: Employee) => void;
   onDelete?: (employee: Employee) => void;
+  onToggleStatus?: (employee: Employee) => void;
 }
 
 function SortIcon({ field, sortBy, sortOrder }: { field: string; sortBy: string; sortOrder: string }) {
@@ -91,6 +92,7 @@ export function EmployeeTable({
   onSort,
   onEdit,
   onDelete,
+  onToggleStatus,
 }: EmployeeTableProps) {
   const [searchInput, setSearchInput] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -164,7 +166,7 @@ export function EmployeeTable({
                         <SortIcon field="hireDate" sortBy={sortBy} sortOrder={sortOrder} />
                       </span>
                     </th>
-                    {(onEdit || onDelete) && <th className="w-[60px] p-4" />}
+                    {(onEdit || onDelete || onToggleStatus) && <th className="w-[60px] p-4" />}
                   </tr>
                 </thead>
                 <tbody>
@@ -209,7 +211,7 @@ export function EmployeeTable({
                       <td className="p-4">
                         <span className="text-sm text-muted-foreground">{formatDate(employee.hireDate)}</span>
                       </td>
-                      {(onEdit || onDelete) && (
+                      {(onEdit || onDelete || onToggleStatus) && (
                         <td className="p-4">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -221,6 +223,11 @@ export function EmployeeTable({
                               {onEdit && (
                                 <DropdownMenuItem onClick={() => onEdit(employee)}>
                                   Edit employee
+                                </DropdownMenuItem>
+                              )}
+                              {onToggleStatus && (
+                                <DropdownMenuItem onClick={() => onToggleStatus(employee)}>
+                                  {employee.isActive ? 'Deactivate' : 'Activate'}
                                 </DropdownMenuItem>
                               )}
                               {onDelete && (
