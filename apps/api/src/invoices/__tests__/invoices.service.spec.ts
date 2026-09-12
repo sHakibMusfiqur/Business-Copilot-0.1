@@ -150,6 +150,95 @@ describe('InvoicesService', () => {
         }),
       );
     });
+
+    it('filters by search term across invoiceNumber, notes, and customer name', async () => {
+      prismaMocks.invoice.count.mockResolvedValue(0);
+      prismaMocks.invoice.findMany.mockResolvedValue([]);
+
+      await service.findAll(ORG_ID, { search: 'INV-2026' });
+
+      expect(prismaMocks.invoice.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: [
+              { invoiceNumber: { contains: 'INV-2026', mode: 'insensitive' } },
+              { notes: { contains: 'INV-2026', mode: 'insensitive' } },
+              { customer: { name: { contains: 'INV-2026', mode: 'insensitive' } } },
+            ],
+          }),
+        }),
+      );
+    });
+
+    it('filters by dateFrom and dateTo on issueDate', async () => {
+      prismaMocks.invoice.count.mockResolvedValue(0);
+      prismaMocks.invoice.findMany.mockResolvedValue([]);
+
+      await service.findAll(ORG_ID, { dateFrom: '2026-01-01', dateTo: '2026-12-31' });
+
+      expect(prismaMocks.invoice.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            issueDate: {
+              gte: new Date('2026-01-01'),
+              lte: new Date('2026-12-31'),
+            },
+          }),
+        }),
+      );
+    });
+
+    it('filters by paymentStatus', async () => {
+      prismaMocks.invoice.count.mockResolvedValue(0);
+      prismaMocks.invoice.findMany.mockResolvedValue([]);
+
+      await service.findAll(ORG_ID, { paymentStatus: 'PAID' });
+
+      expect(prismaMocks.invoice.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ paymentStatus: 'PAID' }),
+        }),
+      );
+    });
+
+    it('applies sortBy and sortOrder', async () => {
+      prismaMocks.invoice.count.mockResolvedValue(0);
+      prismaMocks.invoice.findMany.mockResolvedValue([]);
+
+      await service.findAll(ORG_ID, { sortBy: 'total', sortOrder: 'asc' });
+
+      expect(prismaMocks.invoice.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: { total: 'asc' },
+        }),
+      );
+    });
+
+    it('defaults to createdAt desc for invalid sortBy', async () => {
+      prismaMocks.invoice.count.mockResolvedValue(0);
+      prismaMocks.invoice.findMany.mockResolvedValue([]);
+
+      await service.findAll(ORG_ID, { sortBy: 'invalidField' as never, sortOrder: 'desc' });
+
+      expect(prismaMocks.invoice.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: { createdAt: 'desc' },
+        }),
+      );
+    });
+
+    it('always scopes queries to organizationId', async () => {
+      prismaMocks.invoice.count.mockResolvedValue(0);
+      prismaMocks.invoice.findMany.mockResolvedValue([]);
+
+      await service.findAll(ORG_ID, {});
+
+      expect(prismaMocks.invoice.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ organizationId: ORG_ID }),
+        }),
+      );
+    });
   });
 
   describe('findById', () => {
@@ -197,6 +286,19 @@ describe('InvoicesService', () => {
       await expect(
         service.createFromOrder(ORG_ID, USER_ID, 'so-1'),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws BadRequestException for non-DELIVERED statuses (PENDING, CONFIRMED, SHIPPED, CANCELLED)', async () => {
+      for (const status of ['PENDING', 'CONFIRMED', 'SHIPPED', 'CANCELLED']) {
+        prismaMocks.salesOrder.findFirst.mockResolvedValue(
+          createMockSalesOrder({ status }),
+        );
+        prismaMocks.invoice.findFirst.mockResolvedValue(null);
+
+        await expect(
+          service.createFromOrder(ORG_ID, USER_ID, 'so-1'),
+        ).rejects.toThrow(BadRequestException);
+      }
     });
 
     it('throws ConflictException when invoice already exists for order', async () => {
@@ -288,6 +390,90 @@ describe('InvoicesService', () => {
         }),
       );
     });
+
+    it('maps SalesOrder items to InvoiceItems with correct field mapping', async () => {
+      const salesOrder = createMockSalesOrder();
+      prismaMocks.salesOrder.findFirst.mockResolvedValue(salesOrder);
+      prismaMocks.invoice.findFirst.mockResolvedValue(null);
+      prismaMocks.invoice.create.mockResolvedValue({
+        ...createMockInvoice(),
+        salesOrderId: 'so-1',
+      });
+
+      await service.createFromOrder(ORG_ID, USER_ID, 'so-1');
+
+      const createCall = prismaMocks.invoice.create.mock.calls[0][0];
+      const itemData = createCall.data.items.create;
+
+      expect(itemData).toHaveLength(1);
+      expect(itemData[0].productId).toBe('p1');
+      expect(itemData[0].description).toBe('Product 1');
+      expect(itemData[0].quantity).toBe(2);
+      expect(itemData[0].unitPrice).toBe(50);
+      expect(itemData[0].discount).toBe(10);
+      expect(itemData[0].taxAmount).toBe(5);
+      expect(itemData[0].total).toBe(95);
+    });
+
+    it('sets due date to order date + 30 days', async () => {
+      const orderDate = new Date('2026-06-15T00:00:00Z');
+      const salesOrder = createMockSalesOrder({ orderDate });
+      prismaMocks.salesOrder.findFirst.mockResolvedValue(salesOrder);
+      prismaMocks.invoice.findFirst.mockResolvedValue(null);
+      prismaMocks.invoice.create.mockResolvedValue(createMockInvoice());
+
+      await service.createFromOrder(ORG_ID, USER_ID, 'so-1');
+
+      const createCall = prismaMocks.invoice.create.mock.calls[0][0];
+      const dueDate = createCall.data.dueDate as Date;
+
+      expect(dueDate).toBeInstanceOf(Date);
+      expect(dueDate.toISOString().startsWith('2026-07-15')).toBe(true);
+    });
+
+    it('sets organizationId on created invoice', async () => {
+      prismaMocks.salesOrder.findFirst.mockResolvedValue(createMockSalesOrder());
+      prismaMocks.invoice.findFirst.mockResolvedValue(null);
+      prismaMocks.invoice.create.mockResolvedValue(createMockInvoice());
+
+      await service.createFromOrder(ORG_ID, USER_ID, 'so-1');
+
+      const createCall = prismaMocks.invoice.create.mock.calls[0][0];
+      expect(createCall.data.organizationId).toBe(ORG_ID);
+    });
+
+    it('sets createdById from userId', async () => {
+      prismaMocks.salesOrder.findFirst.mockResolvedValue(createMockSalesOrder());
+      prismaMocks.invoice.findFirst.mockResolvedValue(null);
+      prismaMocks.invoice.create.mockResolvedValue(createMockInvoice());
+
+      await service.createFromOrder(ORG_ID, USER_ID, 'so-1');
+
+      const createCall = prismaMocks.invoice.create.mock.calls[0][0];
+      expect(createCall.data.createdById).toBe(USER_ID);
+    });
+
+    it('sets paymentStatus to PENDING', async () => {
+      prismaMocks.salesOrder.findFirst.mockResolvedValue(createMockSalesOrder());
+      prismaMocks.invoice.findFirst.mockResolvedValue(null);
+      prismaMocks.invoice.create.mockResolvedValue(createMockInvoice());
+
+      await service.createFromOrder(ORG_ID, USER_ID, 'so-1');
+
+      const createCall = prismaMocks.invoice.create.mock.calls[0][0];
+      expect(createCall.data.paymentStatus).toBe('PENDING');
+    });
+
+    it('includes notes referencing the sales order number', async () => {
+      prismaMocks.salesOrder.findFirst.mockResolvedValue(createMockSalesOrder());
+      prismaMocks.invoice.findFirst.mockResolvedValue(null);
+      prismaMocks.invoice.create.mockResolvedValue(createMockInvoice());
+
+      await service.createFromOrder(ORG_ID, USER_ID, 'so-1');
+
+      const createCall = prismaMocks.invoice.create.mock.calls[0][0];
+      expect(createCall.data.notes).toBe('Invoice for SO-2026-000001');
+    });
   });
 
   describe('update', () => {
@@ -307,6 +493,18 @@ describe('InvoicesService', () => {
       await expect(
         service.update(ORG_ID, USER_ID, 'inv-1', { notes: 'test' }),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws BadRequestException for non-DRAFT statuses (SENT, PAID, CANCELLED)', async () => {
+      for (const status of ['SENT', 'PAID', 'CANCELLED']) {
+        prismaMocks.invoice.findFirst.mockResolvedValue(
+          createMockInvoice({ status }),
+        );
+
+        await expect(
+          service.update(ORG_ID, USER_ID, 'inv-1', { notes: 'test' }),
+        ).rejects.toThrow(BadRequestException);
+      }
     });
 
     it('allows metadata updates on DRAFT invoice', async () => {
@@ -352,6 +550,51 @@ describe('InvoicesService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
+    it('rejects customerId change to cross-org customer', async () => {
+      prismaMocks.invoice.findFirst.mockResolvedValue(createMockInvoice());
+      prismaMocks.customer.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.update(ORG_ID, USER_ID, 'inv-1', { customerId: 'cust-cross-org' }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(prismaMocks.customer.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ id: 'cust-cross-org', organizationId: ORG_ID }),
+        }),
+      );
+      expect(prismaMocks.invoice.update).not.toHaveBeenCalled();
+    });
+
+    it('allows customerId change to valid same-org customer', async () => {
+      prismaMocks.invoice.findFirst.mockResolvedValue(createMockInvoice());
+      prismaMocks.customer.findFirst.mockResolvedValue({ id: 'cust-2', name: 'New Customer' });
+      prismaMocks.invoice.update.mockResolvedValue({
+        ...createMockInvoice(),
+        customerId: 'cust-2',
+      });
+
+      const result = await service.update(ORG_ID, USER_ID, 'inv-1', { customerId: 'cust-2' });
+
+      expect(result.customerId).toBe('cust-2');
+      expect(prismaMocks.invoice.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            customer: { connect: { id: 'cust-2' } },
+          }),
+        }),
+      );
+    });
+
+    it('does not validate customerId when not changing it', async () => {
+      prismaMocks.invoice.findFirst.mockResolvedValue(createMockInvoice());
+      prismaMocks.invoice.update.mockResolvedValue(createMockInvoice());
+
+      await service.update(ORG_ID, USER_ID, 'inv-1', { notes: 'unchanged customer' });
+
+      expect(prismaMocks.customer.findFirst).not.toHaveBeenCalled();
+    });
+
     it('records audit event on success', async () => {
       prismaMocks.invoice.findFirst.mockResolvedValue(createMockInvoice());
       prismaMocks.invoice.update.mockResolvedValue(createMockInvoice());
@@ -366,6 +609,21 @@ describe('InvoicesService', () => {
           entity: 'Invoice',
           entityId: 'inv-1',
           status: 'SUCCESS',
+        }),
+      );
+    });
+
+    it('audit event includes invoiceNumber in metadata', async () => {
+      prismaMocks.invoice.findFirst.mockResolvedValue(createMockInvoice());
+      prismaMocks.invoice.update.mockResolvedValue(createMockInvoice());
+
+      await service.update(ORG_ID, USER_ID, 'inv-1', { notes: 'test' });
+
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            invoiceNumber: 'INV-2026-000001',
+          }),
         }),
       );
     });
@@ -388,6 +646,18 @@ describe('InvoicesService', () => {
       await expect(service.remove(ORG_ID, USER_ID, 'inv-1')).rejects.toThrow(
         BadRequestException,
       );
+    });
+
+    it('throws BadRequestException for non-DRAFT statuses (SENT, PAID, CANCELLED)', async () => {
+      for (const status of ['SENT', 'PAID', 'CANCELLED']) {
+        prismaMocks.invoice.findFirst.mockResolvedValue(
+          createMockInvoice({ status }),
+        );
+
+        await expect(service.remove(ORG_ID, USER_ID, 'inv-1')).rejects.toThrow(
+          BadRequestException,
+        );
+      }
     });
 
     it('allows deletion of DRAFT invoice', async () => {
@@ -421,6 +691,21 @@ describe('InvoicesService', () => {
           entity: 'Invoice',
           entityId: 'inv-1',
           status: 'SUCCESS',
+        }),
+      );
+    });
+
+    it('audit event includes invoiceNumber in metadata', async () => {
+      prismaMocks.invoice.findFirst.mockResolvedValue(createMockInvoice());
+      prismaMocks.invoice.delete.mockResolvedValue(createMockInvoice());
+
+      await service.remove(ORG_ID, USER_ID, 'inv-1');
+
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          metadata: expect.objectContaining({
+            invoiceNumber: 'INV-2026-000001',
+          }),
         }),
       );
     });
