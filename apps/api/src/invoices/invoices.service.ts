@@ -393,17 +393,6 @@ export class InvoicesService {
     if (dto.notes !== undefined) updateData.notes = dto.notes;
     if (dto.issueDate !== undefined) updateData.issueDate = new Date(dto.issueDate);
     if (dto.dueDate !== undefined) updateData.dueDate = dto.dueDate ? new Date(dto.dueDate) : null;
-    if (dto.subtotal !== undefined) updateData.subtotal = dto.subtotal;
-    if (dto.taxTotal !== undefined) updateData.taxTotal = dto.taxTotal;
-    if (dto.discountTotal !== undefined) updateData.discountTotal = dto.discountTotal;
-
-    // Recalculate total if amounts changed
-    if (dto.subtotal !== undefined || dto.taxTotal !== undefined || dto.discountTotal !== undefined) {
-      const subtotal = dto.subtotal ?? Number(invoice.subtotal);
-      const taxTotal = dto.taxTotal ?? Number(invoice.taxTotal);
-      const discountTotal = dto.discountTotal ?? Number(invoice.discountTotal);
-      updateData.total = subtotal - discountTotal + taxTotal;
-    }
 
     const updated = await this.prisma.invoice.update({
       where: { id: invoiceId },

@@ -23,7 +23,6 @@ import { ParseCuidPipe } from '../common/pipes/parse-cuid.pipe';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
 
 import { InvoicesService } from './invoices.service';
-import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { QueryInvoiceDto } from './dto/query-invoice.dto';
 
@@ -63,19 +62,6 @@ export class InvoicesController {
   ) {
     const orgId = this.requireOrg(user);
     return this.invoicesService.findById(orgId, id);
-  }
-
-  @Post()
-  @Permissions(['invoices.create'])
-  @ApiOperation({ summary: 'Create a new invoice manually' })
-  @HttpCode(HttpStatus.CREATED)
-  create(
-    @CurrentUser() user: CurrentUserPayload,
-    @Body() dto: CreateInvoiceDto,
-  ) {
-    const orgId = this.requireOrg(user);
-    const userId = user.id;
-    return this.invoicesService.create(orgId, userId, dto);
   }
 
   @Post('from-order/:salesOrderId')
