@@ -12,7 +12,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags, ApiOperation } from '@nestjs/swagger';
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
@@ -23,6 +23,7 @@ import { Permissions } from '../common/decorators/permissions.decorator';
 
 import { EmployeesService } from './employees.service';
 import { CreateEmployeeDto, UpdateEmployeeDto } from './dto/create-employee.dto';
+import { QueryEmployeeDto } from './dto/query-employee.dto';
 
 @ApiTags('Employees')
 @Controller('employees')
@@ -43,27 +44,12 @@ export class EmployeesController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'List employees in the organization' })
   @ApiOkResponse({ description: 'Employees listed successfully' })
-  @ApiQuery({ name: 'search', required: false, description: 'Search by name, email, or employee code' })
-  @ApiQuery({ name: 'departmentId', required: false, description: 'Filter by department ID' })
-  @ApiQuery({ name: 'isActive', required: false, description: 'Filter by active status' })
-  @ApiQuery({ name: 'page', required: false, description: 'Page number' })
-  @ApiQuery({ name: 'limit', required: false, description: 'Items per page (max 100)' })
   async findAll(
     @CurrentUser() user: CurrentUserPayload,
-    @Query('search') search?: string,
-    @Query('departmentId') departmentId?: string,
-    @Query('isActive') isActive?: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
+    @Query() query: QueryEmployeeDto,
   ) {
     const orgId = this.requireOrg(user);
-    return this.employeesService.findAll(orgId, {
-      search,
-      departmentId,
-      isActive: isActive !== undefined ? isActive === 'true' : undefined,
-      page: page ? parseInt(page, 10) : undefined,
-      limit: limit ? parseInt(limit, 10) : undefined,
-    });
+    return this.employeesService.findAll(orgId, query);
   }
 
   @Get('stats')

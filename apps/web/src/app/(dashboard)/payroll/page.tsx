@@ -13,7 +13,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { usePermissions } from '@/hooks/use-permissions';
 import { PAYROLL_READ, PAYROLL_CREATE, PAYROLL_UPDATE, PAYROLL_DELETE } from '@/lib/permissions';
 import { getPayroll, getPayrollRecord, getPayrollStats, deletePayroll, type PayrollRecord, type PayrollDetail, type PayrollStats } from '@/lib/api/payroll';
-import { getEmployees, type Employee } from '@/lib/api/employees';
+import { getEmployees, type EmployeeListResponse } from '@/lib/api/employees';
 import { formatCurrency } from '@/lib/utils';
 import { CreatePayrollDialog } from '@/components/payroll/create-payroll-dialog';
 import { EditPayrollDialog } from '@/components/payroll/edit-payroll-dialog';
@@ -38,9 +38,9 @@ export default function PayrollPage() {
   const [viewRecord, setViewRecord] = useState<PayrollDetail | null>(null);
   const [viewOpen, setViewOpen] = useState(false);
 
-  const employeesQuery = useEmpQuery<Employee[]>({
+  const employeesQuery = useEmpQuery<EmployeeListResponse>({
     queryKey: ['employees', { isActive: true }],
-    queryFn: () => getEmployees({ isActive: true }),
+    queryFn: () => getEmployees({ isActive: true, limit: 100 }),
     enabled: canRead,
   });
 
@@ -92,7 +92,7 @@ export default function PayrollPage() {
     );
   });
 
-  const employees = employeesQuery.data ?? [];
+  const employees = (employeesQuery.data as EmployeeListResponse | undefined)?.data ?? [];
   const stats = statsQuery.data;
 
   return (

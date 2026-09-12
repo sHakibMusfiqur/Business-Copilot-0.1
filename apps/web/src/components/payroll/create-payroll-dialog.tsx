@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { createPayroll } from '@/lib/api/payroll';
-import { getEmployees, type Employee } from '@/lib/api/employees';
+import { getEmployees, type EmployeeListResponse } from '@/lib/api/employees';
 
 interface CreatePayrollDialogProps {
   open: boolean;
@@ -30,9 +30,9 @@ export function CreatePayrollDialog({ open, onClose, onCreated }: CreatePayrollD
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const employeesQuery = useQuery<Employee[]>({
+  const employeesQuery = useQuery<EmployeeListResponse>({
     queryKey: ['employees', { isActive: true }],
-    queryFn: () => getEmployees({ isActive: true }),
+    queryFn: () => getEmployees({ isActive: true, limit: 100 }),
     enabled: open,
   });
 
@@ -96,7 +96,7 @@ export function CreatePayrollDialog({ open, onClose, onCreated }: CreatePayrollD
 
   if (!open) return null;
 
-  const employees = employeesQuery.data ?? [];
+  const employees = (employeesQuery.data as EmployeeListResponse | undefined)?.data ?? [];
   const netSalary = (parseFloat(basicSalary) || 0) + (parseFloat(allowances) || 0) - (parseFloat(deductions) || 0) - (parseFloat(tax) || 0);
 
   return (

@@ -57,7 +57,7 @@ describe('EmployeesService', () => {
       prisma.employee.findMany.mockResolvedValue(employees);
       prisma.employee.count.mockResolvedValue(1);
 
-      const result = await service.findAll('org-1');
+      const result = await service.findAll('org-1', {});
 
       expect(result.data).toEqual(employees);
       expect(result.meta.total).toBe(1);
@@ -81,8 +81,55 @@ describe('EmployeesService', () => {
     it('should filter by active status', async () => {
       prisma.employee.findMany.mockResolvedValue([]);
       prisma.employee.count.mockResolvedValue(0);
-      await service.findAll('org-1', { isActive: true });
+      await service.findAll('org-1', { isActive: 'true' });
       expect(prisma.employee.findMany).toHaveBeenCalled();
+    });
+
+    it('should sort by valid field ascending', async () => {
+      prisma.employee.findMany.mockResolvedValue([]);
+      prisma.employee.count.mockResolvedValue(0);
+      await service.findAll('org-1', { sortBy: 'firstName', sortOrder: 'asc' });
+      expect(prisma.employee.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: { firstName: 'asc' } }),
+      );
+    });
+
+    it('should sort by valid field descending', async () => {
+      prisma.employee.findMany.mockResolvedValue([]);
+      prisma.employee.count.mockResolvedValue(0);
+      await service.findAll('org-1', { sortBy: 'salary', sortOrder: 'desc' });
+      expect(prisma.employee.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: { salary: 'desc' } }),
+      );
+    });
+
+    it('should fallback to createdAt desc for invalid sortBy', async () => {
+      prisma.employee.findMany.mockResolvedValue([]);
+      prisma.employee.count.mockResolvedValue(0);
+      await service.findAll('org-1', { sortBy: 'invalidField' as never, sortOrder: 'desc' });
+      expect(prisma.employee.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: { createdAt: 'desc' } }),
+      );
+    });
+
+    it('should fallback to desc for invalid sortOrder', async () => {
+      prisma.employee.findMany.mockResolvedValue([]);
+      prisma.employee.count.mockResolvedValue(0);
+      await service.findAll('org-1', { sortBy: 'firstName', sortOrder: 'invalid' as never });
+      expect(prisma.employee.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: { firstName: 'desc' } }),
+      );
+    });
+
+    it('should preserve tenant isolation in where clause', async () => {
+      prisma.employee.findMany.mockResolvedValue([]);
+      prisma.employee.count.mockResolvedValue(0);
+      await service.findAll('org-1', { search: 'test', departmentId: 'dept-1', isActive: 'true' });
+      expect(prisma.employee.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ organizationId: 'org-1' }),
+        }),
+      );
     });
   });
 

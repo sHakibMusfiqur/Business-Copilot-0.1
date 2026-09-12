@@ -1,91 +1,43 @@
 import { api } from './client';
 import { API_ROUTES } from './routes';
 
-export interface Employee {
-  id: string;
-  employeeCode: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone?: string;
-  gender?: string;
-  hireDate: string;
-  departmentId?: string;
-  position?: string;
-  salary?: number;
-  isActive: boolean;
-  createdAt: string;
-  userId?: string;
-  department?: {
-    id: string;
-    name: string;
-    code: string;
-  };
-}
-
-export interface EmployeeDetail extends Employee {
-  dateOfBirth?: string;
-  updatedAt: string;
-  leaves?: Array<{
-    id: string;
-    startDate: string;
-    endDate: string;
-    type: string;
-    status: string;
-    reason?: string;
-    createdAt: string;
-  }>;
-  payrolls?: Array<{
-    id: string;
-    periodStart: string;
-    periodEnd: string;
-    basicSalary: number;
-    allowances: number;
-    deductions: number;
-    tax: number;
-    netSalary: number;
-    paymentDate?: string;
-  }>;
-}
-
-export interface EmployeeStats {
-  total: number;
-  active: number;
-  inactive: number;
-  byDepartment: Array<{
-    departmentId: string | null;
-    count: number;
-  }>;
-}
-
-export type EmployeesResponse = Employee[];
+export type { Employee, EmployeeDetail, EmployeeStats, EmployeeListResponse, EmployeeMeta, EmployeeDepartment } from '@/components/employees/employees-types';
+import type { Employee, EmployeeDetail, EmployeeStats, EmployeeListResponse } from '@/components/employees/employees-types';
 
 export interface GetEmployeesParams {
   search?: string;
   departmentId?: string;
   isActive?: boolean;
+  page?: number;
+  limit?: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
 }
 
-export async function getEmployees(params?: GetEmployeesParams): Promise<EmployeesResponse> {
+export async function getEmployees(params?: GetEmployeesParams, signal?: AbortSignal): Promise<EmployeeListResponse> {
   const searchParams = new URLSearchParams();
   if (params?.search) searchParams.set('search', params.search);
   if (params?.departmentId) searchParams.set('departmentId', params.departmentId);
   if (params?.isActive !== undefined) searchParams.set('isActive', String(params.isActive));
+  if (params?.page) searchParams.set('page', String(params.page));
+  if (params?.limit) searchParams.set('limit', String(params.limit));
+  if (params?.sortBy) searchParams.set('sortBy', params.sortBy);
+  if (params?.sortOrder) searchParams.set('sortOrder', params.sortOrder);
 
   const query = searchParams.toString();
   const url = query ? `${API_ROUTES.EMPLOYEES.ROOT}?${query}` : API_ROUTES.EMPLOYEES.ROOT;
 
-  const response = await api.get<EmployeesResponse>(url);
+  const response = await api.get<EmployeeListResponse>(url, { signal });
   return response.data;
 }
 
-export async function getEmployee(id: string): Promise<EmployeeDetail> {
-  const response = await api.get<EmployeeDetail>(`${API_ROUTES.EMPLOYEES.ROOT}/${id}`);
+export async function getEmployee(id: string, signal?: AbortSignal): Promise<EmployeeDetail> {
+  const response = await api.get<EmployeeDetail>(`${API_ROUTES.EMPLOYEES.ROOT}/${id}`, { signal });
   return response.data;
 }
 
-export async function getEmployeeStats(): Promise<EmployeeStats> {
-  const response = await api.get<EmployeeStats>(API_ROUTES.EMPLOYEES.STATS);
+export async function getEmployeeStats(signal?: AbortSignal): Promise<EmployeeStats> {
+  const response = await api.get<EmployeeStats>(API_ROUTES.EMPLOYEES.STATS, { signal });
   return response.data;
 }
 

@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { createLeave, type CreateLeaveData } from '@/lib/api/leaves';
-import { getEmployees, type Employee } from '@/lib/api/employees';
+import { getEmployees, type EmployeeListResponse } from '@/lib/api/employees';
 import { LEAVE_TYPES } from './leave-types';
 import { useQuery } from '@tanstack/react-query';
 
@@ -29,9 +29,9 @@ export function CreateLeaveDialog({ open, onClose, onCreated }: CreateLeaveDialo
   const [type, setType] = useState('ANNUAL');
   const [reason, setReason] = useState('');
 
-  const employeesQuery = useQuery<Employee[]>({
+  const employeesQuery = useQuery<EmployeeListResponse>({
     queryKey: ['employees'],
-    queryFn: () => getEmployees(),
+    queryFn: () => getEmployees({ limit: 100 }),
     enabled: open,
   });
 
@@ -79,7 +79,7 @@ export function CreateLeaveDialog({ open, onClose, onCreated }: CreateLeaveDialo
               required
             >
               <option value="">Select employee</option>
-              {(employeesQuery.data ?? []).map((emp) => (
+              {((employeesQuery.data as EmployeeListResponse | undefined)?.data ?? []).map((emp) => (
                 <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName}</option>
               ))}
             </select>

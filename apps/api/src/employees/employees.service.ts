@@ -5,6 +5,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 
 import type { CreateEmployeeDto, UpdateEmployeeDto } from './dto/create-employee.dto';
+import type { QueryEmployeeDto } from './dto/query-employee.dto';
 
 @Injectable()
 export class EmployeesService {
@@ -13,34 +14,48 @@ export class EmployeesService {
     private readonly auditService: AuditService,
   ) {}
 
-  async findAll(orgId: string, query?: { search?: string; departmentId?: string; isActive?: boolean; page?: number; limit?: number }) {
-    const page = Math.max(1, query?.page ?? 1);
-    const limit = Math.min(100, Math.max(1, query?.limit ?? 50));
+  async findAll(orgId: string, query: QueryEmployeeDto) {
+    const {
+      page: rawPage = 1,
+      limit: rawLimit = 50,
+      search,
+      departmentId,
+      isActive,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+    } = query;
+
+    const page = Math.max(1, rawPage);
+    const limit = Math.min(100, Math.max(1, rawLimit));
     const skip = (page - 1) * limit;
+
+    const allowedSortFields = ['employeeCode', 'firstName', 'lastName', 'email', 'hireDate', 'position', 'salary', 'isActive', 'createdAt', 'updatedAt'] as const;
+    const field = allowedSortFields.includes(sortBy as typeof allowedSortFields[number]) ? sortBy : 'createdAt';
+    const order = sortOrder === 'asc' ? 'asc' : 'desc';
 
     const where: Record<string, unknown> = { organizationId: orgId };
 
-    if (query?.search) {
+    if (search) {
       where.OR = [
-        { firstName: { contains: query.search, mode: 'insensitive' } },
-        { lastName: { contains: query.search, mode: 'insensitive' } },
-        { email: { contains: query.search, mode: 'insensitive' } },
-        { employeeCode: { contains: query.search, mode: 'insensitive' } },
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { employeeCode: { contains: search, mode: 'insensitive' } },
       ];
     }
 
-    if (query?.departmentId) {
-      where.departmentId = query.departmentId;
+    if (departmentId) {
+      where.departmentId = departmentId;
     }
 
-    if (query?.isActive !== undefined) {
-      where.isActive = query.isActive;
+    if (isActive !== undefined) {
+      where.isActive = isActive === 'true';
     }
 
     const [data, total] = await Promise.all([
       this.prisma.employee.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { [field]: order },
         skip,
         take: limit,
         select: {
