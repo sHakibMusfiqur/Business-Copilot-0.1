@@ -507,6 +507,8 @@ model Invoice {
   type           InvoiceType   @default(SALES)
   customerId     String?
   customer       Customer?     @relation(fields: [customerId], references: [id])
+  salesOrderId   String?
+  salesOrder     SalesOrder?   @relation(fields: [salesOrderId], references: [id])
   issueDate      DateTime      @default(now())
   dueDate        DateTime?
   status         OrderStatus   @default(DRAFT)
@@ -515,6 +517,7 @@ model Invoice {
   taxTotal       Decimal       @default(0)
   discountTotal  Decimal       @default(0)
   total          Decimal       @default(0)
+  paidAmount     Decimal       @default(0)
   notes          String?
   createdById    String
   createdBy      User          @relation("CreatedByUser", fields: [createdById], references: [id])
@@ -523,8 +526,10 @@ model Invoice {
 
   items InvoiceItem[]
 
+  @@unique([salesOrderId])
   @@index([organizationId])
   @@index([customerId])
+  @@index([salesOrderId])
   @@index([organizationId, status])
   @@index([organizationId, paymentStatus])
 }
@@ -614,6 +619,7 @@ model SalesOrder {
 
   items       SalesOrderItem[]
   receivables Receivable[]
+  invoices    Invoice[]
 
   @@index([organizationId])
   @@index([customerId])

@@ -18,6 +18,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { DepartmentsModule } from './departments/departments.module';
 import { EmployeesModule } from './employees/employees.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { InvoicesModule } from './invoices/invoices.module';
 import { ImportModule } from './import/import.module';
 import { LeavesModule } from './leaves/leaves.module';
 import { InvitationsModule } from './invitations/invitations.module';
@@ -68,6 +69,7 @@ import { THROTTLE_BUCKETS } from './common/throttle/throttle.config';
     PlatformAdminModule,
     DashboardModule,
     InventoryModule,
+    InvoicesModule,
     ImportModule,
     ProductsModule,
     PurchaseModule,
