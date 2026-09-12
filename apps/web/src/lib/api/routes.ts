@@ -92,6 +92,10 @@ export const API_ROUTES = {
   SALES: {
     ROOT: '/sales',
   },
+  INVOICES: {
+    ROOT: '/invoices',
+    FROM_ORDER: (salesOrderId: string) => `/invoices/from-order/${salesOrderId}`,
+  },
   ACCOUNTING: {
     SUMMARY: '/accounting/summary',
     ACCOUNTS: '/accounting/accounts',

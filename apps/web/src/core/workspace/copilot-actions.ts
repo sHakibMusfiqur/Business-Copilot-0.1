@@ -6,8 +6,8 @@ import { useRouter } from 'next/navigation';
 import { useShellStore } from '@/core/layout/shell-store';
 
 const COMMAND_ROUTES: Record<string, string> = {
-  'invoice.create': '/sales',
-  'invoice.open': '/sales',
+  'invoice.create': '/invoices',
+  'invoice.open': '/invoices',
   'customer.create': '/customers',
   'purchase.create': '/purchases',
   'order.create': '/sales',

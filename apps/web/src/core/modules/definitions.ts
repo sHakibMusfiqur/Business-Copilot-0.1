@@ -124,6 +124,17 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     industries: SALES_INDUSTRIES,
   },
   {
+    id: 'invoices',
+    name: 'Invoices',
+    icon: FileText,
+    category: 'Finance',
+    route: '/invoices',
+    permissions: ['invoices.read'],
+    capabilities: ['accounting', 'finance'],
+    status: 'stable',
+    industries: SALES_INDUSTRIES,
+  },
+  {
     id: 'purchases',
     name: 'Purchases',
     icon: ShoppingBag,
