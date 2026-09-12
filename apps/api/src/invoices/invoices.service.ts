@@ -187,7 +187,9 @@ export class InvoicesService {
     // Generate invoice number with retry
     let invoice: Prisma.InvoiceGetPayload<{ include: { items: true } }>;
 
-    for (let attempt = 0; attempt < 5; attempt++) {
+    const MAX_RETRIES = 20;
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
         const invoiceNumber = await this.generateInvoiceNumber(orgId);
         invoice = await this.prisma.invoice.create({
@@ -236,7 +238,7 @@ export class InvoicesService {
       }
     }
 
-    this.logger.error(`Failed to generate unique invoice number after 5 attempts`);
+    this.logger.error(`Failed to generate unique invoice number after ${MAX_RETRIES} attempts`);
     throw new InternalServerErrorException('Failed to generate unique invoice number');
   }
 
@@ -265,16 +267,6 @@ export class InvoicesService {
       );
     }
 
-    // Check for existing invoice (idempotency)
-    const existingInvoice = await this.prisma.invoice.findFirst({
-      where: { salesOrderId: sale.id, organizationId: orgId },
-    });
-    if (existingInvoice) {
-      throw new ConflictException(
-        `Invoice ${existingInvoice.invoiceNumber} already exists for this sales order`,
-      );
-    }
-
     // Build invoice items from sales order items
     const invoiceItems = sale.items.map((soItem) => ({
       productId: soItem.productId,
@@ -299,8 +291,20 @@ export class InvoicesService {
     // Generate invoice number with retry
     let invoice: Prisma.InvoiceGetPayload<{ include: { items: true; customer: true; salesOrder: true } }>;
 
-    for (let attempt = 0; attempt < 5; attempt++) {
+    const MAX_RETRIES = 20;
+
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
+        // Idempotency check inside retry loop to handle concurrent requests
+        const existingInvoice = await this.prisma.invoice.findFirst({
+          where: { salesOrderId: sale.id, organizationId: orgId },
+        });
+        if (existingInvoice) {
+          throw new ConflictException(
+            `Invoice ${existingInvoice.invoiceNumber} already exists for this sales order`,
+          );
+        }
+
         const invoiceNumber = await this.generateInvoiceNumber(orgId);
         invoice = await this.prisma.invoice.create({
           data: {
@@ -348,17 +352,31 @@ export class InvoicesService {
 
         return invoice;
       } catch (error) {
+        // ConflictException from idempotency check — rethrow immediately
+        if (error instanceof ConflictException) {
+          throw error;
+        }
         if (
           error instanceof Prisma.PrismaClientKnownRequestError &&
           error.code === 'P2002'
         ) {
+          // Check if the P2002 is from the salesOrderId constraint (idempotency)
+          const existingForSale = await this.prisma.invoice.findFirst({
+            where: { salesOrderId: sale.id, organizationId: orgId },
+          });
+          if (existingForSale) {
+            throw new ConflictException(
+              `Invoice ${existingForSale.invoiceNumber} already exists for this sales order`,
+            );
+          }
+          // Otherwise it's an invoiceNumber collision — retry with a new number
           continue;
         }
         throw error;
       }
     }
 
-    this.logger.error(`Failed to generate unique invoice number after 5 attempts`);
+    this.logger.error(`Failed to generate unique invoice number after ${MAX_RETRIES} attempts`);
     throw new InternalServerErrorException('Failed to generate unique invoice number');
   }
 
