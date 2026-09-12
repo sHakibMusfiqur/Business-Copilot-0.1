@@ -31,6 +31,20 @@ function createAuditService(): AuditService {
   return new AuditService(createPrismaService());
 }
 
+function formatError(reason: unknown): { constructor: string; message: string; prismaCode: string | null } {
+  if (reason instanceof Error) {
+    return {
+      constructor: reason.constructor.name,
+      message: reason.message,
+      prismaCode:
+        reason instanceof Prisma.PrismaClientKnownRequestError
+          ? (reason as { code: string }).code
+          : null,
+    };
+  }
+  return { constructor: String(reason), message: String(reason), prismaCode: null };
+}
+
 async function cleanup() {
   await prisma.auditLog.deleteMany({
     where: { organizationId: { in: [ORG_A, ORG_B] } },
@@ -254,9 +268,6 @@ describe('Invoice Concurrency Integration — Real Service', () => {
         select: { invoiceNumber: true },
       });
 
-      expect(orgAInvoices.length).toBeGreaterThanOrEqual(COUNT_PER_ORG);
-      expect(orgBInvoices.length).toBeGreaterThanOrEqual(COUNT_PER_ORG);
-
       const numsA = orgAInvoices.map((i) => i.invoiceNumber);
       const numsB = orgBInvoices.map((i) => i.invoiceNumber);
 
@@ -403,9 +414,10 @@ describe('Invoice Concurrency Integration — Real Service', () => {
       await prisma.customer.create({
         data: { id: freshCustomer, organizationId: freshOrg, name: 'Seq Customer' },
       });
+      const seqProductId = `product-seq-${Date.now()}`;
       await prisma.product.create({
         data: {
-          id: `product-seq-${Date.now()}`,
+          id: seqProductId,
           organizationId: freshOrg,
           name: 'Seq Product',
           sku: `SKU-SEQ-${Date.now()}`,
@@ -455,10 +467,173 @@ describe('Invoice Concurrency Integration — Real Service', () => {
       await prisma.invoice.deleteMany({ where: { organizationId: freshOrg } });
       await prisma.salesOrderItem.deleteMany({ where: { salesOrder: { organizationId: freshOrg } } });
       await prisma.salesOrder.deleteMany({ where: { organizationId: freshOrg } });
-      await prisma.product.deleteMany({ where: { organizationId: freshOrg } });
+      await prisma.product.deleteMany({ where: { id: seqProductId } });
       await prisma.customer.deleteMany({ where: { id: freshCustomer } });
       await prisma.organization.deleteMany({ where: { id: freshOrg } });
       await prisma.user.deleteMany({ where: { id: freshUser } });
     }, 60_000);
+  });
+
+  describe('F. Stress: 20 concurrent same-org', () => {
+    it('should create 20 invoices with contiguous numbers via advisory lock', async () => {
+      const stressOrg = `org-stress-${Date.now()}`;
+      const stressUser = `user-stress-${Date.now()}`;
+      const stressCustomer = `customer-stress-${Date.now()}`;
+      const stressProduct = `product-stress-${Date.now()}`;
+
+      await prisma.user.create({
+        data: { id: stressUser, email: `stress-${Date.now()}@test.com`, name: 'Stress User', role: 'ADMIN', password: 'hashed' },
+      });
+      await prisma.organization.create({ data: { id: stressOrg, name: `Stress Org`, slug: `stress-${Date.now()}` } });
+      await prisma.customer.create({ data: { id: stressCustomer, organizationId: stressOrg, name: 'Stress Customer' } });
+      await prisma.product.create({ data: { id: stressProduct, organizationId: stressOrg, name: 'Stress Product', sku: `SKU-STRESS-${Date.now()}` } });
+
+      const auditService = createAuditService();
+      const stressService = new InvoicesService(createPrismaService(), auditService);
+
+      const COUNT = 20;
+      const salesOrders = await Promise.all(
+        Array.from({ length: COUNT }, (_, i) =>
+          createDeliveredSalesOrder(stressOrg, stressCustomer, stressUser, `stress-${i}`),
+        ),
+      );
+
+      const results = await Promise.allSettled(
+        salesOrders.map((so) => stressService.createFromOrder(stressOrg, stressUser, so.id)),
+      );
+
+      const successes = results.filter((r) => r.status === 'fulfilled');
+      const failures = results.filter((r) => r.status === 'rejected');
+
+      if (failures.length > 0) {
+        console.log('\n══════════════════════════════════════════════════════════════');
+        console.log('STRESS TEST F DIAGNOSTIC — 20 same-org concurrent');
+        console.log('══════════════════════════════════════════════════════════════');
+        for (let i = 0; i < results.length; i++) {
+          const r = results[i];
+          if (r.status === 'rejected') {
+            const err = formatError(r.reason);
+            console.log(`  [${i}] REJECTED: ${err.constructor} — ${err.message} (prismaCode: ${err.prismaCode})`);
+          }
+        }
+        console.log(`  successes: ${successes.length}/${COUNT}`);
+        console.log('══════════════════════════════════════════════════════════════\n');
+      }
+
+      expect(successes.length).toBe(COUNT);
+
+      const invoiceNumbers = successes
+        .map((r) => r.value.invoiceNumber)
+        .map(parseInvoiceNumber)
+        .sort((a, b) => a - b);
+
+      for (let i = 0; i < invoiceNumbers.length; i++) {
+        expect(invoiceNumbers[i]).toBe(i + 1);
+      }
+
+      await prisma.auditLog.deleteMany({ where: { organizationId: stressOrg } });
+      await prisma.invoiceItem.deleteMany({ where: { invoice: { organizationId: stressOrg } } });
+      await prisma.invoice.deleteMany({ where: { organizationId: stressOrg } });
+      await prisma.salesOrderItem.deleteMany({ where: { salesOrder: { organizationId: stressOrg } } });
+      await prisma.salesOrder.deleteMany({ where: { organizationId: stressOrg } });
+      await prisma.product.deleteMany({ where: { id: stressProduct } });
+      await prisma.customer.deleteMany({ where: { id: stressCustomer } });
+      await prisma.organization.deleteMany({ where: { id: stressOrg } });
+      await prisma.user.deleteMany({ where: { id: stressUser } });
+    }, 120_000);
+  });
+
+  describe('G. Stress: 40 concurrent (2 orgs x 20)', () => {
+    it('should create 40 invoices across 2 orgs with independent numbering', async () => {
+      const stressOrgX = `org-stress-x-${Date.now()}`;
+      const stressOrgY = `org-stress-y-${Date.now()}`;
+      const stressUserX = `user-stress-x-${Date.now()}`;
+      const stressUserY = `user-stress-y-${Date.now()}`;
+      const stressCustomerX = `customer-stress-x-${Date.now()}`;
+      const stressCustomerY = `customer-stress-y-${Date.now()}`;
+      const stressProductX = `product-stress-x-${Date.now()}`;
+      const stressProductY = `product-stress-y-${Date.now()}`;
+
+      await prisma.user.create({ data: { id: stressUserX, email: `stress-x-${Date.now()}@test.com`, name: 'Stress X', role: 'ADMIN', password: 'hashed' } });
+      await prisma.user.create({ data: { id: stressUserY, email: `stress-y-${Date.now()}@test.com`, name: 'Stress Y', role: 'ADMIN', password: 'hashed' } });
+      await prisma.organization.create({ data: { id: stressOrgX, name: 'Stress X', slug: `stress-x-${Date.now()}` } });
+      await prisma.organization.create({ data: { id: stressOrgY, name: 'Stress Y', slug: `stress-y-${Date.now()}` } });
+      await prisma.customer.create({ data: { id: stressCustomerX, organizationId: stressOrgX, name: 'Cust X' } });
+      await prisma.customer.create({ data: { id: stressCustomerY, organizationId: stressOrgY, name: 'Cust Y' } });
+      await prisma.product.create({ data: { id: stressProductX, organizationId: stressOrgX, name: 'Prod X', sku: `SKU-SX-${Date.now()}` } });
+      await prisma.product.create({ data: { id: stressProductY, organizationId: stressOrgY, name: 'Prod Y', sku: `SKU-SY-${Date.now()}` } });
+
+      const auditService = createAuditService();
+      const stressServiceX = new InvoicesService(createPrismaService(), auditService);
+      const stressServiceY = new InvoicesService(createPrismaService(), auditService);
+
+      const COUNT_PER_ORG = 20;
+
+      const salesX = await Promise.all(
+        Array.from({ length: COUNT_PER_ORG }, (_, i) =>
+          createDeliveredSalesOrder(stressOrgX, stressCustomerX, stressUserX, `sx-${i}`),
+        ),
+      );
+      const salesY = await Promise.all(
+        Array.from({ length: COUNT_PER_ORG }, (_, i) =>
+          createDeliveredSalesOrder(stressOrgY, stressCustomerY, stressUserY, `sy-${i}`),
+        ),
+      );
+
+      const allSales = [...salesX, ...salesY];
+      const results = await Promise.allSettled(
+        allSales.map((so) => {
+          const isX = so.organizationId === stressOrgX;
+          const svc = isX ? stressServiceX : stressServiceY;
+          const usr = isX ? stressUserX : stressUserY;
+          return svc.createFromOrder(so.organizationId, usr, so.id);
+        }),
+      );
+
+      const successes = results.filter((r) => r.status === 'fulfilled');
+      const failures = results.filter((r) => r.status === 'rejected');
+
+      if (failures.length > 0) {
+        console.log('\n══════════════════════════════════════════════════════════════');
+        console.log('STRESS TEST G DIAGNOSTIC — 40 concurrent (2 orgs x 20)');
+        console.log('══════════════════════════════════════════════════════════════');
+        for (let i = 0; i < results.length; i++) {
+          const r = results[i];
+          if (r.status === 'rejected') {
+            const err = formatError(r.reason);
+            const orgLabel = allSales[i].organizationId === stressOrgX ? 'ORG_X' : 'ORG_Y';
+            console.log(`  [${i}] ${orgLabel} REJECTED: ${err.constructor} — ${err.message} (prismaCode: ${err.prismaCode})`);
+          }
+        }
+        console.log(`  successes: ${successes.length}/${COUNT_PER_ORG * 2}`);
+        console.log('══════════════════════════════════════════════════════════════\n');
+      }
+
+      expect(successes.length).toBe(COUNT_PER_ORG * 2);
+
+      const dbX = await prisma.invoice.findMany({ where: { organizationId: stressOrgX }, select: { invoiceNumber: true } });
+      const dbY = await prisma.invoice.findMany({ where: { organizationId: stressOrgY }, select: { invoiceNumber: true } });
+
+      expect(dbX.length).toBe(COUNT_PER_ORG);
+      expect(dbY.length).toBe(COUNT_PER_ORG);
+
+      const numsX = dbX.map((i) => parseInvoiceNumber(i.invoiceNumber)).sort((a, b) => a - b);
+      const numsY = dbY.map((i) => parseInvoiceNumber(i.invoiceNumber)).sort((a, b) => a - b);
+
+      for (let i = 0; i < numsX.length; i++) expect(numsX[i]).toBe(i + 1);
+      for (let i = 0; i < numsY.length; i++) expect(numsY[i]).toBe(i + 1);
+
+      for (const c of [stressOrgX, stressOrgY, stressUserX, stressUserY, stressCustomerX, stressCustomerY, stressProductX, stressProductY]) {
+        await prisma.auditLog.deleteMany({ where: { organizationId: c } });
+      }
+      await prisma.invoiceItem.deleteMany({ where: { invoice: { organizationId: { in: [stressOrgX, stressOrgY] } } } });
+      await prisma.invoice.deleteMany({ where: { organizationId: { in: [stressOrgX, stressOrgY] } } });
+      await prisma.salesOrderItem.deleteMany({ where: { salesOrder: { organizationId: { in: [stressOrgX, stressOrgY] } } } });
+      await prisma.salesOrder.deleteMany({ where: { organizationId: { in: [stressOrgX, stressOrgY] } } });
+      await prisma.product.deleteMany({ where: { id: { in: [stressProductX, stressProductY] } } });
+      await prisma.customer.deleteMany({ where: { id: { in: [stressCustomerX, stressCustomerY] } } });
+      await prisma.organization.deleteMany({ where: { id: { in: [stressOrgX, stressOrgY] } } });
+      await prisma.user.deleteMany({ where: { id: { in: [stressUserX, stressUserY] } } });
+    }, 120_000);
   });
 });

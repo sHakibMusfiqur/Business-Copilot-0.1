@@ -292,49 +292,52 @@ export class InvoicesService {
     // This eliminates the read-then-write race in generateInvoiceNumber().
     const lockKey = this.computeAdvisoryLockKey(orgId);
 
-    const invoice = await this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey})`;
+    const invoice = await this.prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey})`;
 
-      // Idempotency check — inside lock so concurrent requests see the same state
-      const existingInvoice = await tx.invoice.findFirst({
-        where: { salesOrderId: sale.id, organizationId: orgId },
-      });
-      if (existingInvoice) {
-        throw new ConflictException(
-          `Invoice ${existingInvoice.invoiceNumber} already exists for this sales order`,
-        );
-      }
+        // Idempotency check — inside lock so concurrent requests see the same state
+        const existingInvoice = await tx.invoice.findFirst({
+          where: { salesOrderId: sale.id, organizationId: orgId },
+        });
+        if (existingInvoice) {
+          throw new ConflictException(
+            `Invoice ${existingInvoice.invoiceNumber} already exists for this sales order`,
+          );
+        }
 
-      const invoiceNumber = await this.generateInvoiceNumber(orgId, tx);
-      return tx.invoice.create({
-        data: {
-          invoiceNumber,
-          organizationId: orgId,
-          type: 'SALES',
-          customerId: sale.customerId,
-          salesOrderId: sale.id,
-          issueDate: new Date(),
-          dueDate,
-          status: 'DRAFT',
-          paymentStatus: 'PENDING',
-          subtotal,
-          taxTotal,
-          discountTotal,
-          total,
-          paidAmount: 0,
-          notes: `Invoice for ${sale.orderNumber}`,
-          createdById: userId,
-          items: {
-            create: invoiceItems,
+        const invoiceNumber = await this.generateInvoiceNumber(orgId, tx);
+        return tx.invoice.create({
+          data: {
+            invoiceNumber,
+            organizationId: orgId,
+            type: 'SALES',
+            customerId: sale.customerId,
+            salesOrderId: sale.id,
+            issueDate: new Date(),
+            dueDate,
+            status: 'DRAFT',
+            paymentStatus: 'PENDING',
+            subtotal,
+            taxTotal,
+            discountTotal,
+            total,
+            paidAmount: 0,
+            notes: `Invoice for ${sale.orderNumber}`,
+            createdById: userId,
+            items: {
+              create: invoiceItems,
+            },
           },
-        },
-        include: {
-          items: true,
-          customer: true,
-          salesOrder: true,
-        },
-      });
-    });
+          include: {
+            items: true,
+            customer: true,
+            salesOrder: true,
+          },
+        });
+      },
+      { timeout: 30_000 },
+    );
 
     // Audit log outside transaction — only written on success
     await this.auditService.record({
