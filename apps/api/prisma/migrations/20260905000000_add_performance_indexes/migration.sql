@@ -22,10 +22,6 @@ CREATE INDEX IF NOT EXISTS "Inventory_warehouseId_idx" ON "Inventory"("warehouse
 -- InventoryTransaction: tenant-scoped date ranges
 CREATE INDEX IF NOT EXISTS "InventoryTransaction_organizationId_createdAt_idx" ON "InventoryTransaction"("organizationId", "createdAt");
 
--- Invoice: status/dashboard queries
-CREATE INDEX IF NOT EXISTS "Invoice_organizationId_status_idx" ON "Invoice"("organizationId", "status");
-CREATE INDEX IF NOT EXISTS "Invoice_organizationId_paymentStatus_idx" ON "Invoice"("organizationId", "paymentStatus");
-
 -- PurchaseOrder: order management
 CREATE INDEX IF NOT EXISTS "PurchaseOrder_organizationId_status_idx" ON "PurchaseOrder"("organizationId", "status");
 

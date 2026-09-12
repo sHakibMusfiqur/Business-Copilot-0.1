@@ -501,7 +501,7 @@ model InventoryTransaction {
 
 model Invoice {
   id             String        @id @default(cuid())
-  invoiceNumber  String        @unique
+  invoiceNumber  String
   organizationId String
   organization   Organization  @relation(fields: [organizationId], references: [id])
   type           InvoiceType   @default(SALES)
@@ -526,6 +526,7 @@ model Invoice {
 
   items InvoiceItem[]
 
+  @@unique([organizationId, invoiceNumber])
   @@unique([salesOrderId])
   @@index([organizationId])
   @@index([customerId])
