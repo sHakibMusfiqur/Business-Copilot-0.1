@@ -10,7 +10,7 @@ import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
 import { usePermissions } from '@/hooks/use-permissions';
-import { EMPLOYEES_READ, EMPLOYEES_CREATE, EMPLOYEES_UPDATE, EMPLOYEES_DELETE, EMPLOYEES_APPROVE, EMPLOYEES_REJECT } from '@/lib/permissions';
+import { LEAVES_READ, LEAVES_CREATE, LEAVES_UPDATE, LEAVES_DELETE, LEAVES_APPROVE, LEAVES_REJECT } from '@/lib/permissions';
 import { getLeaves, deleteLeave, approveLeave, rejectLeave, type Leave, type LeavesResponse } from '@/lib/api/leaves';
 import { useToast } from '@/components/ui/use-toast';
 import { LeaveTable } from '@/components/leaves/leave-table';
@@ -23,12 +23,12 @@ export default function LeavesPage() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const canRead = isLoaded && hasPermission(EMPLOYEES_READ);
-  const canCreate = isLoaded && hasPermission(EMPLOYEES_CREATE);
-  const canUpdate = isLoaded && hasPermission(EMPLOYEES_UPDATE);
-  const canDelete = isLoaded && hasPermission(EMPLOYEES_DELETE);
-  const canApprove = isLoaded && hasPermission(EMPLOYEES_APPROVE);
-  const canReject = isLoaded && hasPermission(EMPLOYEES_REJECT);
+  const canRead = isLoaded && hasPermission(LEAVES_READ);
+  const canCreate = isLoaded && hasPermission(LEAVES_CREATE);
+  const canUpdate = isLoaded && hasPermission(LEAVES_UPDATE);
+  const canDelete = isLoaded && hasPermission(LEAVES_DELETE);
+  const canApprove = isLoaded && hasPermission(LEAVES_APPROVE);
+  const canReject = isLoaded && hasPermission(LEAVES_REJECT);
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');

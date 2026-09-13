@@ -83,6 +83,14 @@ export const DEPARTMENTS_CREATE = 'departments.create' as const;
 export const DEPARTMENTS_UPDATE = 'departments.update' as const;
 export const DEPARTMENTS_DELETE = 'departments.delete' as const;
 
+// ── Leaves ──────────────────────────────────────────────────────────────────
+export const LEAVES_READ = 'leaves.read' as const;
+export const LEAVES_CREATE = 'leaves.create' as const;
+export const LEAVES_UPDATE = 'leaves.update' as const;
+export const LEAVES_DELETE = 'leaves.delete' as const;
+export const LEAVES_APPROVE = 'leaves.approve' as const;
+export const LEAVES_REJECT = 'leaves.reject' as const;
+
 // ── Payroll ──────────────────────────────────────────────────────────────────
 export const PAYROLL_READ = 'payroll.read' as const;
 export const PAYROLL_CREATE = 'payroll.create' as const;

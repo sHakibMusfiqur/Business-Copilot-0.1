@@ -39,7 +39,7 @@ export class LeavesController {
 
   @Get()
   @UseGuards(PermissionGuard)
-  @Permissions(['employees.read'])
+  @Permissions(['leaves.read'])
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'List leave requests' })
   @ApiOkResponse({ description: 'Leave requests listed' })
@@ -62,7 +62,7 @@ export class LeavesController {
 
   @Get('stats')
   @UseGuards(PermissionGuard)
-  @Permissions(['employees.read'])
+  @Permissions(['leaves.read'])
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get leave statistics' })
   @ApiOkResponse({ description: 'Leave statistics' })
@@ -73,7 +73,7 @@ export class LeavesController {
 
   @Get(':id')
   @UseGuards(PermissionGuard)
-  @Permissions(['employees.read'])
+  @Permissions(['leaves.read'])
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Get leave details' })
   @ApiOkResponse({ description: 'Leave details' })
@@ -87,7 +87,7 @@ export class LeavesController {
 
   @Post()
   @UseGuards(PermissionGuard)
-  @Permissions(['employees.create'])
+  @Permissions(['leaves.create'])
   @HttpCode(HttpStatus.CREATED)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Create a leave request' })
@@ -102,7 +102,7 @@ export class LeavesController {
 
   @Patch(':id')
   @UseGuards(PermissionGuard)
-  @Permissions(['employees.update'])
+  @Permissions(['leaves.update'])
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Update a leave request' })
   @ApiOkResponse({ description: 'Leave request updated' })
@@ -117,7 +117,7 @@ export class LeavesController {
 
   @Delete(':id')
   @UseGuards(PermissionGuard)
-  @Permissions(['employees.delete'])
+  @Permissions(['leaves.delete'])
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Delete a leave request' })
@@ -132,7 +132,7 @@ export class LeavesController {
 
   @Post(':id/approve')
   @UseGuards(PermissionGuard)
-  @Permissions(['employees.approve'])
+  @Permissions(['leaves.approve'])
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Approve a leave request' })
@@ -147,7 +147,7 @@ export class LeavesController {
 
   @Post(':id/reject')
   @UseGuards(PermissionGuard)
-  @Permissions(['employees.reject'])
+  @Permissions(['leaves.reject'])
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Reject a leave request' })
