@@ -237,7 +237,7 @@ export const MODULE_MANIFESTS: ModuleManifest[] = [
     icon: Building,
     category: 'People',
     route: '/departments',
-    permissions: ['users.read'],
+    permissions: ['departments.read'],
     capabilities: ['hr'],
     status: 'stable',
   },

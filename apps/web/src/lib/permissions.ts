@@ -77,6 +77,12 @@ export const EMPLOYEES_DELETE = 'employees.delete' as const;
 export const EMPLOYEES_APPROVE = 'employees.approve' as const;
 export const EMPLOYEES_REJECT = 'employees.reject' as const;
 
+// ── Departments ──────────────────────────────────────────────────────────────
+export const DEPARTMENTS_READ = 'departments.read' as const;
+export const DEPARTMENTS_CREATE = 'departments.create' as const;
+export const DEPARTMENTS_UPDATE = 'departments.update' as const;
+export const DEPARTMENTS_DELETE = 'departments.delete' as const;
+
 // ── Payroll ──────────────────────────────────────────────────────────────────
 export const PAYROLL_READ = 'payroll.read' as const;
 export const PAYROLL_CREATE = 'payroll.create' as const;

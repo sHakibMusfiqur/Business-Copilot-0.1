@@ -39,7 +39,7 @@ export class DepartmentsController {
 
   @Get()
   @UseGuards(PermissionGuard)
-  @Permissions(['users.read'])
+  @Permissions(['departments.read'])
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'List active departments available to the organization' })
   @ApiOkResponse({ description: 'Active departments available to the organization' })
@@ -50,7 +50,7 @@ export class DepartmentsController {
 
   @Post()
   @UseGuards(PermissionGuard)
-  @Permissions(['users.create'])
+  @Permissions(['departments.create'])
   @HttpCode(HttpStatus.CREATED)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Create a department' })
@@ -65,7 +65,7 @@ export class DepartmentsController {
 
   @Patch(':id')
   @UseGuards(PermissionGuard)
-  @Permissions(['users.update'])
+  @Permissions(['departments.update'])
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Update a department' })
   @ApiOkResponse({ description: 'Department updated' })
@@ -80,7 +80,7 @@ export class DepartmentsController {
 
   @Delete(':id')
   @UseGuards(PermissionGuard)
-  @Permissions(['users.delete'])
+  @Permissions(['departments.delete'])
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'Delete a department' })

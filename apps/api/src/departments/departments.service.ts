@@ -139,6 +139,22 @@ export class DepartmentsService {
       throw new NotFoundException('Department not found');
     }
 
+    const [employeeCount, userCount, invitationCount] = await Promise.all([
+      this.prisma.employee.count({ where: { departmentId } }),
+      this.prisma.user.count({ where: { departmentId } }),
+      this.prisma.invitation.count({ where: { departmentId } }),
+    ]);
+
+    if (employeeCount > 0 || userCount > 0 || invitationCount > 0) {
+      const deps: string[] = [];
+      if (employeeCount > 0) deps.push(`${employeeCount} employee(s)`);
+      if (userCount > 0) deps.push(`${userCount} user(s)`);
+      if (invitationCount > 0) deps.push(`${invitationCount} invitation(s)`);
+      throw new BadRequestException(
+        `Cannot delete department "${department.name}": it is linked to ${deps.join(', ')}. Reassign or remove them first.`,
+      );
+    }
+
     await this.prisma.department.delete({ where: { id: departmentId } });
 
     await this.auditService.record({
