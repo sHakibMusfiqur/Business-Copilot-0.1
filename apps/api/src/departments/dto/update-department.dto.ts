@@ -18,7 +18,7 @@ export class UpdateDepartmentDto {
   @IsOptional()
   @IsString()
   @MaxLength(120)
-  managerId?: string;
+  managerId?: string | null;
 
   @ApiPropertyOptional({ description: 'Active status' })
   @IsOptional()

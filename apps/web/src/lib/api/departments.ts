@@ -19,6 +19,11 @@ export async function updateDepartment(id: string, data: UpdateDepartmentData): 
   return response.data;
 }
 
+export async function updateDepartmentStatus(id: string, isActive: boolean): Promise<Department> {
+  const response = await api.patch<Department>(`${API_ROUTES.DEPARTMENTS.ROOT}/${id}`, { isActive });
+  return response.data;
+}
+
 export async function deleteDepartment(id: string): Promise<void> {
   await api.delete(`${API_ROUTES.DEPARTMENTS.ROOT}/${id}`);
 }

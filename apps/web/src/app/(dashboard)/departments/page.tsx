@@ -13,6 +13,7 @@ import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { RequirePermission } from '@/components/rbac/require-permission';
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
+import { StatusToggleDialog } from '@/components/ui/status-toggle-dialog';
 import { usePermissions } from '@/hooks/use-permissions';
 import { DEPARTMENTS_READ, DEPARTMENTS_CREATE, DEPARTMENTS_UPDATE, DEPARTMENTS_DELETE } from '@/lib/permissions';
 import { useToast } from '@/components/ui/use-toast';
@@ -20,10 +21,14 @@ import {
   getDepartments,
   createDepartment,
   updateDepartment,
+  updateDepartmentStatus,
   deleteDepartment,
   type Department,
   type CreateDepartmentData,
+  type UpdateDepartmentData,
 } from '@/lib/api/departments';
+import { getOrganizationUsers } from '@/lib/api/users';
+import type { OrganizationUser } from '@/components/rbac/rbac-types';
 import { DepartmentTable } from '@/components/departments/departments-table';
 import { useMutation } from '@tanstack/react-query';
 
@@ -41,14 +46,23 @@ export default function DepartmentsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editDept, setEditDept] = useState<Department | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Department | null>(null);
+  const [statusDepartment, setStatusDepartment] = useState<Department | null>(null);
 
   const [formName, setFormName] = useState('');
   const [formCode, setFormCode] = useState('');
+  const [formManagerId, setFormManagerId] = useState('');
+  const [formIsActive, setFormIsActive] = useState(true);
 
   const deptQuery = useQuery<Department[]>({
     queryKey: ['departments'],
     queryFn: () => getDepartments(),
     enabled: canRead,
+  });
+
+  const managersQuery = useQuery<OrganizationUser[]>({
+    queryKey: ['users', 'assignable'],
+    queryFn: () => getOrganizationUsers(),
+    enabled: canRead && (createOpen || editDept !== null),
   });
 
   function invalidate() {
@@ -71,7 +85,7 @@ export default function DepartmentsPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: { name?: string; code?: string } }) => updateDepartment(id, data),
+    mutationFn: ({ id, data }: { id: string; data: UpdateDepartmentData }) => updateDepartment(id, data),
     onSuccess: () => {
       toast({ title: 'Department updated' });
       invalidate();
@@ -86,6 +100,8 @@ export default function DepartmentsPage() {
   function resetForm() {
     setFormName('');
     setFormCode('');
+    setFormManagerId('');
+    setFormIsActive(true);
   }
 
   function openCreate() {
@@ -96,19 +112,33 @@ export default function DepartmentsPage() {
   function openEdit(dept: Department) {
     setFormName(dept.name);
     setFormCode(dept.code);
+    setFormManagerId(dept.managerId ?? '');
+    setFormIsActive(dept.isActive);
     setEditDept(dept);
   }
 
   function handleCreateSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!formName.trim() || !formCode.trim()) return;
-    createMutation.mutate({ name: formName.trim(), code: formCode.trim() });
+    createMutation.mutate({
+      name: formName.trim(),
+      code: formCode.trim(),
+      managerId: formManagerId || undefined,
+    });
   }
 
   function handleEditSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!editDept || !formName.trim() || !formCode.trim()) return;
-    updateMutation.mutate({ id: editDept.id, data: { name: formName.trim(), code: formCode.trim() } });
+    updateMutation.mutate({
+      id: editDept.id,
+      data: {
+        name: formName.trim(),
+        code: formCode.trim(),
+        managerId: formManagerId || null,
+        isActive: formIsActive,
+      },
+    });
   }
 
   if (!isLoaded) return <DashboardSkeleton />;
@@ -175,6 +205,7 @@ export default function DepartmentsPage() {
           canDelete={canDelete}
           onEdit={openEdit}
           onDelete={setDeleteTarget}
+          onToggleStatus={canUpdate ? setStatusDepartment : undefined}
         />
       )}
 
@@ -192,6 +223,21 @@ export default function DepartmentsPage() {
             <div className="space-y-2">
               <Label>Code</Label>
               <Input value={formCode} onChange={(e) => setFormCode(e.target.value)} placeholder="e.g. ENG" required />
+            </div>
+            <div className="space-y-2">
+              <Label>Manager</Label>
+              <select
+                value={formManagerId}
+                onChange={(e) => setFormManagerId(e.target.value)}
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">No Manager</option>
+                {managersQuery.data?.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.name} ({user.email})
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="flex items-center justify-end gap-3">
               <Button type="button" variant="outline" onClick={() => { resetForm(); setCreateOpen(false); }}>Cancel</Button>
@@ -218,6 +264,31 @@ export default function DepartmentsPage() {
               <Label>Code</Label>
               <Input value={formCode} onChange={(e) => setFormCode(e.target.value)} required />
             </div>
+            <div className="space-y-2">
+              <Label>Manager</Label>
+              <select
+                value={formManagerId}
+                onChange={(e) => setFormManagerId(e.target.value)}
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+              >
+                <option value="">No Manager</option>
+                {managersQuery.data?.map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.name} ({user.email})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="isActive"
+                checked={formIsActive}
+                onChange={(e) => setFormIsActive(e.target.checked)}
+                className="h-4 w-4 rounded border-border"
+              />
+              <Label htmlFor="isActive" className="font-normal">Active department</Label>
+            </div>
             <div className="flex items-center justify-end gap-3">
               <Button type="button" variant="outline" onClick={() => { resetForm(); setEditDept(null); }}>Cancel</Button>
               <Button type="submit" disabled={updateMutation.isPending}>
@@ -239,6 +310,18 @@ export default function DepartmentsPage() {
         onClose={() => setDeleteTarget(null)}
         onDeleted={invalidate}
         deleteFn={() => deleteTarget ? deleteDepartment(deleteTarget.id) : Promise.resolve()}
+      />
+
+      <StatusToggleDialog
+        entity={statusDepartment ? { ...statusDepartment, name: statusDepartment.name } : null}
+        entityLabel="Department"
+        open={statusDepartment !== null}
+        onClose={() => setStatusDepartment(null)}
+        onToggled={invalidate}
+        updateStatus={updateDepartmentStatus}
+        activateDescription={(name) => `Activate ${name}?`}
+        deactivateDescription={(name) => `Deactivate ${name}? It will no longer appear in active department lists.`}
+        errorFallback="Failed to update department status."
       />
     </div>
     </RequirePermission>

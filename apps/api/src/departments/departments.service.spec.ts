@@ -226,6 +226,77 @@ describe('DepartmentsService', () => {
     });
   });
 
+  describe('manager clearing', () => {
+    it('should set managerId to null when managerId is explicitly null', async () => {
+      prisma.department.findFirst.mockResolvedValue({ id: '1', name: 'Engineering', code: 'ENG' });
+      prisma.department.update.mockResolvedValue({
+        id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: null,
+      });
+
+      await service.update('org-1', 'user-1', '1', { managerId: null });
+
+      expect(prisma.department.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ managerId: null }),
+        }),
+      );
+    });
+
+    it('should not change managerId when managerId is undefined', async () => {
+      prisma.department.findFirst.mockResolvedValue({ id: '1', name: 'Engineering', code: 'ENG' });
+      prisma.department.update.mockResolvedValue({
+        id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: 'existing',
+      });
+
+      await service.update('org-1', 'user-1', '1', { name: 'Updated' });
+
+      const updateCall = prisma.department.update.mock.calls[0][0];
+      expect(updateCall.data).not.toHaveProperty('managerId');
+    });
+  });
+
+  describe('isActive update', () => {
+    it('should update isActive to false', async () => {
+      prisma.department.findFirst.mockResolvedValue({ id: '1', name: 'Engineering', code: 'ENG' });
+      prisma.department.update.mockResolvedValue({
+        id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: null,
+      });
+
+      await service.update('org-1', 'user-1', '1', { isActive: false });
+
+      expect(prisma.department.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ isActive: false }),
+        }),
+      );
+    });
+
+    it('should update isActive to true', async () => {
+      prisma.department.findFirst.mockResolvedValue({ id: '1', name: 'Engineering', code: 'ENG' });
+      prisma.department.update.mockResolvedValue({
+        id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: null,
+      });
+
+      await service.update('org-1', 'user-1', '1', { isActive: true });
+
+      expect(prisma.department.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ isActive: true }),
+        }),
+      );
+    });
+  });
+
+  describe('shared department protection', () => {
+    it('should throw NotFoundException when updating shared department from different org', async () => {
+      prisma.department.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.update('org-1', 'user-1', 'shared-dept', { name: 'Test' }),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
   describe('tenant isolation', () => {
     it('should not find department from another organization', async () => {
       prisma.department.findFirst.mockResolvedValue(null);

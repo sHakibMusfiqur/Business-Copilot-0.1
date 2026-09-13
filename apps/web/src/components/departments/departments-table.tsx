@@ -1,8 +1,9 @@
 'use client';
 
-import { Building2 } from 'lucide-react';
+import { Building2, MoreHorizontal } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import type { Department } from './departments-types';
 
 interface DepartmentTableProps {
@@ -11,6 +12,7 @@ interface DepartmentTableProps {
   canDelete: boolean;
   onEdit: (dept: Department) => void;
   onDelete: (dept: Department) => void;
+  onToggleStatus?: (dept: Department) => void;
 }
 
 export function DepartmentTable({
@@ -19,6 +21,7 @@ export function DepartmentTable({
   canDelete,
   onEdit,
   onDelete,
+  onToggleStatus,
 }: DepartmentTableProps) {
   return (
     <div className="rounded-lg border border-border bg-card">
@@ -29,8 +32,9 @@ export function DepartmentTable({
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">Department</th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">Code</th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">Type</th>
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
               {(canUpdate || canDelete) && (
-                <th className="px-4 py-3 text-right font-medium text-muted-foreground">Actions</th>
+                <th className="w-[60px] p-4" />
               )}
             </tr>
           </thead>
@@ -57,25 +61,51 @@ export function DepartmentTable({
                     </span>
                   )}
                 </td>
+                <td className="px-4 py-3">
+                  {dept.isActive ? (
+                    <span className="inline-flex items-center rounded-full bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                      Active
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-full bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
+                      Inactive
+                    </span>
+                  )}
+                </td>
                 {(canUpdate || canDelete) && (
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {canUpdate && !dept.shared && (
-                        <Button variant="ghost" size="sm" onClick={() => onEdit(dept)}>
-                          Edit
-                        </Button>
-                      )}
-                      {canDelete && !dept.shared && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => onDelete(dept)}
-                        >
-                          Delete
-                        </Button>
-                      )}
-                    </div>
+                  <td className="p-4">
+                    {!dept.shared && (canUpdate || canDelete) ? (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-44">
+                          {canUpdate && (
+                            <DropdownMenuItem onClick={() => onEdit(dept)}>
+                              Edit department
+                            </DropdownMenuItem>
+                          )}
+                          {canUpdate && onToggleStatus && (
+                            <DropdownMenuItem onClick={() => onToggleStatus(dept)}>
+                              {dept.isActive ? 'Deactivate' : 'Activate'}
+                            </DropdownMenuItem>
+                          )}
+                          {canDelete && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => onDelete(dept)}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                Delete department
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    ) : null}
                   </td>
                 )}
               </tr>
