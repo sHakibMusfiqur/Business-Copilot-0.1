@@ -110,3 +110,8 @@ export async function rejectLeave(id: string): Promise<Leave> {
   const response = await api.post<Leave>(`${API_ROUTES.LEAVES.ROOT}/${id}/reject`);
   return response.data;
 }
+
+export async function cancelLeave(id: string): Promise<Leave> {
+  const response = await api.post<Leave>(`${API_ROUTES.LEAVES.ROOT}/${id}/cancel`);
+  return response.data;
+}

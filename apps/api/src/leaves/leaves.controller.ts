@@ -159,4 +159,19 @@ export class LeavesController {
     const orgId = this.requireOrg(user);
     return this.leavesService.reject(orgId, user.id, leaveId);
   }
+
+  @Post(':id/cancel')
+  @UseGuards(PermissionGuard)
+  @Permissions(['leaves.update'])
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Cancel a leave request' })
+  @ApiOkResponse({ description: 'Leave request cancelled' })
+  async cancel(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id', ParseCuidPipe) leaveId: string,
+  ) {
+    const orgId = this.requireOrg(user);
+    return this.leavesService.cancel(orgId, user.id, leaveId);
+  }
 }

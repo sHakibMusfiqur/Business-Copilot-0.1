@@ -11,7 +11,7 @@ import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
 import { usePermissions } from '@/hooks/use-permissions';
 import { LEAVES_READ, LEAVES_CREATE, LEAVES_UPDATE, LEAVES_DELETE, LEAVES_APPROVE, LEAVES_REJECT } from '@/lib/permissions';
-import { getLeaves, deleteLeave, approveLeave, rejectLeave, type Leave, type LeavesResponse } from '@/lib/api/leaves';
+import { getLeaves, deleteLeave, approveLeave, rejectLeave, cancelLeave, type Leave, type LeavesResponse } from '@/lib/api/leaves';
 import { useToast } from '@/components/ui/use-toast';
 import { LeaveTable } from '@/components/leaves/leave-table';
 import { CreateLeaveDialog } from '@/components/leaves/create-leave-dialog';
@@ -37,6 +37,7 @@ export default function LeavesPage() {
   const [editLeave, setEditLeave] = useState<Leave | null>(null);
   const [viewLeave, setViewLeave] = useState<Leave | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Leave | null>(null);
+  const [cancelTarget, setCancelTarget] = useState<Leave | null>(null);
 
   const leavesQuery = useQuery<LeavesResponse>({
     queryKey: ['leaves', { status: statusFilter, type: typeFilter }],
@@ -172,6 +173,7 @@ export default function LeavesPage() {
           canDelete={canDelete}
           onApprove={(leave) => approveMutation.mutate(leave.id)}
           onReject={(leave) => rejectMutation.mutate(leave.id)}
+          onCancel={setCancelTarget}
           onView={setViewLeave}
           onEdit={setEditLeave}
           onDelete={setDeleteTarget}
@@ -208,6 +210,19 @@ export default function LeavesPage() {
         onClose={() => setDeleteTarget(null)}
         onDeleted={invalidate}
         deleteFn={() => deleteTarget ? deleteLeave(deleteTarget.id) : Promise.resolve()}
+      />
+
+      <ConfirmDeleteDialog
+        entityName={cancelTarget ? `${cancelTarget.employee.firstName} ${cancelTarget.employee.lastName}'s leave request` : null}
+        title="Cancel Leave Request"
+        description="This will cancel the leave request. This action cannot be undone."
+        buttonLabel="Cancel Request"
+        successTitle="Leave request cancelled"
+        errorFallback="Failed to cancel leave request."
+        open={cancelTarget !== null}
+        onClose={() => setCancelTarget(null)}
+        onDeleted={invalidate}
+        deleteFn={() => cancelTarget ? cancelLeave(cancelTarget.id) : Promise.resolve()}
       />
     </div>
   );

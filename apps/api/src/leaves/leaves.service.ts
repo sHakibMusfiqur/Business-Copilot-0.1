@@ -265,7 +265,16 @@ export class LeavesService {
     return this.transitionStatus(orgId, actorId, leaveId, 'REJECTED');
   }
 
-  private async transitionStatus(orgId: string, actorId: string, leaveId: string, targetStatus: string) {
+  async cancel(orgId: string, actorId: string, leaveId: string) {
+    return this.transitionStatus(orgId, actorId, leaveId, 'CANCELLED');
+  }
+
+  private async transitionStatus(
+    orgId: string,
+    actorId: string,
+    leaveId: string,
+    targetStatus: 'APPROVED' | 'REJECTED' | 'CANCELLED',
+  ) {
     const leave = await this.prisma.leave.findFirst({
       where: { id: leaveId, employee: { organizationId: orgId } },
       select: { id: true, status: true, employeeId: true },
@@ -285,7 +294,7 @@ export class LeavesService {
     const updated = await this.prisma.leave.update({
       where: { id: leaveId, employee: { organizationId: orgId } },
       data: {
-        status: targetStatus as 'APPROVED' | 'REJECTED',
+        status: targetStatus,
         ...(targetStatus === 'APPROVED' ? { approvedBy: actorId } : {}),
       },
       select: {

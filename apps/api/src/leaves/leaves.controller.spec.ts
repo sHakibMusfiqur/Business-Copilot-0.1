@@ -15,6 +15,7 @@ describe('LeavesController', () => {
       remove: jest.fn(async () => ({ message: 'Leave deleted successfully' })),
       approve: jest.fn(async () => ({ id: 'leave-1', status: 'APPROVED' })),
       reject: jest.fn(async () => ({ id: 'leave-1', status: 'REJECTED' })),
+      cancel: jest.fn(async () => ({ id: 'leave-1', status: 'CANCELLED' })),
       getStats: jest.fn(async () => ({ total: 0, pending: 0, approved: 0, rejected: 0, cancelled: 0 })),
     } as unknown as LeavesService;
 
@@ -102,6 +103,25 @@ describe('LeavesController', () => {
     });
   });
 
+  describe('cancel', () => {
+    it('should call service.cancel with orgId, userId, and leaveId', async () => {
+      const { controller, service } = buildController();
+      await controller.cancel(makeUser(), 'leave-1' as never);
+      expect(service.cancel).toHaveBeenCalledWith('org-1', 'user-1', 'leave-1');
+    });
+
+    it('should throw ForbiddenException when user has no organization', async () => {
+      const { controller } = buildController();
+      await expect(controller.cancel(makeUser({ organizationId: undefined }), 'leave-1' as never)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should forward userId from CurrentUser', async () => {
+      const { controller, service } = buildController();
+      await controller.cancel({ id: 'user-99', email: 'x@x.com', role: 'ADMIN', organizationId: 'org-1' }, 'leave-1' as never);
+      expect(service.cancel).toHaveBeenCalledWith('org-1', 'user-99', 'leave-1');
+    });
+  });
+
   describe('permission metadata', () => {
     const reflector = new Reflector();
 
@@ -150,6 +170,11 @@ describe('LeavesController', () => {
       expect(getPermissions(controller.reject)).toEqual(['leaves.reject']);
     });
 
+    it('POST /:id/cancel should require leaves.update', () => {
+      const { controller } = buildController();
+      expect(getPermissions(controller.cancel)).toEqual(['leaves.update']);
+    });
+
     it('should not reference employees.* permissions', () => {
       const { controller } = buildController();
       const allHandlers = [
@@ -161,6 +186,7 @@ describe('LeavesController', () => {
         controller.remove,
         controller.approve,
         controller.reject,
+        controller.cancel,
       ];
       for (const handler of allHandlers) {
         const perms = getPermissions(handler);

@@ -163,6 +163,82 @@ describe('LeavesService', () => {
     });
   });
 
+  describe('cancel', () => {
+    it('cancels a pending leave', async () => {
+      prismaMock.leave.findFirst.mockResolvedValue({ id: leaveId, status: 'PENDING' });
+      prismaMock.leave.update.mockResolvedValue({ id: leaveId, status: 'CANCELLED' });
+
+      const result = await service.cancel(orgId, actorId, leaveId);
+      expect(result.status).toBe('CANCELLED');
+      expect(auditMock.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'LEAVE_CANCELLED' }),
+      );
+    });
+
+    it('cancels an approved leave', async () => {
+      prismaMock.leave.findFirst.mockResolvedValue({ id: leaveId, status: 'APPROVED' });
+      prismaMock.leave.update.mockResolvedValue({ id: leaveId, status: 'CANCELLED' });
+
+      const result = await service.cancel(orgId, actorId, leaveId);
+      expect(result.status).toBe('CANCELLED');
+    });
+
+    it('throws when leave is rejected', async () => {
+      prismaMock.leave.findFirst.mockResolvedValue({ id: leaveId, status: 'REJECTED' });
+
+      await expect(service.cancel(orgId, actorId, leaveId)).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws when leave is already cancelled', async () => {
+      prismaMock.leave.findFirst.mockResolvedValue({ id: leaveId, status: 'CANCELLED' });
+
+      await expect(service.cancel(orgId, actorId, leaveId)).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws NotFoundException for cross-tenant leave', async () => {
+      prismaMock.leave.findFirst.mockResolvedValue(null);
+
+      await expect(service.cancel('wrong-org', actorId, leaveId)).rejects.toThrow(NotFoundException);
+    });
+
+    it('does not set approvedBy when cancelling', async () => {
+      prismaMock.leave.findFirst.mockResolvedValue({ id: leaveId, status: 'PENDING' });
+      prismaMock.leave.update.mockResolvedValue({ id: leaveId, status: 'CANCELLED' });
+
+      await service.cancel(orgId, actorId, leaveId);
+
+      const updateCall = prismaMock.leave.update.mock.calls[0][0];
+      expect(updateCall.data).not.toHaveProperty('approvedBy');
+    });
+
+    it('preserves existing approvedBy when cancelling approved leave', async () => {
+      prismaMock.leave.findFirst.mockResolvedValue({ id: leaveId, status: 'APPROVED' });
+      prismaMock.leave.update.mockResolvedValue({ id: leaveId, status: 'CANCELLED' });
+
+      await service.cancel(orgId, actorId, leaveId);
+
+      const updateCall = prismaMock.leave.update.mock.calls[0][0];
+      expect(updateCall.data).not.toHaveProperty('approvedBy');
+    });
+
+    it('records audit event with previous and new status', async () => {
+      prismaMock.leave.findFirst.mockResolvedValue({ id: leaveId, status: 'APPROVED' });
+      prismaMock.leave.update.mockResolvedValue({ id: leaveId, status: 'CANCELLED' });
+
+      await service.cancel(orgId, actorId, leaveId);
+
+      expect(auditMock.record).toHaveBeenCalledWith({
+        userId: actorId,
+        organizationId: orgId,
+        action: 'LEAVE_CANCELLED',
+        entity: 'Leave',
+        entityId: leaveId,
+        status: 'SUCCESS',
+        metadata: { previousStatus: 'APPROVED', newStatus: 'CANCELLED' },
+      });
+    });
+  });
+
   describe('remove', () => {
     it('deletes a pending leave', async () => {
       prismaMock.leave.findFirst.mockResolvedValue({ id: leaveId, status: 'PENDING' });
