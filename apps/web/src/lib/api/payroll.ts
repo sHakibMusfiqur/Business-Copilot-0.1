@@ -1,5 +1,6 @@
 import { api } from './client';
 import { API_ROUTES } from './routes';
+import type { Meta } from '@/lib/types';
 
 export interface PayrollRecord {
   id: string;
@@ -14,6 +15,7 @@ export interface PayrollRecord {
   paymentDate?: string;
   notes?: string;
   createdAt: string;
+  updatedAt?: string;
   employee: {
     id: string;
     employeeCode: string;
@@ -50,7 +52,12 @@ export interface PayrollStats {
   }>;
 }
 
-export type PayrollResponse = PayrollRecord[];
+export type PayrollListMeta = Meta;
+
+export interface PayrollResponse {
+  data: PayrollRecord[];
+  meta: PayrollListMeta;
+}
 
 export interface GetPayrollParams {
   employeeId?: string;

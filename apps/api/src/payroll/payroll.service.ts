@@ -52,6 +52,7 @@ export class PayrollService {
           paymentDate: true,
           notes: true,
           createdAt: true,
+          updatedAt: true,
           employee: {
             select: {
               id: true,

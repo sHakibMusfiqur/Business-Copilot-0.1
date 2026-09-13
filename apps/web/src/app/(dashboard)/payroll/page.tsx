@@ -12,7 +12,7 @@ import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { usePermissions } from '@/hooks/use-permissions';
 import { PAYROLL_READ, PAYROLL_CREATE, PAYROLL_UPDATE, PAYROLL_DELETE } from '@/lib/permissions';
-import { getPayroll, getPayrollRecord, getPayrollStats, deletePayroll, type PayrollRecord, type PayrollDetail, type PayrollStats } from '@/lib/api/payroll';
+import { getPayroll, getPayrollRecord, getPayrollStats, deletePayroll, type PayrollRecord, type PayrollDetail, type PayrollStats, type PayrollResponse } from '@/lib/api/payroll';
 import { getEmployees, type EmployeeListResponse } from '@/lib/api/employees';
 import { formatCurrency } from '@/lib/utils';
 import { CreatePayrollDialog } from '@/components/payroll/create-payroll-dialog';
@@ -44,7 +44,7 @@ export default function PayrollPage() {
     enabled: canRead,
   });
 
-  const payrollQuery = useQuery<PayrollRecord[]>({
+  const payrollQuery = useQuery<PayrollResponse>({
     queryKey: ['payroll', { employeeId: employeeFilter || undefined }],
     queryFn: () => getPayroll({ employeeId: employeeFilter || undefined }),
     enabled: canRead,
@@ -82,7 +82,7 @@ export default function PayrollPage() {
     );
   }
 
-  const payroll = (payrollQuery.data ?? []).filter((record) => {
+  const payroll = (payrollQuery.data?.data ?? []).filter((record) => {
     if (!search) return true;
     const q = search.toLowerCase();
     return (

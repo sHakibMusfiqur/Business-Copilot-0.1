@@ -61,6 +61,36 @@ describe('PayrollService', () => {
       expect(prisma.payroll.findMany).toHaveBeenCalled();
     });
 
+    it('should return { data, meta } shape matching frontend contract', async () => {
+      const records = [
+        { id: '1', employeeId: 'emp-1', periodStart: new Date(), periodEnd: new Date(), netSalary: 5000 },
+        { id: '2', employeeId: 'emp-2', periodStart: new Date(), periodEnd: new Date(), netSalary: 3000 },
+      ];
+      prisma.payroll.findMany.mockResolvedValue(records);
+      prisma.payroll.count.mockResolvedValue(2);
+
+      const result = await service.findAll('org-1', { page: 1, limit: 20 });
+
+      expect(result).toHaveProperty('data');
+      expect(result).toHaveProperty('meta');
+      expect(Array.isArray(result.data)).toBe(true);
+      expect(result.data).toHaveLength(2);
+      expect(result.meta).toEqual({ total: 2, page: 1, limit: 20, totalPages: 1 });
+    });
+
+    it('should return updatedAt in each record', async () => {
+      const now = new Date();
+      const records = [
+        { id: '1', employeeId: 'emp-1', periodStart: now, periodEnd: now, netSalary: 5000, updatedAt: now },
+      ];
+      prisma.payroll.findMany.mockResolvedValue(records);
+      prisma.payroll.count.mockResolvedValue(1);
+
+      const result = await service.findAll('org-1');
+
+      expect(result.data[0]).toHaveProperty('updatedAt');
+    });
+
     it('should filter by employeeId', async () => {
       prisma.payroll.findMany.mockResolvedValue([]);
       prisma.payroll.count.mockResolvedValue(0);
