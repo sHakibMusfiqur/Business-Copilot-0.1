@@ -69,7 +69,7 @@ describe('DepartmentsController', () => {
   describe('permission metadata', () => {
     const reflector = new Reflector();
 
-    function getPermissions(handler: Function): string[] | undefined {
+    function getPermissions(handler: (...args: never[]) => unknown): string[] | undefined {
       const metadata = reflector.getAllAndOverride(PERMISSIONS_KEY, [handler]);
       return metadata?.permissions;
     }
