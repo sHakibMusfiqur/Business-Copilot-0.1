@@ -286,7 +286,7 @@ export class ProvisioningExecutorService {
       const code = dept.name
         .toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 16)
         + `_${org.id.slice(0, 8)}`;
-      return { name: dept.name, code, isActive: true };
+      return { name: dept.name, code, organizationId: org.id, isActive: true };
     });
     if (departments.length > 0) {
       await tx.department.createMany({ data: departments, skipDuplicates: true });

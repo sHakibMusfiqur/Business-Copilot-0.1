@@ -321,6 +321,10 @@ export class UsersService {
     }
 
     await this.prisma.$transaction([
+      this.prisma.department.updateMany({
+        where: { managerId: userId },
+        data: { managerId: null },
+      }),
       this.prisma.refreshToken.deleteMany({ where: { userId } }),
       this.prisma.user.update({
         where: { id: userId, organizationId: orgId },

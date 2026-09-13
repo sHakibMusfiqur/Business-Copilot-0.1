@@ -167,6 +167,38 @@ describe('ProvisioningExecutorService', () => {
     expect(mockTx.organizationMember.create).toHaveBeenCalled();
   });
 
+  it('creates provisioned departments with the correct organizationId', async () => {
+    const mockTx = buildMockTx();
+    mockTx.organization.findUnique.mockResolvedValue({ id: 'org-1', name: 'Acme Inc' });
+
+    const session = {
+      id: 'session-1',
+      orgName: 'Acme Inc',
+      organizationId: 'org-1',
+      selectedModules: [],
+    };
+
+    const configWithDepts = {
+      ...emptyConfig,
+      departments: [
+        { name: 'Engineering' },
+        { name: 'Sales' },
+      ],
+    };
+
+    const result = await service.executeCheckpoint(session, configWithDepts as never, 3, mockTx);
+
+    expect(result.success).toBe(true);
+    expect(mockTx.department.createMany).toHaveBeenCalledTimes(1);
+    expect(mockTx.department.createMany).toHaveBeenCalledWith({
+      data: expect.arrayContaining([
+        expect.objectContaining({ organizationId: 'org-1' }),
+        expect.objectContaining({ organizationId: 'org-1' }),
+      ]),
+      skipDuplicates: true,
+    });
+  });
+
   it('aborts with a conflict when another session already claimed the user', async () => {
     const mockTx = buildMockTx();
     mockTx.organization.findUnique.mockResolvedValue({ id: 'org-1', name: 'Acme Inc' });

@@ -52,10 +52,20 @@ export class DepartmentsService {
       }
     }
 
+    const normalizedCode = dto.code.trim().toUpperCase();
+
+    const existingByCode = await this.prisma.department.findFirst({
+      where: { code: normalizedCode },
+      select: { id: true },
+    });
+    if (existingByCode) {
+      throw new BadRequestException(`Department code "${normalizedCode}" is already in use.`);
+    }
+
     const department = await this.prisma.department.create({
       data: {
         name: dto.name.trim(),
-        code: dto.code.trim().toUpperCase(),
+        code: normalizedCode,
         organizationId: orgId,
         managerId: dto.managerId ?? null,
       },
@@ -99,6 +109,17 @@ export class DepartmentsService {
       });
       if (!manager) {
         throw new BadRequestException('managerId does not belong to this organization');
+      }
+    }
+
+    if (dto.code !== undefined) {
+      const normalizedCode = dto.code.trim().toUpperCase();
+      const existingByCode = await this.prisma.department.findFirst({
+        where: { code: normalizedCode, id: { not: departmentId } },
+        select: { id: true },
+      });
+      if (existingByCode) {
+        throw new BadRequestException(`Department code "${normalizedCode}" is already in use.`);
       }
     }
 

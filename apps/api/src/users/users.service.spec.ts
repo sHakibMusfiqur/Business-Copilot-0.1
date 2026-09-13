@@ -397,3 +397,70 @@ describe('UsersService update (deactivation protection / P3-M1)', () => {
     );
   });
 });
+
+describe('UsersService softDelete (manager cleanup)', () => {
+  let service: UsersService;
+  let departmentUpdateMany: jest.Mock;
+  let userUpdate: jest.Mock;
+  let transaction: jest.Mock;
+  let userFindFirst: jest.Mock;
+
+  beforeEach(() => {
+    departmentUpdateMany = jest.fn().mockResolvedValue({});
+    userUpdate = jest.fn().mockResolvedValue({});
+    transaction = jest.fn().mockImplementation(async (promises: Promise<unknown>[]) => {
+      await Promise.all(promises);
+      return [];
+    });
+    userFindFirst = jest.fn();
+
+    service = new UsersService(
+      {
+        department: { updateMany: departmentUpdateMany },
+        user: { findFirst: userFindFirst, update: userUpdate },
+        refreshToken: { deleteMany: jest.fn().mockResolvedValue({}) },
+        role: { findUnique: jest.fn().mockResolvedValue(null) },
+        userRoleAssignment: { findUnique: jest.fn().mockResolvedValue(null), count: jest.fn().mockResolvedValue(0) },
+        $transaction: transaction,
+      } as unknown as PrismaService,
+      {} as unknown as RbacService,
+    );
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('should clear managerId from departments when soft-deleting a user', async () => {
+    userFindFirst.mockResolvedValue({ id: 'user-1', email: 'u@x.com', organizationId: 'org-1' });
+
+    await service.softDelete('org-1', 'actor-1', 'user-1');
+
+    expect(departmentUpdateMany).toHaveBeenCalledWith({
+      where: { managerId: 'user-1' },
+      data: { managerId: null },
+    });
+  });
+
+  it('should perform manager cleanup in the same transaction as user soft-delete', async () => {
+    userFindFirst.mockResolvedValue({ id: 'user-1', email: 'u@x.com', organizationId: 'org-1' });
+
+    await service.softDelete('org-1', 'actor-1', 'user-1');
+
+    expect(transaction).toHaveBeenCalledTimes(1);
+    expect(departmentUpdateMany).toHaveBeenCalled();
+    expect(userUpdate).toHaveBeenCalled();
+  });
+
+  it('should still perform user soft-delete even if no departments reference the user as manager', async () => {
+    userFindFirst.mockResolvedValue({ id: 'user-1', email: 'u@x.com', organizationId: 'org-1' });
+    departmentUpdateMany.mockResolvedValue({ count: 0 });
+
+    await service.softDelete('org-1', 'actor-1', 'user-1');
+
+    expect(userUpdate).toHaveBeenCalledWith({
+      where: { id: 'user-1', organizationId: 'org-1' },
+      data: { deletedAt: expect.any(Date), isActive: false },
+    });
+  });
+});

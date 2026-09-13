@@ -139,6 +139,31 @@ describe('DepartmentsService', () => {
         }),
       );
     });
+
+    it('should reject create with duplicate code', async () => {
+      prisma.department.findFirst.mockResolvedValue({ id: 'existing', code: 'ENG' });
+
+      await expect(
+        service.create('org-1', 'user-1', { name: 'Engineering', code: 'ENG' }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(prisma.department.create).not.toHaveBeenCalled();
+    });
+
+    it('should allow creating with same code after normalization', async () => {
+      prisma.department.findFirst.mockResolvedValue(null);
+      prisma.department.create.mockResolvedValue({
+        id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: null, isActive: true,
+      });
+
+      await service.create('org-1', 'user-1', { name: 'Engineering', code: ' eng ' });
+
+      expect(prisma.department.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ code: 'ENG' }),
+        }),
+      );
+    });
   });
 
   describe('update', () => {
@@ -182,6 +207,52 @@ describe('DepartmentsService', () => {
       const result = await service.update('org-1', 'user-1', '1', { isActive: false });
 
       expect(result).toHaveProperty('isActive', false);
+    });
+
+    it('should reject update with duplicate code', async () => {
+      prisma.department.findFirst
+        .mockResolvedValueOnce({ id: '1', name: 'Engineering', code: 'ENG' })
+        .mockResolvedValueOnce({ id: '2', code: 'SALES' });
+
+      await expect(
+        service.update('org-1', 'user-1', '1', { code: 'SALES' }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(prisma.department.update).not.toHaveBeenCalled();
+    });
+
+    it('should allow updating a department to retain its own existing code', async () => {
+      prisma.department.findFirst
+        .mockResolvedValueOnce({ id: '1', name: 'Engineering', code: 'ENG' })
+        .mockResolvedValueOnce(null);
+      prisma.department.update.mockResolvedValue({
+        id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: null, isActive: true,
+      });
+
+      const result = await service.update('org-1', 'user-1', '1', { code: 'ENG' });
+
+      expect(result.code).toBe('ENG');
+      expect(prisma.department.update).toHaveBeenCalled();
+    });
+
+    it('should scope duplicate code check to exclude current department', async () => {
+      prisma.department.findFirst
+        .mockResolvedValueOnce({ id: '1', name: 'Engineering', code: 'ENG' })
+        .mockResolvedValueOnce(null);
+      prisma.department.update.mockResolvedValue({
+        id: '1', name: 'Engineering', code: 'NEW', organizationId: 'org-1', managerId: null, isActive: true,
+      });
+
+      await service.update('org-1', 'user-1', '1', { code: 'NEW' });
+
+      expect(prisma.department.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            code: 'NEW',
+            id: { not: '1' },
+          }),
+        }),
+      );
     });
   });
 
