@@ -18,6 +18,7 @@ interface ConfirmDeleteDialogProps {
   onClose: () => void;
   onDeleted: () => void;
   deleteFn: () => Promise<unknown>;
+  buttonVariant?: 'destructive' | 'default';
 }
 
 export function ConfirmDeleteDialog({
@@ -31,6 +32,7 @@ export function ConfirmDeleteDialog({
   onClose,
   onDeleted,
   deleteFn,
+  buttonVariant = 'destructive',
 }: ConfirmDeleteDialogProps) {
   const { toast } = useToast();
 
@@ -94,7 +96,7 @@ export function ConfirmDeleteDialog({
             Cancel
           </Button>
           <Button
-            variant="destructive"
+            variant={buttonVariant}
             onClick={() => deleteMutation.mutate()}
             disabled={deleteMutation.isPending}
           >

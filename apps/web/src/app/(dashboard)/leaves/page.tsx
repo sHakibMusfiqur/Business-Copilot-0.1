@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,6 @@ import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
 import { usePermissions } from '@/hooks/use-permissions';
 import { LEAVES_READ, LEAVES_CREATE, LEAVES_UPDATE, LEAVES_DELETE, LEAVES_APPROVE, LEAVES_REJECT } from '@/lib/permissions';
 import { getLeaves, deleteLeave, approveLeave, rejectLeave, cancelLeave, type Leave, type LeavesResponse } from '@/lib/api/leaves';
-import { useToast } from '@/components/ui/use-toast';
 import { LeaveTable } from '@/components/leaves/leave-table';
 import { CreateLeaveDialog } from '@/components/leaves/create-leave-dialog';
 import { EditLeaveDialog } from '@/components/leaves/edit-leave-dialog';
@@ -20,7 +19,6 @@ import { LeaveDetailsDialog } from '@/components/leaves/leave-details-dialog';
 export default function LeavesPage() {
   const { hasPermission, isLoaded } = usePermissions();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
 
   const canRead = isLoaded && hasPermission(LEAVES_READ);
   const canCreate = isLoaded && hasPermission(LEAVES_CREATE);
@@ -41,6 +39,8 @@ export default function LeavesPage() {
   const [viewLeave, setViewLeave] = useState<Leave | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Leave | null>(null);
   const [cancelTarget, setCancelTarget] = useState<Leave | null>(null);
+  const [approveTarget, setApproveTarget] = useState<Leave | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<Leave | null>(null);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -77,28 +77,6 @@ export default function LeavesPage() {
     queryClient.invalidateQueries({ queryKey: ['leaves'] });
     queryClient.invalidateQueries({ queryKey: ['employees'] });
   }
-
-  const approveMutation = useMutation({
-    mutationFn: (id: string) => approveLeave(id),
-    onSuccess: () => {
-      toast({ title: 'Leave approved', description: 'The leave request has been approved.' });
-      invalidate();
-    },
-    onError: (error: Error) => {
-      toast({ title: 'Failed to approve', description: error.message, variant: 'destructive' });
-    },
-  });
-
-  const rejectMutation = useMutation({
-    mutationFn: (id: string) => rejectLeave(id),
-    onSuccess: () => {
-      toast({ title: 'Leave rejected', description: 'The leave request has been rejected.' });
-      invalidate();
-    },
-    onError: (error: Error) => {
-      toast({ title: 'Failed to reject', description: error.message, variant: 'destructive' });
-    },
-  });
 
   if (!isLoaded) return <DashboardSkeleton />;
 
@@ -153,8 +131,8 @@ export default function LeavesPage() {
             setSortOrder('desc');
           }
         }}
-        onApprove={(leave) => approveMutation.mutate(leave.id)}
-        onReject={(leave) => rejectMutation.mutate(leave.id)}
+        onApprove={setApproveTarget}
+        onReject={setRejectTarget}
         onCancel={setCancelTarget}
         onView={setViewLeave}
         onEdit={setEditLeave}
@@ -204,6 +182,33 @@ export default function LeavesPage() {
         onClose={() => setCancelTarget(null)}
         onDeleted={invalidate}
         deleteFn={() => cancelTarget ? cancelLeave(cancelTarget.id) : Promise.resolve()}
+      />
+
+      <ConfirmDeleteDialog
+        entityName={approveTarget ? `${approveTarget.employee.firstName} ${approveTarget.employee.lastName}'s leave request` : null}
+        title="Approve Leave Request"
+        description={`This will approve the ${approveTarget?.type?.toLowerCase() ?? ''} leave from ${approveTarget ? new Date(approveTarget.startDate).toLocaleDateString() : ''} to ${approveTarget ? new Date(approveTarget.endDate).toLocaleDateString() : ''}.`}
+        buttonLabel="Approve"
+        successTitle="Leave approved"
+        errorFallback="Failed to approve leave request."
+        open={approveTarget !== null}
+        onClose={() => setApproveTarget(null)}
+        onDeleted={invalidate}
+        deleteFn={() => approveTarget ? approveLeave(approveTarget.id) : Promise.resolve()}
+        buttonVariant="default"
+      />
+
+      <ConfirmDeleteDialog
+        entityName={rejectTarget ? `${rejectTarget.employee.firstName} ${rejectTarget.employee.lastName}'s leave request` : null}
+        title="Reject Leave Request"
+        description={`This will reject the ${rejectTarget?.type?.toLowerCase() ?? ''} leave from ${rejectTarget ? new Date(rejectTarget.startDate).toLocaleDateString() : ''} to ${rejectTarget ? new Date(rejectTarget.endDate).toLocaleDateString() : ''}.`}
+        buttonLabel="Reject"
+        successTitle="Leave rejected"
+        errorFallback="Failed to reject leave request."
+        open={rejectTarget !== null}
+        onClose={() => setRejectTarget(null)}
+        onDeleted={invalidate}
+        deleteFn={() => rejectTarget ? rejectLeave(rejectTarget.id) : Promise.resolve()}
       />
     </div>
   );
