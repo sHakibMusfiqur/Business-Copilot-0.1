@@ -41,19 +41,25 @@ export interface LeaveStats {
 
 export interface GetLeavesParams {
   employeeId?: string;
+  search?: string;
   status?: string;
   type?: string;
   page?: number;
   limit?: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
 }
 
 export async function getLeaves(params?: GetLeavesParams, signal?: AbortSignal): Promise<LeavesResponse> {
   const searchParams = new URLSearchParams();
   if (params?.employeeId) searchParams.set('employeeId', params.employeeId);
+  if (params?.search) searchParams.set('search', params.search);
   if (params?.status) searchParams.set('status', params.status);
   if (params?.type) searchParams.set('type', params.type);
   if (params?.page) searchParams.set('page', String(params.page));
   if (params?.limit) searchParams.set('limit', String(params.limit));
+  if (params?.sortBy) searchParams.set('sortBy', params.sortBy);
+  if (params?.sortOrder) searchParams.set('sortOrder', params.sortOrder);
 
   const query = searchParams.toString();
   const url = query ? `${API_ROUTES.LEAVES.ROOT}?${query}` : API_ROUTES.LEAVES.ROOT;

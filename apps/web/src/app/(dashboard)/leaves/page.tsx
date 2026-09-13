@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
-import { Plus, Search, CalendarDays } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
-import { DashboardError } from '@/components/dashboard/dashboard-error';
 import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
@@ -30,27 +29,49 @@ export default function LeavesPage() {
   const canApprove = isLoaded && hasPermission(LEAVES_APPROVE);
   const canReject = isLoaded && hasPermission(LEAVES_REJECT);
 
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState('createdAt');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [createOpen, setCreateOpen] = useState(false);
   const [editLeave, setEditLeave] = useState<Leave | null>(null);
   const [viewLeave, setViewLeave] = useState<Leave | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Leave | null>(null);
   const [cancelTarget, setCancelTarget] = useState<Leave | null>(null);
 
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1);
+    }, 300);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [searchInput]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, typeFilter]);
+
   const leavesQuery = useQuery<LeavesResponse>({
-    queryKey: ['leaves', { status: statusFilter, type: typeFilter }],
+    queryKey: ['leaves', { search, status: statusFilter, type: typeFilter, page, limit: 20, sortBy, sortOrder }],
     queryFn: ({ signal }) => getLeaves({
+      search: search || undefined,
       status: statusFilter || undefined,
       type: typeFilter || undefined,
+      page,
+      limit: 20,
+      sortBy,
+      sortOrder,
     }, signal),
     enabled: canRead,
   });
-
-  const handleSearch = useCallback((value: string) => {
-    setSearch(value);
-  }, []);
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: ['leaves'] });
@@ -90,15 +111,8 @@ export default function LeavesPage() {
     );
   }
 
-  const leaves = (leavesQuery.data?.data ?? []).filter((leave) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return (
-      leave.employee.firstName.toLowerCase().includes(q) ||
-      leave.employee.lastName.toLowerCase().includes(q) ||
-      leave.employee.email.toLowerCase().includes(q)
-    );
-  });
+  const leaves = leavesQuery.data?.data ?? [];
+  const meta = leavesQuery.data?.meta ?? null;
 
   return (
     <div className="space-y-6">
@@ -114,71 +128,38 @@ export default function LeavesPage() {
         )}
       </div>
 
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search by employee name..."
-            value={search}
-            onChange={(e) => handleSearch(e.target.value)}
-            className="w-full rounded-lg border border-border bg-background pl-9 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-          />
-        </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-        >
-          <option value="">All Status</option>
-          <option value="PENDING">Pending</option>
-          <option value="APPROVED">Approved</option>
-          <option value="REJECTED">Rejected</option>
-          <option value="CANCELLED">Cancelled</option>
-        </select>
-        <select
-          value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value)}
-          className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-        >
-          <option value="">All Types</option>
-          <option value="ANNUAL">Annual</option>
-          <option value="SICK">Sick</option>
-          <option value="PERSONAL">Personal</option>
-          <option value="MATERNITY">Maternity</option>
-          <option value="PATERNITY">Paternity</option>
-          <option value="UNPAID">Unpaid</option>
-          <option value="OTHER">Other</option>
-        </select>
-      </div>
-
-      {leavesQuery.isLoading ? (
-        <DashboardSkeleton />
-      ) : leavesQuery.error ? (
-        <DashboardError status={500} message={(leavesQuery.error as Error).message} />
-      ) : leaves.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border/50 bg-muted/20 py-16">
-          <CalendarDays className="h-12 w-12 text-muted-foreground/50" />
-          <p className="mt-4 text-sm font-medium text-muted-foreground">No leave requests found</p>
-          <p className="mt-1 text-xs text-muted-foreground/70">
-            {search || statusFilter || typeFilter ? 'Try adjusting your filters.' : 'Create your first leave request to get started.'}
-          </p>
-        </div>
-      ) : (
-        <LeaveTable
-          leaves={leaves}
-          canApprove={canApprove}
-          canReject={canReject}
-          canUpdate={canUpdate}
-          canDelete={canDelete}
-          onApprove={(leave) => approveMutation.mutate(leave.id)}
-          onReject={(leave) => rejectMutation.mutate(leave.id)}
-          onCancel={setCancelTarget}
-          onView={setViewLeave}
-          onEdit={setEditLeave}
-          onDelete={setDeleteTarget}
-        />
-      )}
+      <LeaveTable
+        leaves={leaves}
+        meta={meta}
+        search={searchInput}
+        statusFilter={statusFilter}
+        typeFilter={typeFilter}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        isLoading={leavesQuery.isLoading}
+        canApprove={canApprove}
+        canReject={canReject}
+        canUpdate={canUpdate}
+        canDelete={canDelete}
+        onSearchChange={setSearchInput}
+        onStatusChange={setStatusFilter}
+        onTypeChange={setTypeFilter}
+        onPageChange={setPage}
+        onSort={(field) => {
+          if (field === sortBy) {
+            setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+          } else {
+            setSortBy(field);
+            setSortOrder('desc');
+          }
+        }}
+        onApprove={(leave) => approveMutation.mutate(leave.id)}
+        onReject={(leave) => rejectMutation.mutate(leave.id)}
+        onCancel={setCancelTarget}
+        onView={setViewLeave}
+        onEdit={setEditLeave}
+        onDelete={setDeleteTarget}
+      />
 
       <CreateLeaveDialog
         open={createOpen}

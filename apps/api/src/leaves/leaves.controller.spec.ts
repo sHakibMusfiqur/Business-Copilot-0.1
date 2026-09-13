@@ -33,15 +33,29 @@ describe('LeavesController', () => {
   });
 
   describe('findAll', () => {
-    it('should call service.findAll with orgId and query', async () => {
+    it('should call service.findAll with orgId and default query', async () => {
       const { controller, service } = buildController();
-      await controller.findAll(makeUser());
-      expect(service.findAll).toHaveBeenCalledWith('org-1', { employeeId: undefined, status: undefined, type: undefined, page: undefined, limit: undefined });
+      await controller.findAll(makeUser(), {});
+      expect(service.findAll).toHaveBeenCalledWith('org-1', {});
+    });
+
+    it('should call service.findAll with search and filters', async () => {
+      const { controller, service } = buildController();
+      const query = { search: 'john', status: 'PENDING' as const, type: 'ANNUAL' as const, page: 2, limit: 10, sortBy: 'startDate' as const, sortOrder: 'desc' as const };
+      await controller.findAll(makeUser(), query);
+      expect(service.findAll).toHaveBeenCalledWith('org-1', query);
     });
 
     it('should throw ForbiddenException when user has no organization', async () => {
       const { controller } = buildController();
-      await expect(controller.findAll(makeUser({ organizationId: undefined }))).rejects.toThrow(ForbiddenException);
+      await expect(controller.findAll(makeUser({ organizationId: undefined }), {})).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should not accept organizationId from request', async () => {
+      const { controller, service } = buildController();
+      await controller.findAll(makeUser(), {});
+      const callArgs = (service.findAll as jest.Mock).mock.calls[0];
+      expect(callArgs[0]).toBe('org-1');
     });
   });
 

@@ -12,7 +12,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags, ApiOperation } from '@nestjs/swagger';
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
@@ -23,6 +23,7 @@ import { Permissions } from '../common/decorators/permissions.decorator';
 
 import { LeavesService } from './leaves.service';
 import { CreateLeaveDto, UpdateLeaveDto } from './dto/create-leave.dto';
+import { QueryLeaveDto } from './dto/query-leave.dto';
 
 @ApiTags('Leaves')
 @Controller('leaves')
@@ -43,21 +44,12 @@ export class LeavesController {
   @ApiBearerAuth('access-token')
   @ApiOperation({ summary: 'List leave requests' })
   @ApiOkResponse({ description: 'Leave requests listed' })
-  @ApiQuery({ name: 'employeeId', required: false })
-  @ApiQuery({ name: 'status', required: false })
-  @ApiQuery({ name: 'type', required: false })
-  @ApiQuery({ name: 'page', required: false, description: 'Page number' })
-  @ApiQuery({ name: 'limit', required: false, description: 'Items per page (max 100)' })
   async findAll(
     @CurrentUser() user: CurrentUserPayload,
-    @Query('employeeId') employeeId?: string,
-    @Query('status') status?: string,
-    @Query('type') type?: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
+    @Query() query: QueryLeaveDto,
   ) {
     const orgId = this.requireOrg(user);
-    return this.leavesService.findAll(orgId, { employeeId, status, type, page: page ? parseInt(page, 10) : undefined, limit: limit ? parseInt(limit, 10) : undefined });
+    return this.leavesService.findAll(orgId, query);
   }
 
   @Get('stats')

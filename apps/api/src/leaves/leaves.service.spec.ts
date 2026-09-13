@@ -42,7 +42,7 @@ describe('LeavesService', () => {
   const leaveId = 'leave-1';
 
   describe('findAll', () => {
-    it('returns leaves scoped to organization', async () => {
+    it('returns leaves scoped to organization with default pagination', async () => {
       const leaves = [{ id: leaveId, status: 'PENDING' }];
       prismaMock.leave.findMany.mockResolvedValue(leaves);
       prismaMock.leave.count.mockResolvedValue(1);
@@ -50,14 +50,150 @@ describe('LeavesService', () => {
       const result = await service.findAll(orgId);
 
       expect(result.data).toEqual(leaves);
-      expect(result.meta.total).toBe(1);
+      expect(result.meta).toEqual({ total: 1, page: 1, limit: 20, totalPages: 1 });
       expect(prismaMock.leave.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            employee: { organizationId: orgId },
+            AND: expect.arrayContaining([
+              { employee: { organizationId: orgId } },
+            ]),
           }),
+          orderBy: { createdAt: 'desc' },
+          skip: 0,
+          take: 20,
         }),
       );
+    });
+
+    it('applies search across employee fields with AND tenant scope', async () => {
+      prismaMock.leave.findMany.mockResolvedValue([]);
+      prismaMock.leave.count.mockResolvedValue(0);
+
+      await service.findAll(orgId, { search: 'john' });
+
+      const findManyCall = prismaMock.leave.findMany.mock.calls[0][0];
+      const where = findManyCall.where;
+      expect(where.AND).toEqual(
+        expect.arrayContaining([
+          { employee: { organizationId: orgId } },
+          {
+            OR: [
+              { employee: { firstName: { contains: 'john', mode: 'insensitive' } } },
+              { employee: { lastName: { contains: 'john', mode: 'insensitive' } } },
+              { employee: { email: { contains: 'john', mode: 'insensitive' } } },
+              { employee: { employeeCode: { contains: 'john', mode: 'insensitive' } } },
+            ],
+          },
+        ]),
+      );
+    });
+
+    it('applies status filter with tenant scope', async () => {
+      prismaMock.leave.findMany.mockResolvedValue([]);
+      prismaMock.leave.count.mockResolvedValue(0);
+
+      await service.findAll(orgId, { status: 'APPROVED' });
+
+      const findManyCall = prismaMock.leave.findMany.mock.calls[0][0];
+      expect(findManyCall.where.AND).toEqual(
+        expect.arrayContaining([
+          { employee: { organizationId: orgId } },
+          { status: 'APPROVED' },
+        ]),
+      );
+    });
+
+    it('applies type filter with tenant scope', async () => {
+      prismaMock.leave.findMany.mockResolvedValue([]);
+      prismaMock.leave.count.mockResolvedValue(0);
+
+      await service.findAll(orgId, { type: 'SICK' });
+
+      const findManyCall = prismaMock.leave.findMany.mock.calls[0][0];
+      expect(findManyCall.where.AND).toEqual(
+        expect.arrayContaining([
+          { employee: { organizationId: orgId } },
+          { type: 'SICK' },
+        ]),
+      );
+    });
+
+    it('applies employeeId filter with tenant scope', async () => {
+      prismaMock.leave.findMany.mockResolvedValue([]);
+      prismaMock.leave.count.mockResolvedValue(0);
+
+      await service.findAll(orgId, { employeeId: 'emp-1' });
+
+      const findManyCall = prismaMock.leave.findMany.mock.calls[0][0];
+      expect(findManyCall.where.AND).toEqual(
+        expect.arrayContaining([
+          { employee: { organizationId: orgId } },
+          { employeeId: 'emp-1' },
+        ]),
+      );
+    });
+
+    it('combines search + status + pagination', async () => {
+      prismaMock.leave.findMany.mockResolvedValue([]);
+      prismaMock.leave.count.mockResolvedValue(0);
+
+      await service.findAll(orgId, { search: 'doe', status: 'PENDING', page: 2, limit: 10 });
+
+      const findManyCall = prismaMock.leave.findMany.mock.calls[0][0];
+      expect(findManyCall.where.AND).toEqual(
+        expect.arrayContaining([
+          { employee: { organizationId: orgId } },
+          { status: 'PENDING' },
+          expect.objectContaining({ OR: expect.any(Array) }),
+        ]),
+      );
+      expect(findManyCall.skip).toBe(10);
+      expect(findManyCall.take).toBe(10);
+    });
+
+    it('uses custom sort field and order', async () => {
+      prismaMock.leave.findMany.mockResolvedValue([]);
+      prismaMock.leave.count.mockResolvedValue(0);
+
+      await service.findAll(orgId, { sortBy: 'startDate', sortOrder: 'asc' });
+
+      const findManyCall = prismaMock.leave.findMany.mock.calls[0][0];
+      expect(findManyCall.orderBy).toEqual({ startDate: 'asc' });
+    });
+
+    it('cannot leak cross-tenant data', async () => {
+      prismaMock.leave.findMany.mockResolvedValue([]);
+      prismaMock.leave.count.mockResolvedValue(0);
+
+      await service.findAll('other-org', { search: 'test' });
+
+      const findManyCall = prismaMock.leave.findMany.mock.calls[0][0];
+      expect(findManyCall.where.AND).toEqual(
+        expect.arrayContaining([
+          { employee: { organizationId: 'other-org' } },
+        ]),
+      );
+    });
+
+    it('defaults page to 1 and limit to 20', async () => {
+      prismaMock.leave.findMany.mockResolvedValue([]);
+      prismaMock.leave.count.mockResolvedValue(0);
+
+      await service.findAll(orgId, {});
+
+      const findManyCall = prismaMock.leave.findMany.mock.calls[0][0];
+      expect(findManyCall.skip).toBe(0);
+      expect(findManyCall.take).toBe(20);
+    });
+
+    it('caps limit at 100', async () => {
+      prismaMock.leave.findMany.mockResolvedValue([]);
+      prismaMock.leave.count.mockResolvedValue(0);
+
+      await service.findAll(orgId, { limit: 200 });
+
+      const findManyCall = prismaMock.leave.findMany.mock.calls[0][0];
+      expect(findManyCall.take).toBe(100);
     });
   });
 

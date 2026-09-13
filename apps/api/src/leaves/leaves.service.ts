@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 
 import type { CreateLeaveDto, UpdateLeaveDto } from './dto/create-leave.dto';
+import type { QueryLeaveDto } from './dto/query-leave.dto';
 
 const VALID_TRANSITIONS: Record<string, string[]> = {
   PENDING: ['APPROVED', 'REJECTED', 'CANCELLED'],
@@ -19,31 +20,47 @@ export class LeavesService {
     private readonly auditService: AuditService,
   ) {}
 
-  async findAll(orgId: string, query?: { employeeId?: string; status?: string; type?: string; page?: number; limit?: number }) {
+  async findAll(orgId: string, query?: QueryLeaveDto) {
     const page = Math.max(1, query?.page ?? 1);
-    const limit = Math.min(100, Math.max(1, query?.limit ?? 50));
+    const limit = Math.min(100, Math.max(1, query?.limit ?? 20));
     const skip = (page - 1) * limit;
 
-    const where: Record<string, unknown> = {
-      employee: { organizationId: orgId },
-    };
+    const andConditions: Record<string, unknown>[] = [
+      { employee: { organizationId: orgId } },
+    ];
 
-    if (query?.employeeId) {
-      where.employeeId = query.employeeId;
+    if (query?.search) {
+      const search = query.search;
+      andConditions.push({
+        OR: [
+          { employee: { firstName: { contains: search, mode: 'insensitive' } } },
+          { employee: { lastName: { contains: search, mode: 'insensitive' } } },
+          { employee: { email: { contains: search, mode: 'insensitive' } } },
+          { employee: { employeeCode: { contains: search, mode: 'insensitive' } } },
+        ],
+      });
     }
 
     if (query?.status) {
-      where.status = query.status;
+      andConditions.push({ status: query.status });
     }
 
     if (query?.type) {
-      where.type = query.type;
+      andConditions.push({ type: query.type });
     }
+
+    if (query?.employeeId) {
+      andConditions.push({ employeeId: query.employeeId });
+    }
+
+    const where = { AND: andConditions };
+
+    const orderBy = { [query?.sortBy ?? 'createdAt']: query?.sortOrder ?? 'desc' };
 
     const [data, total] = await Promise.all([
       this.prisma.leave.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         skip,
         take: limit,
         select: {
