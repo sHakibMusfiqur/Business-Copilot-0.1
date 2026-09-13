@@ -163,10 +163,7 @@ export function LeaveTable({
                 <thead>
                   <tr className="border-b border-border bg-muted/50">
                     <th className="px-4 py-3 text-left font-medium text-muted-foreground">
-                      <span className="inline-flex items-center cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => onSort('startDate')}>
-                        Employee
-                        <SortIcon field="startDate" sortBy={sortBy} sortOrder={sortOrder} />
-                      </span>
+                      Employee
                     </th>
                     <th className="px-4 py-3 text-left font-medium text-muted-foreground">
                       <span className="inline-flex items-center cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => onSort('type')}>
@@ -174,7 +171,12 @@ export function LeaveTable({
                         <SortIcon field="type" sortBy={sortBy} sortOrder={sortOrder} />
                       </span>
                     </th>
-                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">Duration</th>
+                    <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                      <span className="inline-flex items-center cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => onSort('startDate')}>
+                        Duration
+                        <SortIcon field="startDate" sortBy={sortBy} sortOrder={sortOrder} />
+                      </span>
+                    </th>
                     <th className="px-4 py-3 text-left font-medium text-muted-foreground">Days</th>
                     <th className="px-4 py-3 text-left font-medium text-muted-foreground">
                       <span className="inline-flex items-center cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => onSort('status')}>
