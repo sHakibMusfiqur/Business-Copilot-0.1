@@ -1,3 +1,5 @@
+import type { Meta } from '@/lib/types';
+
 export interface Department {
   id: string;
   name: string;
@@ -19,4 +21,19 @@ export interface UpdateDepartmentData {
   code?: string;
   managerId?: string | null;
   isActive?: boolean;
+}
+
+export type DepartmentListMeta = Meta;
+
+export interface DepartmentListResponse {
+  data: Department[];
+  meta: DepartmentListMeta;
+}
+
+export interface DepartmentListQuery {
+  page?: number;
+  limit?: number;
+  search?: string;
+  sortBy?: 'name' | 'code' | 'isActive' | 'createdAt';
+  sortOrder?: 'asc' | 'desc';
 }

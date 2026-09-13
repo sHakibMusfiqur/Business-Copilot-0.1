@@ -9,6 +9,7 @@ describe('DepartmentsController', () => {
   function buildController() {
     const service = {
       findAll: jest.fn(async () => []),
+      findAllPaginated: jest.fn(async () => ({ data: [], meta: { total: 0, page: 1, limit: 20, totalPages: 0 } })),
       create: jest.fn(async () => ({ id: '1', name: 'Engineering', code: 'ENG', shared: false })),
       update: jest.fn(async () => ({ id: '1', name: 'Updated', code: 'ENG', shared: false })),
       remove: jest.fn(async () => ({ message: 'Department deleted successfully' })),
@@ -37,6 +38,38 @@ describe('DepartmentsController', () => {
     it('should throw ForbiddenException when user has no organization', async () => {
       const { controller } = buildController();
       await expect(controller.findAll(makeUser({ organizationId: undefined }))).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('findPaginated', () => {
+    it('should call service.findAllPaginated with orgId and query', async () => {
+      const { controller, service } = buildController();
+      const query = { page: 1, limit: 10, search: 'eng', sortBy: 'name', sortOrder: 'asc' as const };
+      await controller.findPaginated(makeUser(), query as never);
+      expect(service.findAllPaginated).toHaveBeenCalledWith('org-1', query);
+    });
+
+    it('should throw ForbiddenException when user has no organization', async () => {
+      const { controller } = buildController();
+      await expect(
+        controller.findPaginated(makeUser({ organizationId: undefined }), {} as never),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should return paginated response shape', async () => {
+      const { controller, service } = buildController();
+      (service.findAllPaginated as jest.Mock).mockResolvedValue({
+        data: [{ id: '1', name: 'Engineering', code: 'ENG', shared: false }],
+        meta: { total: 1, page: 1, limit: 20, totalPages: 1 },
+      });
+
+      const result = await controller.findPaginated(makeUser(), {} as never);
+      expect(result).toHaveProperty('data');
+      expect(result).toHaveProperty('meta');
+      expect(result.meta).toHaveProperty('total');
+      expect(result.meta).toHaveProperty('page');
+      expect(result.meta).toHaveProperty('limit');
+      expect(result.meta).toHaveProperty('totalPages');
     });
   });
 
@@ -77,6 +110,11 @@ describe('DepartmentsController', () => {
     it('GET should require departments.read', () => {
       const { controller } = buildController();
       expect(getPermissions(controller.findAll)).toEqual(['departments.read']);
+    });
+
+    it('GET /list should require departments.read', () => {
+      const { controller } = buildController();
+      expect(getPermissions(controller.findPaginated)).toEqual(['departments.read']);
     });
 
     it('POST should require departments.create', () => {

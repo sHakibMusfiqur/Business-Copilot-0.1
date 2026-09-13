@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Search, Building2 } from 'lucide-react';
+import { Plus, Building2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,12 +18,13 @@ import { usePermissions } from '@/hooks/use-permissions';
 import { DEPARTMENTS_READ, DEPARTMENTS_CREATE, DEPARTMENTS_UPDATE, DEPARTMENTS_DELETE } from '@/lib/permissions';
 import { useToast } from '@/components/ui/use-toast';
 import {
-  getDepartments,
+  getDepartmentsList,
   createDepartment,
   updateDepartment,
   updateDepartmentStatus,
   deleteDepartment,
   type Department,
+  type DepartmentListResponse,
   type CreateDepartmentData,
   type UpdateDepartmentData,
 } from '@/lib/api/departments';
@@ -43,6 +44,11 @@ export default function DepartmentsPage() {
   const canDelete = isLoaded && hasPermission(DEPARTMENTS_DELETE);
 
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState<'name' | 'code' | 'isActive' | 'createdAt'>('name');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const limit = 20;
+
   const [createOpen, setCreateOpen] = useState(false);
   const [editDept, setEditDept] = useState<Department | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Department | null>(null);
@@ -53,9 +59,9 @@ export default function DepartmentsPage() {
   const [formManagerId, setFormManagerId] = useState('');
   const [formIsActive, setFormIsActive] = useState(true);
 
-  const deptQuery = useQuery<Department[]>({
-    queryKey: ['departments'],
-    queryFn: () => getDepartments(),
+  const deptQuery = useQuery<DepartmentListResponse>({
+    queryKey: ['departments-list', { page, limit, search, sortBy, sortOrder }],
+    queryFn: ({ signal }) => getDepartmentsList({ page, limit, search: search || undefined, sortBy, sortOrder }, signal),
     enabled: canRead,
   });
 
@@ -66,6 +72,7 @@ export default function DepartmentsPage() {
   });
 
   function invalidate() {
+    queryClient.invalidateQueries({ queryKey: ['departments-list'] });
     queryClient.invalidateQueries({ queryKey: ['departments'] });
     queryClient.invalidateQueries({ queryKey: ['employees'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
@@ -141,6 +148,22 @@ export default function DepartmentsPage() {
     });
   }
 
+  const handleSearch = useCallback((value: string) => {
+    setSearch(value);
+    setPage(1);
+  }, []);
+
+  const handleSort = useCallback((field: string) => {
+    setSortBy((prev) => {
+      if (prev === field) {
+        setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
+        return prev;
+      }
+      setSortOrder('asc');
+      return field as typeof sortBy;
+    });
+  }, []);
+
   if (!isLoaded) return <DashboardSkeleton />;
 
   if (!canRead) {
@@ -152,11 +175,15 @@ export default function DepartmentsPage() {
     );
   }
 
-  const departments = (deptQuery.data ?? []).filter((d) => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    return d.name.toLowerCase().includes(q) || d.code.toLowerCase().includes(q);
-  });
+  if (deptQuery.isLoading) return <DashboardSkeleton />;
+
+  if (deptQuery.error) {
+    return <DashboardError status={500} message={(deptQuery.error as Error).message} />;
+  }
+
+  const departmentsData = deptQuery.data as DepartmentListResponse;
+  const departments = departmentsData.data;
+  const meta = departmentsData.meta;
 
   return (
     <RequirePermission permission={DEPARTMENTS_READ}>
@@ -173,36 +200,27 @@ export default function DepartmentsPage() {
         )}
       </div>
 
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search departments..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-border bg-background pl-9 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-          />
-        </div>
-      </div>
-
-      {deptQuery.isLoading ? (
-        <DashboardSkeleton />
-      ) : deptQuery.error ? (
-        <DashboardError status={500} message={(deptQuery.error as Error).message} />
-      ) : departments.length === 0 ? (
+      {departments.length === 0 && !search ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border/50 bg-muted/20 py-16">
           <Building2 className="h-12 w-12 text-muted-foreground/50" />
           <p className="mt-4 text-sm font-medium text-muted-foreground">No departments found</p>
           <p className="mt-1 text-xs text-muted-foreground/70">
-            {search ? 'Try adjusting your search.' : 'Create your first department to get started.'}
+            Create your first department to get started.
           </p>
         </div>
       ) : (
         <DepartmentTable
           departments={departments}
+          meta={meta}
+          search={search}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          isLoading={deptQuery.isLoading}
           canUpdate={canUpdate}
           canDelete={canDelete}
+          onSearchChange={handleSearch}
+          onPageChange={setPage}
+          onSort={handleSort}
           onEdit={openEdit}
           onDelete={setDeleteTarget}
           onToggleStatus={canUpdate ? setStatusDepartment : undefined}

@@ -9,6 +9,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiTags, ApiOperation } from '@nestjs/swagger';
@@ -23,6 +24,7 @@ import { Permissions } from '../common/decorators/permissions.decorator';
 import { DepartmentsService } from './departments.service';
 import { CreateDepartmentDto } from './dto/create-department.dto';
 import { UpdateDepartmentDto } from './dto/update-department.dto';
+import { QueryDepartmentListDto } from './dto/query-department-list.dto';
 
 @ApiTags('Departments')
 @Controller('departments')
@@ -46,6 +48,20 @@ export class DepartmentsController {
   async findAll(@CurrentUser() user: CurrentUserPayload) {
     const orgId = this.requireOrg(user);
     return this.departmentsService.findAll(orgId);
+  }
+
+  @Get('list')
+  @UseGuards(PermissionGuard)
+  @Permissions(['departments.read'])
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Paginated list of departments for management' })
+  @ApiOkResponse({ description: 'Paginated departments' })
+  async findPaginated(
+    @CurrentUser() user: CurrentUserPayload,
+    @Query() query: QueryDepartmentListDto,
+  ) {
+    const orgId = this.requireOrg(user);
+    return this.departmentsService.findAllPaginated(orgId, query);
   }
 
   @Post()

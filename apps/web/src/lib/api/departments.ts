@@ -1,11 +1,16 @@
 import { api } from './client';
 import { API_ROUTES } from './routes';
 
-export type { Department, CreateDepartmentData, UpdateDepartmentData } from '@/components/departments/departments-types';
-import type { Department, CreateDepartmentData, UpdateDepartmentData } from '@/components/departments/departments-types';
+export type { Department, CreateDepartmentData, UpdateDepartmentData, DepartmentListResponse, DepartmentListMeta, DepartmentListQuery } from '@/components/departments/departments-types';
+import type { Department, CreateDepartmentData, UpdateDepartmentData, DepartmentListResponse, DepartmentListQuery } from '@/components/departments/departments-types';
 
 export async function getDepartments(signal?: AbortSignal) {
   const response = await api.get<Department[]>(API_ROUTES.DEPARTMENTS.ROOT, { signal });
+  return response.data;
+}
+
+export async function getDepartmentsList(params?: DepartmentListQuery, signal?: AbortSignal): Promise<DepartmentListResponse> {
+  const response = await api.get<DepartmentListResponse>(`${API_ROUTES.DEPARTMENTS.ROOT}/list`, { params, signal });
   return response.data;
 }
 

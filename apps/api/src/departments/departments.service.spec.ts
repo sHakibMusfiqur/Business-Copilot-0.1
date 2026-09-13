@@ -381,6 +381,193 @@ describe('DepartmentsService', () => {
     });
   });
 
+  describe('findAllPaginated', () => {
+    beforeEach(() => {
+      prisma.department.count = jest.fn();
+    });
+
+    it('should return paginated departments with meta', async () => {
+      const departments = [
+        { id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: null, isActive: true },
+        { id: '2', name: 'Sales', code: 'SALES', organizationId: 'org-1', managerId: null, isActive: true },
+      ];
+      prisma.department.findMany.mockResolvedValue(departments);
+      prisma.department.count.mockResolvedValue(2);
+
+      const result = await service.findAllPaginated('org-1', {});
+
+      expect(result.data).toHaveLength(2);
+      expect(result.meta).toEqual({ total: 2, page: 1, limit: 20, totalPages: 1 });
+      expect(result.data[0].shared).toBe(false);
+    });
+
+    it('should use default page 1 and limit 20', async () => {
+      prisma.department.findMany.mockResolvedValue([]);
+      prisma.department.count.mockResolvedValue(0);
+
+      await service.findAllPaginated('org-1', {});
+
+      expect(prisma.department.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 0, take: 20 }),
+      );
+    });
+
+    it('should calculate skip for page 2', async () => {
+      prisma.department.findMany.mockResolvedValue([]);
+      prisma.department.count.mockResolvedValue(25);
+
+      const result = await service.findAllPaginated('org-1', { page: 2, limit: 10 });
+
+      expect(prisma.department.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 10, take: 10 }),
+      );
+      expect(result.meta.page).toBe(2);
+      expect(result.meta.totalPages).toBe(3);
+    });
+
+    it('should enforce max limit of 100', async () => {
+      prisma.department.findMany.mockResolvedValue([]);
+      prisma.department.count.mockResolvedValue(0);
+
+      await service.findAllPaginated('org-1', { limit: 200 });
+
+      expect(prisma.department.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 100 }),
+      );
+    });
+
+    it('should search by name (case-insensitive)', async () => {
+      prisma.department.findMany.mockResolvedValue([]);
+      prisma.department.count.mockResolvedValue(0);
+
+      await service.findAllPaginated('org-1', { search: 'engineering' });
+
+      expect(prisma.department.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: expect.arrayContaining([
+              expect.objectContaining({
+                name: expect.objectContaining({ contains: 'engineering', mode: 'insensitive' }),
+              }),
+            ]),
+          }),
+        }),
+      );
+    });
+
+    it('should search by code (case-insensitive)', async () => {
+      prisma.department.findMany.mockResolvedValue([]);
+      prisma.department.count.mockResolvedValue(0);
+
+      await service.findAllPaginated('org-1', { search: 'eng' });
+
+      expect(prisma.department.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: expect.arrayContaining([
+              expect.objectContaining({
+                code: expect.objectContaining({ contains: 'eng', mode: 'insensitive' }),
+              }),
+            ]),
+          }),
+        }),
+      );
+    });
+
+    it('should sort by name asc by default', async () => {
+      prisma.department.findMany.mockResolvedValue([]);
+      prisma.department.count.mockResolvedValue(0);
+
+      await service.findAllPaginated('org-1', {});
+
+      expect(prisma.department.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: { name: 'asc' } }),
+      );
+    });
+
+    it('should sort by code desc', async () => {
+      prisma.department.findMany.mockResolvedValue([]);
+      prisma.department.count.mockResolvedValue(0);
+
+      await service.findAllPaginated('org-1', { sortBy: 'code', sortOrder: 'desc' });
+
+      expect(prisma.department.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: { code: 'desc' } }),
+      );
+    });
+
+    it('should sort by isActive', async () => {
+      prisma.department.findMany.mockResolvedValue([]);
+      prisma.department.count.mockResolvedValue(0);
+
+      await service.findAllPaginated('org-1', { sortBy: 'isActive', sortOrder: 'asc' });
+
+      expect(prisma.department.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: { isActive: 'asc' } }),
+      );
+    });
+
+    it('should sort by createdAt', async () => {
+      prisma.department.findMany.mockResolvedValue([]);
+      prisma.department.count.mockResolvedValue(0);
+
+      await service.findAllPaginated('org-1', { sortBy: 'createdAt', sortOrder: 'desc' });
+
+      expect(prisma.department.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: { createdAt: 'desc' } }),
+      );
+    });
+
+    it('should scope to organization and include shared departments', async () => {
+      prisma.department.findMany.mockResolvedValue([]);
+      prisma.department.count.mockResolvedValue(0);
+
+      await service.findAllPaginated('org-1', {});
+
+      expect(prisma.department.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: [{ organizationId: 'org-1' }, { organizationId: null }],
+          }),
+        }),
+      );
+    });
+
+    it('should return empty result set', async () => {
+      prisma.department.findMany.mockResolvedValue([]);
+      prisma.department.count.mockResolvedValue(0);
+
+      const result = await service.findAllPaginated('org-1', { search: 'nonexistent' });
+
+      expect(result.data).toEqual([]);
+      expect(result.meta.total).toBe(0);
+      expect(result.meta.totalPages).toBe(0);
+    });
+
+    it('should include shared flag in response', async () => {
+      prisma.department.findMany.mockResolvedValue([
+        { id: '1', name: 'Org Dept', code: 'ORG', organizationId: 'org-1', managerId: null, isActive: true },
+        { id: '2', name: 'Shared Dept', code: 'SHR', organizationId: null, managerId: null, isActive: true },
+      ]);
+      prisma.department.count.mockResolvedValue(2);
+
+      const result = await service.findAllPaginated('org-1', {});
+
+      expect(result.data[0].shared).toBe(false);
+      expect(result.data[1].shared).toBe(true);
+    });
+
+    it('should calculate totalPages correctly', async () => {
+      prisma.department.findMany.mockResolvedValue([]);
+      prisma.department.count.mockResolvedValue(45);
+
+      const result = await service.findAllPaginated('org-1', { page: 1, limit: 20 });
+
+      expect(result.meta.totalPages).toBe(3);
+      expect(result.meta.total).toBe(45);
+    });
+  });
+
   describe('shared department protection', () => {
     it('should throw NotFoundException when updating shared department from different org', async () => {
       prisma.department.findFirst.mockResolvedValue(null);

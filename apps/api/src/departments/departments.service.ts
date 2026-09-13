@@ -5,6 +5,7 @@ import { AuditService } from '../audit/audit.service';
 
 import type { CreateDepartmentDto } from './dto/create-department.dto';
 import type { UpdateDepartmentDto } from './dto/update-department.dto';
+import type { QueryDepartmentListDto } from './dto/query-department-list.dto';
 
 @Injectable()
 export class DepartmentsService {
@@ -39,6 +40,63 @@ export class DepartmentsService {
       isActive: department.isActive,
       shared: department.organizationId === null,
     }));
+  }
+
+  async findAllPaginated(orgId: string, query: QueryDepartmentListDto) {
+    const { page = 1, limit = 20, search, sortBy = 'name', sortOrder = 'asc' } = query;
+    const safePage = Math.max(1, page);
+    const safeLimit = Math.min(100, Math.max(1, limit));
+    const skip = (safePage - 1) * safeLimit;
+
+    const where = {
+      OR: [{ organizationId: orgId }, { organizationId: null }],
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' as const } },
+              { code: { contains: search, mode: 'insensitive' as const } },
+            ],
+          }
+        : {}),
+    };
+
+    const orderBy = { [sortBy]: sortOrder } as const;
+
+    const [departments, total] = await Promise.all([
+      this.prisma.department.findMany({
+        where,
+        orderBy,
+        skip,
+        take: safeLimit,
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          organizationId: true,
+          managerId: true,
+          isActive: true,
+        },
+      }),
+      this.prisma.department.count({ where }),
+    ]);
+
+    return {
+      data: departments.map((dept) => ({
+        id: dept.id,
+        name: dept.name,
+        code: dept.code,
+        organizationId: dept.organizationId,
+        managerId: dept.managerId,
+        isActive: dept.isActive,
+        shared: dept.organizationId === null,
+      })),
+      meta: {
+        total,
+        page: safePage,
+        limit: safeLimit,
+        totalPages: Math.ceil(total / safeLimit),
+      },
+    };
   }
 
   async create(orgId: string, actorId: string, dto: CreateDepartmentDto) {
