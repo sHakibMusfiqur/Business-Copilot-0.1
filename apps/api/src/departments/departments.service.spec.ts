@@ -49,8 +49,8 @@ describe('DepartmentsService', () => {
   describe('findAll', () => {
     it('should return departments for organization including shared', async () => {
       const departments = [
-        { id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: null },
-        { id: '2', name: 'Shared Dept', code: 'SHR', organizationId: null, managerId: null },
+        { id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: null, isActive: true },
+        { id: '2', name: 'Shared Dept', code: 'SHR', organizationId: null, managerId: null, isActive: true },
       ];
       prisma.department.findMany.mockResolvedValue(departments);
 
@@ -58,7 +58,9 @@ describe('DepartmentsService', () => {
 
       expect(result).toHaveLength(2);
       expect(result[0].shared).toBe(false);
+      expect(result[0].isActive).toBe(true);
       expect(result[1].shared).toBe(true);
+      expect(result[1].isActive).toBe(true);
       expect(prisma.department.findMany).toHaveBeenCalledWith({
         where: {
           isActive: true,
@@ -76,11 +78,21 @@ describe('DepartmentsService', () => {
 
       expect(result).toEqual([]);
     });
+
+    it('should include isActive in the response', async () => {
+      prisma.department.findMany.mockResolvedValue([
+        { id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: null, isActive: true },
+      ]);
+
+      const result = await service.findAll('org-1');
+
+      expect(result[0]).toHaveProperty('isActive', true);
+    });
   });
 
   describe('create', () => {
     it('should create a department', async () => {
-      const department = { id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: null };
+      const department = { id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: null, isActive: true };
       prisma.department.create.mockResolvedValue(department);
 
       const result = await service.create('org-1', 'user-1', { name: 'Engineering', code: 'ENG' });
@@ -104,7 +116,7 @@ describe('DepartmentsService', () => {
     it('should create department with valid managerId', async () => {
       prisma.user.findFirst.mockResolvedValue({ id: 'manager-1' });
       prisma.department.create.mockResolvedValue({
-        id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: 'manager-1',
+        id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: 'manager-1', isActive: true,
       });
 
       const result = await service.create('org-1', 'user-1', {
@@ -116,7 +128,7 @@ describe('DepartmentsService', () => {
 
     it('should trim and uppercase code', async () => {
       prisma.department.create.mockResolvedValue({
-        id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: null,
+        id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: null, isActive: true,
       });
 
       await service.create('org-1', 'user-1', { name: 'Engineering', code: ' eng ' });
@@ -133,7 +145,7 @@ describe('DepartmentsService', () => {
     it('should update a department', async () => {
       prisma.department.findFirst.mockResolvedValue({ id: '1', name: 'Engineering', code: 'ENG' });
       prisma.department.update.mockResolvedValue({
-        id: '1', name: 'Engineering Updated', code: 'ENG', organizationId: 'org-1', managerId: null,
+        id: '1', name: 'Engineering Updated', code: 'ENG', organizationId: 'org-1', managerId: null, isActive: true,
       });
 
       const result = await service.update('org-1', 'user-1', '1', { name: 'Engineering Updated' });
@@ -159,6 +171,17 @@ describe('DepartmentsService', () => {
       await expect(
         service.update('org-1', 'user-1', '1', { managerId: 'bad-manager' }),
       ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should include isActive in update response', async () => {
+      prisma.department.findFirst.mockResolvedValue({ id: '1', name: 'Engineering', code: 'ENG' });
+      prisma.department.update.mockResolvedValue({
+        id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: null, isActive: false,
+      });
+
+      const result = await service.update('org-1', 'user-1', '1', { isActive: false });
+
+      expect(result).toHaveProperty('isActive', false);
     });
   });
 
@@ -230,7 +253,7 @@ describe('DepartmentsService', () => {
     it('should set managerId to null when managerId is explicitly null', async () => {
       prisma.department.findFirst.mockResolvedValue({ id: '1', name: 'Engineering', code: 'ENG' });
       prisma.department.update.mockResolvedValue({
-        id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: null,
+        id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: null, isActive: true,
       });
 
       await service.update('org-1', 'user-1', '1', { managerId: null });
@@ -245,7 +268,7 @@ describe('DepartmentsService', () => {
     it('should not change managerId when managerId is undefined', async () => {
       prisma.department.findFirst.mockResolvedValue({ id: '1', name: 'Engineering', code: 'ENG' });
       prisma.department.update.mockResolvedValue({
-        id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: 'existing',
+        id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: 'existing', isActive: true,
       });
 
       await service.update('org-1', 'user-1', '1', { name: 'Updated' });
@@ -259,7 +282,7 @@ describe('DepartmentsService', () => {
     it('should update isActive to false', async () => {
       prisma.department.findFirst.mockResolvedValue({ id: '1', name: 'Engineering', code: 'ENG' });
       prisma.department.update.mockResolvedValue({
-        id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: null,
+        id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: null, isActive: false,
       });
 
       await service.update('org-1', 'user-1', '1', { isActive: false });
@@ -274,7 +297,7 @@ describe('DepartmentsService', () => {
     it('should update isActive to true', async () => {
       prisma.department.findFirst.mockResolvedValue({ id: '1', name: 'Engineering', code: 'ENG' });
       prisma.department.update.mockResolvedValue({
-        id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: null,
+        id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-1', managerId: null, isActive: true,
       });
 
       await service.update('org-1', 'user-1', '1', { isActive: true });

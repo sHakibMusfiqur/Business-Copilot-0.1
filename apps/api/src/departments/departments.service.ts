@@ -26,6 +26,7 @@ export class DepartmentsService {
         code: true,
         organizationId: true,
         managerId: true,
+        isActive: true,
       },
     });
 
@@ -35,6 +36,7 @@ export class DepartmentsService {
       code: department.code,
       organizationId: department.organizationId,
       managerId: department.managerId,
+      isActive: department.isActive,
       shared: department.organizationId === null,
     }));
   }
@@ -63,6 +65,7 @@ export class DepartmentsService {
         code: true,
         organizationId: true,
         managerId: true,
+        isActive: true,
       },
     });
 
@@ -114,6 +117,7 @@ export class DepartmentsService {
         code: true,
         organizationId: true,
         managerId: true,
+        isActive: true,
       },
     });
 
