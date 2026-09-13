@@ -238,8 +238,8 @@ export class LeavesService {
       throw new NotFoundException('Leave request not found');
     }
 
-    if (leave.status === 'APPROVED') {
-      throw new BadRequestException('Cannot delete an approved leave request');
+    if (leave.status !== 'PENDING') {
+      throw new BadRequestException('Only pending leave requests can be deleted');
     }
 
     await this.prisma.leave.delete({ where: { id: leaveId, employee: { organizationId: orgId } } });
@@ -284,7 +284,10 @@ export class LeavesService {
 
     const updated = await this.prisma.leave.update({
       where: { id: leaveId, employee: { organizationId: orgId } },
-      data: { status: targetStatus as 'APPROVED' | 'REJECTED', approvedBy: actorId },
+      data: {
+        status: targetStatus as 'APPROVED' | 'REJECTED',
+        ...(targetStatus === 'APPROVED' ? { approvedBy: actorId } : {}),
+      },
       select: {
         id: true,
         employeeId: true,

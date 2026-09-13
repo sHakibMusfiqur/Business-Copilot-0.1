@@ -60,6 +60,10 @@ export function CreateLeaveDialog({ open, onClose, onCreated }: CreateLeaveDialo
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!employeeId || !startDate || !endDate) return;
+    if (new Date(endDate) < new Date(startDate)) {
+      toast({ title: 'Invalid dates', description: 'End date must be after start date.', variant: 'destructive' });
+      return;
+    }
     createMutation.mutate({ employeeId, startDate, endDate, type, reason: reason || undefined });
   }
 

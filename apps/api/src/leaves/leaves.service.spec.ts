@@ -177,6 +177,46 @@ describe('LeavesService', () => {
 
       await expect(service.remove(orgId, actorId, leaveId)).rejects.toThrow(BadRequestException);
     });
+
+    it('throws when trying to delete rejected leave', async () => {
+      prismaMock.leave.findFirst.mockResolvedValue({ id: leaveId, status: 'REJECTED' });
+
+      await expect(service.remove(orgId, actorId, leaveId)).rejects.toThrow(BadRequestException);
+    });
+
+    it('throws when trying to delete cancelled leave', async () => {
+      prismaMock.leave.findFirst.mockResolvedValue({ id: leaveId, status: 'CANCELLED' });
+
+      await expect(service.remove(orgId, actorId, leaveId)).rejects.toThrow(BadRequestException);
+    });
+
+    it('does not set approvedBy when rejecting', async () => {
+      prismaMock.leave.findFirst.mockResolvedValue({ id: leaveId, status: 'PENDING' });
+      prismaMock.leave.update.mockResolvedValue({ id: leaveId, status: 'REJECTED' });
+
+      await service.reject(orgId, actorId, leaveId);
+
+      expect(prismaMock.leave.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'REJECTED' }),
+        }),
+      );
+      const updateCall = prismaMock.leave.update.mock.calls[0][0];
+      expect(updateCall.data).not.toHaveProperty('approvedBy');
+    });
+
+    it('sets approvedBy when approving', async () => {
+      prismaMock.leave.findFirst.mockResolvedValue({ id: leaveId, status: 'PENDING' });
+      prismaMock.leave.update.mockResolvedValue({ id: leaveId, status: 'APPROVED' });
+
+      await service.approve(orgId, actorId, leaveId);
+
+      expect(prismaMock.leave.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: 'APPROVED', approvedBy: actorId }),
+        }),
+      );
+    });
   });
 
   describe('getStats', () => {

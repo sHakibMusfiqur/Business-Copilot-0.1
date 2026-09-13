@@ -40,10 +40,10 @@ export default function LeavesPage() {
 
   const leavesQuery = useQuery<LeavesResponse>({
     queryKey: ['leaves', { status: statusFilter, type: typeFilter }],
-    queryFn: () => getLeaves({
+    queryFn: ({ signal }) => getLeaves({
       status: statusFilter || undefined,
       type: typeFilter || undefined,
-    }),
+    }, signal),
     enabled: canRead,
   });
 
@@ -89,7 +89,7 @@ export default function LeavesPage() {
     );
   }
 
-  const leaves = (leavesQuery.data ?? []).filter((leave) => {
+  const leaves = (leavesQuery.data?.data ?? []).filter((leave) => {
     if (!search) return true;
     const q = search.toLowerCase();
     return (

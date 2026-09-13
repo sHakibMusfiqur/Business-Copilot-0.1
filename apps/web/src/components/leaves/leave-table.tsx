@@ -1,6 +1,6 @@
 'use client';
 
-import { CalendarDays, Check, X, Eye, Pencil } from 'lucide-react';
+import { CalendarDays, Check, X, Eye, Pencil, Trash2 } from 'lucide-react';
 
 import type { Leave } from '@/lib/api/leaves';
 import { getLeaveTypeLabel, getLeaveStatusStyle, getLeaveStatusLabel, getDaysCount } from './leave-types';
@@ -104,13 +104,13 @@ export function LeaveTable({ leaves, canApprove, canReject, canUpdate, canDelete
                         <X className="h-4 w-4" />
                       </button>
                     )}
-                    {canDelete && leave.status !== 'APPROVED' && (
+                    {canDelete && leave.status === 'PENDING' && (
                       <button
                         onClick={() => onDelete(leave)}
                         className="inline-flex items-center justify-center rounded-md p-1.5 text-red-600 hover:bg-red-500/10"
                         title="Delete"
                       >
-                        <X className="h-4 w-4" />
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     )}
                   </div>

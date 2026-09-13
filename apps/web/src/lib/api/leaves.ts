@@ -1,5 +1,6 @@
 import { api } from './client';
 import { API_ROUTES } from './routes';
+import type { Meta } from '@/lib/types';
 
 export interface LeaveEmployee {
   id: string;
@@ -24,7 +25,12 @@ export interface Leave {
   employee: LeaveEmployee;
 }
 
-export type LeavesResponse = Leave[];
+export type LeaveListMeta = Meta;
+
+export interface LeavesResponse {
+  data: Leave[];
+  meta: LeaveListMeta;
+}
 
 export interface LeaveStats {
   total: number;
@@ -37,18 +43,22 @@ export interface GetLeavesParams {
   employeeId?: string;
   status?: string;
   type?: string;
+  page?: number;
+  limit?: number;
 }
 
-export async function getLeaves(params?: GetLeavesParams): Promise<LeavesResponse> {
+export async function getLeaves(params?: GetLeavesParams, signal?: AbortSignal): Promise<LeavesResponse> {
   const searchParams = new URLSearchParams();
   if (params?.employeeId) searchParams.set('employeeId', params.employeeId);
   if (params?.status) searchParams.set('status', params.status);
   if (params?.type) searchParams.set('type', params.type);
+  if (params?.page) searchParams.set('page', String(params.page));
+  if (params?.limit) searchParams.set('limit', String(params.limit));
 
   const query = searchParams.toString();
   const url = query ? `${API_ROUTES.LEAVES.ROOT}?${query}` : API_ROUTES.LEAVES.ROOT;
 
-  const response = await api.get<LeavesResponse>(url);
+  const response = await api.get<LeavesResponse>(url, { signal });
   return response.data;
 }
 
