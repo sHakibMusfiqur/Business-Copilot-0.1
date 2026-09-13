@@ -444,13 +444,17 @@ describe('DepartmentsService', () => {
 
       expect(prisma.department.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({
-            OR: expect.arrayContaining([
-              expect.objectContaining({
-                name: expect.objectContaining({ contains: 'engineering', mode: 'insensitive' }),
-              }),
-            ]),
-          }),
+          where: {
+            AND: [
+              { OR: [{ organizationId: 'org-1' }, { organizationId: null }] },
+              {
+                OR: [
+                  { name: { contains: 'engineering', mode: 'insensitive' } },
+                  { code: { contains: 'engineering', mode: 'insensitive' } },
+                ],
+              },
+            ],
+          },
         }),
       );
     });
@@ -463,13 +467,17 @@ describe('DepartmentsService', () => {
 
       expect(prisma.department.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({
-            OR: expect.arrayContaining([
-              expect.objectContaining({
-                code: expect.objectContaining({ contains: 'eng', mode: 'insensitive' }),
-              }),
-            ]),
-          }),
+          where: {
+            AND: [
+              { OR: [{ organizationId: 'org-1' }, { organizationId: null }] },
+              {
+                OR: [
+                  { name: { contains: 'eng', mode: 'insensitive' } },
+                  { code: { contains: 'eng', mode: 'insensitive' } },
+                ],
+              },
+            ],
+          },
         }),
       );
     });
@@ -526,9 +534,9 @@ describe('DepartmentsService', () => {
 
       expect(prisma.department.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({
+          where: {
             OR: [{ organizationId: 'org-1' }, { organizationId: null }],
-          }),
+          },
         }),
       );
     });
@@ -597,6 +605,109 @@ describe('DepartmentsService', () => {
           where: expect.objectContaining({
             OR: [{ organizationId: 'org-1' }, { organizationId: null }],
           }),
+        }),
+      );
+    });
+  });
+
+  describe('findAllPaginated tenant isolation with search', () => {
+    beforeEach(() => {
+      prisma.department.count = jest.fn();
+    });
+
+    it('should combine tenant scope AND search using AND (not overwrite OR)', async () => {
+      prisma.department.findMany.mockResolvedValue([]);
+      prisma.department.count.mockResolvedValue(0);
+
+      await service.findAllPaginated('org-1', { search: 'eng' });
+
+      expect(prisma.department.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            AND: [
+              { OR: [{ organizationId: 'org-1' }, { organizationId: null }] },
+              {
+                OR: [
+                  { name: { contains: 'eng', mode: 'insensitive' } },
+                  { code: { contains: 'eng', mode: 'insensitive' } },
+                ],
+              },
+            ],
+          },
+        }),
+      );
+    });
+
+    it('search must never replace the organization filter', async () => {
+      prisma.department.findMany.mockResolvedValue([]);
+      prisma.department.count.mockResolvedValue(0);
+
+      await service.findAllPaginated('org-1', { search: 'test' });
+
+      const whereArg = prisma.department.findMany.mock.calls[0][0].where;
+      expect(whereArg).toHaveProperty('AND');
+      expect(whereArg.AND).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            OR: expect.arrayContaining([
+              expect.objectContaining({ organizationId: 'org-1' }),
+            ]),
+          }),
+        ]),
+      );
+    });
+
+    it('search matching a department from another organization must not return it', async () => {
+      prisma.department.findMany.mockResolvedValue([]);
+      prisma.department.count.mockResolvedValue(0);
+
+      await service.findAllPaginated('org-1', { search: 'Engineering' });
+
+      const whereArg = prisma.department.findMany.mock.calls[0][0].where;
+      expect(whereArg.AND).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            OR: [
+              { organizationId: 'org-1' },
+              { organizationId: null },
+            ],
+          }),
+        ]),
+      );
+      expect(whereArg.AND).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            OR: expect.arrayContaining([
+              expect.objectContaining({ name: expect.objectContaining({ contains: 'Engineering' }) }),
+            ]),
+          }),
+        ]),
+      );
+    });
+
+    it('search matching a shared department may return the shared department', async () => {
+      const sharedDept = { id: '2', name: 'Shared HR', code: 'SHR', organizationId: null, managerId: null, isActive: true };
+      prisma.department.findMany.mockResolvedValue([sharedDept]);
+      prisma.department.count.mockResolvedValue(1);
+
+      const result = await service.findAllPaginated('org-1', { search: 'Shared' });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].shared).toBe(true);
+      expect(result.data[0].organizationId).toBeNull();
+    });
+
+    it('without search, should use plain tenant scope (no AND)', async () => {
+      prisma.department.findMany.mockResolvedValue([]);
+      prisma.department.count.mockResolvedValue(0);
+
+      await service.findAllPaginated('org-1', {});
+
+      expect(prisma.department.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            OR: [{ organizationId: 'org-1' }, { organizationId: null }],
+          },
         }),
       );
     });

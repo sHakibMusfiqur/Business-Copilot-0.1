@@ -48,17 +48,21 @@ export class DepartmentsService {
     const safeLimit = Math.min(100, Math.max(1, limit));
     const skip = (safePage - 1) * safeLimit;
 
-    const where = {
-      OR: [{ organizationId: orgId }, { organizationId: null }],
-      ...(search
-        ? {
-            OR: [
-              { name: { contains: search, mode: 'insensitive' as const } },
-              { code: { contains: search, mode: 'insensitive' as const } },
-            ],
-          }
-        : {}),
-    };
+    const tenantScope = { OR: [{ organizationId: orgId }, { organizationId: null }] };
+
+    const where = search
+      ? {
+          AND: [
+            tenantScope,
+            {
+              OR: [
+                { name: { contains: search, mode: 'insensitive' as const } },
+                { code: { contains: search, mode: 'insensitive' as const } },
+              ],
+            },
+          ],
+        }
+      : tenantScope;
 
     const orderBy = { [sortBy]: sortOrder } as const;
 
