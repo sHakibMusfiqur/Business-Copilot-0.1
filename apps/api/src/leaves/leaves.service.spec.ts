@@ -432,15 +432,62 @@ describe('LeavesService', () => {
   });
 
   describe('getStats', () => {
-    it('returns leave statistics', async () => {
+    it('returns leave statistics including cancelled', async () => {
       prismaMock.leave.count
         .mockResolvedValueOnce(10)
         .mockResolvedValueOnce(3)
         .mockResolvedValueOnce(5)
+        .mockResolvedValueOnce(2)
+        .mockResolvedValueOnce(1);
+
+      const result = await service.getStats(orgId);
+      expect(result).toEqual({ total: 10, pending: 3, approved: 5, rejected: 2, cancelled: 1 });
+    });
+
+    it('returns zero cancelled when none exist', async () => {
+      prismaMock.leave.count
+        .mockResolvedValueOnce(8)
+        .mockResolvedValueOnce(4)
+        .mockResolvedValueOnce(3)
+        .mockResolvedValueOnce(1)
+        .mockResolvedValueOnce(0);
+
+      const result = await service.getStats(orgId);
+      expect(result.cancelled).toBe(0);
+    });
+
+    it('scopes cancelled count to organization', async () => {
+      prismaMock.leave.count
+        .mockResolvedValueOnce(5)
+        .mockResolvedValueOnce(2)
+        .mockResolvedValueOnce(2)
+        .mockResolvedValueOnce(1)
+        .mockResolvedValueOnce(1);
+
+      await service.getStats(orgId);
+
+      const countCalls = prismaMock.leave.count.mock.calls;
+      for (const call of countCalls) {
+        expect(call[0].where).toEqual(
+          expect.objectContaining({ employee: { organizationId: orgId } }),
+        );
+      }
+    });
+
+    it('returns independent counts for mixed statuses', async () => {
+      prismaMock.leave.count
+        .mockResolvedValueOnce(20)
+        .mockResolvedValueOnce(8)
+        .mockResolvedValueOnce(6)
+        .mockResolvedValueOnce(4)
         .mockResolvedValueOnce(2);
 
       const result = await service.getStats(orgId);
-      expect(result).toEqual({ total: 10, pending: 3, approved: 5, rejected: 2 });
+      expect(result.total).toBe(20);
+      expect(result.pending).toBe(8);
+      expect(result.approved).toBe(6);
+      expect(result.rejected).toBe(4);
+      expect(result.cancelled).toBe(2);
     });
   });
 });

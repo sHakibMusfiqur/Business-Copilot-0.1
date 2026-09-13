@@ -341,13 +341,14 @@ export class LeavesService {
   }
 
   async getStats(orgId: string) {
-    const [total, pending, approved, rejected] = await Promise.all([
+    const [total, pending, approved, rejected, cancelled] = await Promise.all([
       this.prisma.leave.count({ where: { employee: { organizationId: orgId } } }),
       this.prisma.leave.count({ where: { employee: { organizationId: orgId }, status: 'PENDING' } }),
       this.prisma.leave.count({ where: { employee: { organizationId: orgId }, status: 'APPROVED' } }),
       this.prisma.leave.count({ where: { employee: { organizationId: orgId }, status: 'REJECTED' } }),
+      this.prisma.leave.count({ where: { employee: { organizationId: orgId }, status: 'CANCELLED' } }),
     ]);
 
-    return { total, pending, approved, rejected };
+    return { total, pending, approved, rejected, cancelled };
   }
 }
