@@ -59,22 +59,44 @@ export interface PayrollResponse {
   meta: PayrollListMeta;
 }
 
+export type PayrollSortField =
+  | 'periodStart'
+  | 'periodEnd'
+  | 'basicSalary'
+  | 'allowances'
+  | 'deductions'
+  | 'tax'
+  | 'netSalary'
+  | 'paymentDate'
+  | 'createdAt'
+  | 'updatedAt';
+
 export interface GetPayrollParams {
+  search?: string;
   employeeId?: string;
   periodStart?: string;
   periodEnd?: string;
+  page?: number;
+  limit?: number;
+  sortBy?: PayrollSortField;
+  sortOrder?: 'asc' | 'desc';
 }
 
-export async function getPayroll(params?: GetPayrollParams): Promise<PayrollResponse> {
+export async function getPayroll(params?: GetPayrollParams, signal?: AbortSignal): Promise<PayrollResponse> {
   const searchParams = new URLSearchParams();
+  if (params?.search) searchParams.set('search', params.search);
   if (params?.employeeId) searchParams.set('employeeId', params.employeeId);
   if (params?.periodStart) searchParams.set('periodStart', params.periodStart);
   if (params?.periodEnd) searchParams.set('periodEnd', params.periodEnd);
+  if (params?.page) searchParams.set('page', String(params.page));
+  if (params?.limit) searchParams.set('limit', String(params.limit));
+  if (params?.sortBy) searchParams.set('sortBy', params.sortBy);
+  if (params?.sortOrder) searchParams.set('sortOrder', params.sortOrder);
 
   const query = searchParams.toString();
   const url = query ? `${API_ROUTES.PAYROLL.ROOT}?${query}` : API_ROUTES.PAYROLL.ROOT;
 
-  const response = await api.get<PayrollResponse>(url);
+  const response = await api.get<PayrollResponse>(url, { signal });
   return response.data;
 }
 

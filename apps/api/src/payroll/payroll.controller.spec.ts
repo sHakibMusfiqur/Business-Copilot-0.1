@@ -30,25 +30,31 @@ describe('PayrollController', () => {
   });
 
   describe('findAll', () => {
-    it('should call service.findAll with orgId and default query', async () => {
+    it('should call service.findAll with orgId and empty query', async () => {
       const { controller, service } = buildController();
-      await controller.findAll(makeUser());
-      expect(service.findAll).toHaveBeenCalledWith('org-1', {
-        employeeId: undefined,
-        periodStart: undefined,
-        periodEnd: undefined,
-        page: undefined,
-        limit: undefined,
-      });
+      await controller.findAll(makeUser(), {} as never);
+      expect(service.findAll).toHaveBeenCalledWith('org-1', {});
     });
 
-    it('should call service.findAll with filters and pagination', async () => {
+    it('should call service.findAll with query params', async () => {
       const { controller, service } = buildController();
-      await controller.findAll(makeUser(), 'emp-1', '2026-01-01', '2026-01-31', '2', '10');
-      expect(service.findAll).toHaveBeenCalledWith('org-1', {
+      await controller.findAll(makeUser(), {
+        search: 'john',
         employeeId: 'emp-1',
         periodStart: '2026-01-01',
         periodEnd: '2026-01-31',
+        sortBy: 'basicSalary',
+        sortOrder: 'asc',
+        page: 2,
+        limit: 10,
+      } as never);
+      expect(service.findAll).toHaveBeenCalledWith('org-1', {
+        search: 'john',
+        employeeId: 'emp-1',
+        periodStart: '2026-01-01',
+        periodEnd: '2026-01-31',
+        sortBy: 'basicSalary',
+        sortOrder: 'asc',
         page: 2,
         limit: 10,
       });
@@ -56,12 +62,12 @@ describe('PayrollController', () => {
 
     it('should throw ForbiddenException when user has no organization', async () => {
       const { controller } = buildController();
-      await expect(controller.findAll(makeUser({ organizationId: undefined }))).rejects.toThrow(ForbiddenException);
+      await expect(controller.findAll(makeUser({ organizationId: undefined }), {} as never)).rejects.toThrow(ForbiddenException);
     });
 
     it('should not accept organizationId from request', async () => {
       const { controller, service } = buildController();
-      await controller.findAll(makeUser());
+      await controller.findAll(makeUser(), {} as never);
       const callArgs = (service.findAll as jest.Mock).mock.calls[0];
       expect(callArgs[0]).toBe('org-1');
     });

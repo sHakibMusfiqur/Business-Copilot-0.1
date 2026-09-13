@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 
 import type { CreatePayrollDto, UpdatePayrollDto } from './dto/create-payroll.dto';
+import type { QueryPayrollDto } from './dto/query-payroll.dto';
 
 @Injectable()
 export class PayrollService {
@@ -12,31 +13,42 @@ export class PayrollService {
     private readonly auditService: AuditService,
   ) {}
 
-  async findAll(orgId: string, query?: { employeeId?: string; periodStart?: string; periodEnd?: string; page?: number; limit?: number }) {
-    const page = Math.max(1, query?.page ?? 1);
-    const limit = Math.min(100, Math.max(1, query?.limit ?? 50));
+  async findAll(orgId: string, query: QueryPayrollDto = {}) {
+    const page = Math.max(1, query.page ?? 1);
+    const limit = Math.min(100, Math.max(1, query.limit ?? 20));
     const skip = (page - 1) * limit;
 
     const where: Record<string, unknown> = {
       employee: { organizationId: orgId },
     };
 
-    if (query?.employeeId) {
+    if (query.employeeId) {
       where.employeeId = query.employeeId;
     }
 
-    if (query?.periodStart) {
+    if (query.periodStart) {
       where.periodStart = { gte: new Date(query.periodStart) };
     }
 
-    if (query?.periodEnd) {
+    if (query.periodEnd) {
       where.periodEnd = { lte: new Date(query.periodEnd) };
     }
+
+    if (query.search) {
+      where.OR = [
+        { employee: { firstName: { contains: query.search, mode: 'insensitive' } } },
+        { employee: { lastName: { contains: query.search, mode: 'insensitive' } } },
+        { employee: { employeeCode: { contains: query.search, mode: 'insensitive' } } },
+        { employee: { email: { contains: query.search, mode: 'insensitive' } } },
+      ];
+    }
+
+    const orderBy = { [query.sortBy ?? 'periodEnd']: query.sortOrder ?? 'desc' };
 
     const [data, total] = await Promise.all([
       this.prisma.payroll.findMany({
         where,
-        orderBy: { periodEnd: 'desc' },
+        orderBy,
         skip,
         take: limit,
         select: {
