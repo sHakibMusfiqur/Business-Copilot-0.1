@@ -182,6 +182,8 @@ export default function LeavesPage() {
         onClose={() => setCancelTarget(null)}
         onDeleted={invalidate}
         deleteFn={() => cancelTarget ? cancelLeave(cancelTarget.id) : Promise.resolve()}
+        actionVerb="cancel"
+        pendingLabel="Cancelling..."
       />
 
       <ConfirmDeleteDialog
@@ -196,6 +198,8 @@ export default function LeavesPage() {
         onDeleted={invalidate}
         deleteFn={() => approveTarget ? approveLeave(approveTarget.id) : Promise.resolve()}
         buttonVariant="default"
+        actionVerb="approve"
+        pendingLabel="Approving..."
       />
 
       <ConfirmDeleteDialog
@@ -209,6 +213,8 @@ export default function LeavesPage() {
         onClose={() => setRejectTarget(null)}
         onDeleted={invalidate}
         deleteFn={() => rejectTarget ? rejectLeave(rejectTarget.id) : Promise.resolve()}
+        actionVerb="reject"
+        pendingLabel="Rejecting..."
       />
     </div>
   );

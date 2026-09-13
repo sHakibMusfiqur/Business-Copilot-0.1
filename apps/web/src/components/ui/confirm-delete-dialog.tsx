@@ -19,6 +19,8 @@ interface ConfirmDeleteDialogProps {
   onDeleted: () => void;
   deleteFn: () => Promise<unknown>;
   buttonVariant?: 'destructive' | 'default';
+  actionVerb?: string;
+  pendingLabel?: string;
 }
 
 export function ConfirmDeleteDialog({
@@ -33,6 +35,8 @@ export function ConfirmDeleteDialog({
   onDeleted,
   deleteFn,
   buttonVariant = 'destructive',
+  actionVerb = 'delete',
+  pendingLabel = 'Deleting...',
 }: ConfirmDeleteDialogProps) {
   const { toast } = useToast();
 
@@ -85,7 +89,7 @@ export function ConfirmDeleteDialog({
           </div>
           <div>
             <p className="text-sm font-medium mb-1">
-              Are you sure you want to delete {entityName}?
+              Are you sure you want to {actionVerb} {entityName}?
             </p>
             <p className="text-sm text-muted-foreground">{description}</p>
           </div>
@@ -103,7 +107,7 @@ export function ConfirmDeleteDialog({
             {deleteMutation.isPending ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Deleting...
+                {pendingLabel}
               </>
             ) : (
               buttonLabel
