@@ -95,28 +95,88 @@ describe('PayrollService', () => {
       prisma.payroll.findMany.mockResolvedValue([]);
       prisma.payroll.count.mockResolvedValue(0);
       await service.findAll('org-1', { employeeId: 'emp-1' });
-      expect(prisma.payroll.findMany).toHaveBeenCalled();
+      const callArgs = prisma.payroll.findMany.mock.calls[0][0];
+      expect(callArgs.where.AND).toBeDefined();
+      expect(callArgs.where.AND).toContainEqual({ employeeId: 'emp-1' });
     });
 
-    it('should filter by period dates', async () => {
+    it('should filter by periodStart', async () => {
+      prisma.payroll.findMany.mockResolvedValue([]);
+      prisma.payroll.count.mockResolvedValue(0);
+      await service.findAll('org-1', { periodStart: '2026-01-01' });
+      const callArgs = prisma.payroll.findMany.mock.calls[0][0];
+      expect(callArgs.where.AND).toContainEqual({ periodStart: { gte: new Date('2026-01-01') } });
+    });
+
+    it('should filter by periodEnd', async () => {
+      prisma.payroll.findMany.mockResolvedValue([]);
+      prisma.payroll.count.mockResolvedValue(0);
+      await service.findAll('org-1', { periodEnd: '2026-01-31' });
+      const callArgs = prisma.payroll.findMany.mock.calls[0][0];
+      expect(callArgs.where.AND).toContainEqual({ periodEnd: { lte: new Date('2026-01-31') } });
+    });
+
+    it('should filter by both period dates', async () => {
       prisma.payroll.findMany.mockResolvedValue([]);
       prisma.payroll.count.mockResolvedValue(0);
       await service.findAll('org-1', { periodStart: '2026-01-01', periodEnd: '2026-01-31' });
-      expect(prisma.payroll.findMany).toHaveBeenCalled();
+      const callArgs = prisma.payroll.findMany.mock.calls[0][0];
+      expect(callArgs.where.AND).toContainEqual({ periodStart: { gte: new Date('2026-01-01') } });
+      expect(callArgs.where.AND).toContainEqual({ periodEnd: { lte: new Date('2026-01-31') } });
     });
 
-    it('should search across employee fields with OR', async () => {
+    it('should always include tenant scope in AND structure', async () => {
+      prisma.payroll.findMany.mockResolvedValue([]);
+      prisma.payroll.count.mockResolvedValue(0);
+      await service.findAll('org-1', { search: 'john' });
+      const callArgs = prisma.payroll.findMany.mock.calls[0][0];
+      expect(callArgs.where.AND).toContainEqual({ employee: { organizationId: 'org-1' } });
+    });
+
+    it('should search across employee fields with OR inside AND', async () => {
       prisma.payroll.findMany.mockResolvedValue([]);
       prisma.payroll.count.mockResolvedValue(0);
 
       await service.findAll('org-1', { search: 'john' });
 
       const callArgs = prisma.payroll.findMany.mock.calls[0][0];
-      expect(callArgs.where.OR).toBeDefined();
-      expect(callArgs.where.OR).toHaveLength(4);
-      expect(callArgs.where.OR[0]).toEqual({
+      const searchCondition = callArgs.where.AND.find(
+        (c: Record<string, unknown>) => Array.isArray(c.OR),
+      );
+      expect(searchCondition).toBeDefined();
+      expect(searchCondition.OR).toHaveLength(4);
+      expect(searchCondition.OR[0]).toEqual({
         employee: { firstName: { contains: 'john', mode: 'insensitive' } },
       });
+    });
+
+    it('should combine search, period filters, and employeeId in AND', async () => {
+      prisma.payroll.findMany.mockResolvedValue([]);
+      prisma.payroll.count.mockResolvedValue(0);
+
+      await service.findAll('org-1', {
+        search: 'doe',
+        employeeId: 'emp-1',
+        periodStart: '2026-01-01',
+        periodEnd: '2026-06-30',
+        sortBy: 'netSalary',
+        sortOrder: 'asc',
+        page: 2,
+        limit: 10,
+      });
+
+      const callArgs = prisma.payroll.findMany.mock.calls[0][0];
+      expect(callArgs.where.AND).toContainEqual({ employee: { organizationId: 'org-1' } });
+      expect(callArgs.where.AND).toContainEqual({ employeeId: 'emp-1' });
+      expect(callArgs.where.AND).toContainEqual({ periodStart: { gte: new Date('2026-01-01') } });
+      expect(callArgs.where.AND).toContainEqual({ periodEnd: { lte: new Date('2026-06-30') } });
+      const searchCondition = callArgs.where.AND.find(
+        (c: Record<string, unknown>) => Array.isArray(c.OR),
+      );
+      expect(searchCondition).toBeDefined();
+      expect(callArgs.orderBy).toEqual({ netSalary: 'asc' });
+      expect(callArgs.skip).toBe(10);
+      expect(callArgs.take).toBe(10);
     });
 
     it('should use configurable sortBy and sortOrder', async () => {
@@ -129,6 +189,26 @@ describe('PayrollService', () => {
       expect(callArgs.orderBy).toEqual({ basicSalary: 'asc' });
     });
 
+    it('should sort by paymentDate asc', async () => {
+      prisma.payroll.findMany.mockResolvedValue([]);
+      prisma.payroll.count.mockResolvedValue(0);
+
+      await service.findAll('org-1', { sortBy: 'paymentDate', sortOrder: 'asc' });
+
+      const callArgs = prisma.payroll.findMany.mock.calls[0][0];
+      expect(callArgs.orderBy).toEqual({ paymentDate: 'asc' });
+    });
+
+    it('should sort by paymentDate desc', async () => {
+      prisma.payroll.findMany.mockResolvedValue([]);
+      prisma.payroll.count.mockResolvedValue(0);
+
+      await service.findAll('org-1', { sortBy: 'paymentDate', sortOrder: 'desc' });
+
+      const callArgs = prisma.payroll.findMany.mock.calls[0][0];
+      expect(callArgs.orderBy).toEqual({ paymentDate: 'desc' });
+    });
+
     it('should default orderBy to periodEnd desc', async () => {
       prisma.payroll.findMany.mockResolvedValue([]);
       prisma.payroll.count.mockResolvedValue(0);
@@ -137,29 +217,6 @@ describe('PayrollService', () => {
 
       const callArgs = prisma.payroll.findMany.mock.calls[0][0];
       expect(callArgs.orderBy).toEqual({ periodEnd: 'desc' });
-    });
-
-    it('should combine search with filters', async () => {
-      prisma.payroll.findMany.mockResolvedValue([]);
-      prisma.payroll.count.mockResolvedValue(0);
-
-      await service.findAll('org-1', {
-        search: 'doe',
-        employeeId: 'emp-1',
-        periodStart: '2026-01-01',
-        sortBy: 'netSalary',
-        sortOrder: 'asc',
-        page: 2,
-        limit: 10,
-      });
-
-      const callArgs = prisma.payroll.findMany.mock.calls[0][0];
-      expect(callArgs.where.employeeId).toBe('emp-1');
-      expect(callArgs.where.periodStart).toEqual({ gte: new Date('2026-01-01') });
-      expect(callArgs.where.OR).toBeDefined();
-      expect(callArgs.orderBy).toEqual({ netSalary: 'asc' });
-      expect(callArgs.skip).toBe(10);
-      expect(callArgs.take).toBe(10);
     });
 
     it('should default limit to 20', async () => {

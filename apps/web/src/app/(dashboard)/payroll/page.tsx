@@ -56,6 +56,8 @@ export default function PayrollPage() {
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [employeeFilter, setEmployeeFilter] = useState('');
+  const [periodStart, setPeriodStart] = useState('');
+  const [periodEnd, setPeriodEnd] = useState('');
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState<PayrollSortField>('periodEnd');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -80,7 +82,7 @@ export default function PayrollPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [employeeFilter]);
+  }, [employeeFilter, periodStart, periodEnd]);
 
   const employeesQuery = useEmpQuery<EmployeeListResponse>({
     queryKey: ['employees', { isActive: true }],
@@ -89,10 +91,12 @@ export default function PayrollPage() {
   });
 
   const payrollQuery = useQuery<PayrollResponse>({
-    queryKey: ['payroll', { search, employeeId: employeeFilter || undefined, page, limit: 20, sortBy, sortOrder }],
+    queryKey: ['payroll', { search, employeeId: employeeFilter || undefined, periodStart: periodStart || undefined, periodEnd: periodEnd || undefined, page, limit: 20, sortBy, sortOrder }],
     queryFn: ({ signal }) => getPayroll({
       search: search || undefined,
       employeeId: employeeFilter || undefined,
+      periodStart: periodStart || undefined,
+      periodEnd: periodEnd || undefined,
       page,
       limit: 20,
       sortBy,
@@ -206,6 +210,20 @@ export default function PayrollPage() {
               className="pl-9"
             />
           </div>
+          <input
+            type="date"
+            value={periodStart}
+            onChange={(e) => setPeriodStart(e.target.value)}
+            placeholder="Period Start"
+            className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+          />
+          <input
+            type="date"
+            value={periodEnd}
+            onChange={(e) => setPeriodEnd(e.target.value)}
+            placeholder="Period End"
+            className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+          />
           <select
             value={employeeFilter}
             onChange={(e) => setEmployeeFilter(e.target.value)}
@@ -236,7 +254,7 @@ export default function PayrollPage() {
             <Wallet className="h-12 w-12 text-muted-foreground/50" />
             <p className="mt-4 text-sm font-medium text-muted-foreground">No payroll records found</p>
             <p className="mt-1 text-xs text-muted-foreground/70">
-              {search || employeeFilter ? 'Try adjusting your filters.' : canCreate ? 'Create your first payroll record to get started.' : 'Payroll records will appear here once created.'}
+              {search || employeeFilter || periodStart || periodEnd ? 'Try adjusting your filters.' : canCreate ? 'Create your first payroll record to get started.' : 'Payroll records will appear here once created.'}
             </p>
           </div>
         ) : (
@@ -283,7 +301,12 @@ export default function PayrollPage() {
                           <SortIcon field="netSalary" sortBy={sortBy} sortOrder={sortOrder} />
                         </span>
                       </th>
-                      <th className="px-4 py-3 text-left font-medium text-muted-foreground">Payment Date</th>
+                      <th className="px-4 py-3 text-left font-medium text-muted-foreground">
+                        <span className="inline-flex items-center cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleSort('paymentDate')}>
+                          Payment Date
+                          <SortIcon field="paymentDate" sortBy={sortBy} sortOrder={sortOrder} />
+                        </span>
+                      </th>
                       <th className="px-4 py-3 text-right font-medium text-muted-foreground">Actions</th>
                     </tr>
                   </thead>

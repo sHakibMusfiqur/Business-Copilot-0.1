@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsOptional, IsInt, Min, Max, IsString, IsIn } from 'class-validator';
+import { IsOptional, IsInt, Min, Max, IsString, IsIn, IsDateString } from 'class-validator';
 
 const allowedSortFields = [
   'periodStart',
@@ -44,12 +44,12 @@ export class QueryPayrollDto {
 
   @ApiPropertyOptional({ description: 'Filter from period start (ISO 8601)' })
   @IsOptional()
-  @IsString()
+  @IsDateString()
   periodStart?: string;
 
   @ApiPropertyOptional({ description: 'Filter to period end (ISO 8601)' })
   @IsOptional()
-  @IsString()
+  @IsDateString()
   periodEnd?: string;
 
   @ApiPropertyOptional({ enum: allowedSortFields, default: 'periodEnd' })

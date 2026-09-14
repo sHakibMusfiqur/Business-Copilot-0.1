@@ -18,30 +18,34 @@ export class PayrollService {
     const limit = Math.min(100, Math.max(1, query.limit ?? 20));
     const skip = (page - 1) * limit;
 
-    const where: Record<string, unknown> = {
-      employee: { organizationId: orgId },
-    };
+    const andConditions: Record<string, unknown>[] = [
+      { employee: { organizationId: orgId } },
+    ];
 
     if (query.employeeId) {
-      where.employeeId = query.employeeId;
+      andConditions.push({ employeeId: query.employeeId });
     }
 
     if (query.periodStart) {
-      where.periodStart = { gte: new Date(query.periodStart) };
+      andConditions.push({ periodStart: { gte: new Date(query.periodStart) } });
     }
 
     if (query.periodEnd) {
-      where.periodEnd = { lte: new Date(query.periodEnd) };
+      andConditions.push({ periodEnd: { lte: new Date(query.periodEnd) } });
     }
 
     if (query.search) {
-      where.OR = [
-        { employee: { firstName: { contains: query.search, mode: 'insensitive' } } },
-        { employee: { lastName: { contains: query.search, mode: 'insensitive' } } },
-        { employee: { employeeCode: { contains: query.search, mode: 'insensitive' } } },
-        { employee: { email: { contains: query.search, mode: 'insensitive' } } },
-      ];
+      andConditions.push({
+        OR: [
+          { employee: { firstName: { contains: query.search, mode: 'insensitive' } } },
+          { employee: { lastName: { contains: query.search, mode: 'insensitive' } } },
+          { employee: { employeeCode: { contains: query.search, mode: 'insensitive' } } },
+          { employee: { email: { contains: query.search, mode: 'insensitive' } } },
+        ],
+      });
     }
+
+    const where = { AND: andConditions };
 
     const orderBy = { [query.sortBy ?? 'periodEnd']: query.sortOrder ?? 'desc' };
 
