@@ -81,7 +81,7 @@ async function seedBase() {
   await prisma.user.create({
     data: {
       id: USER_A,
-      email: 'integ-a@test.com',
+      email: `integ-a-${SUFFIX}@test.com`,
       name: 'Test User A',
       role: 'ADMIN',
       password: 'hashed',
@@ -91,7 +91,7 @@ async function seedBase() {
   await prisma.user.create({
     data: {
       id: USER_B,
-      email: 'integ-b@test.com',
+      email: `integ-b-${SUFFIX}@test.com`,
       name: 'Test User B',
       role: 'ADMIN',
       password: 'hashed',
@@ -99,11 +99,11 @@ async function seedBase() {
   });
 
   await prisma.organization.create({
-    data: { id: ORG_A, name: 'Org A', slug: 'org-a-integ' },
+    data: { id: ORG_A, name: `Org A ${SUFFIX}`, slug: `org-a-integ-${SUFFIX}` },
   });
 
   await prisma.organization.create({
-    data: { id: ORG_B, name: 'Org B', slug: 'org-b-integ' },
+    data: { id: ORG_B, name: `Org B ${SUFFIX}`, slug: `org-b-integ-${SUFFIX}` },
   });
 
   await prisma.customer.create({
@@ -484,7 +484,7 @@ describe('Invoice Concurrency Integration — Real Service', () => {
       await prisma.user.create({
         data: { id: stressUser, email: `stress-${Date.now()}@test.com`, name: 'Stress User', role: 'ADMIN', password: 'hashed' },
       });
-      await prisma.organization.create({ data: { id: stressOrg, name: `Stress Org`, slug: `stress-${Date.now()}` } });
+      await prisma.organization.create({ data: { id: stressOrg, name: `Stress Org ${SUFFIX}`, slug: `stress-${Date.now()}` } });
       await prisma.customer.create({ data: { id: stressCustomer, organizationId: stressOrg, name: 'Stress Customer' } });
       await prisma.product.create({ data: { id: stressProduct, organizationId: stressOrg, name: 'Stress Product', sku: `SKU-STRESS-${Date.now()}` } });
 
@@ -556,8 +556,8 @@ describe('Invoice Concurrency Integration — Real Service', () => {
 
       await prisma.user.create({ data: { id: stressUserX, email: `stress-x-${Date.now()}@test.com`, name: 'Stress X', role: 'ADMIN', password: 'hashed' } });
       await prisma.user.create({ data: { id: stressUserY, email: `stress-y-${Date.now()}@test.com`, name: 'Stress Y', role: 'ADMIN', password: 'hashed' } });
-      await prisma.organization.create({ data: { id: stressOrgX, name: 'Stress X', slug: `stress-x-${Date.now()}` } });
-      await prisma.organization.create({ data: { id: stressOrgY, name: 'Stress Y', slug: `stress-y-${Date.now()}` } });
+      await prisma.organization.create({ data: { id: stressOrgX, name: `Stress X ${SUFFIX}`, slug: `stress-x-${Date.now()}` } });
+      await prisma.organization.create({ data: { id: stressOrgY, name: `Stress Y ${SUFFIX}`, slug: `stress-y-${Date.now()}` } });
       await prisma.customer.create({ data: { id: stressCustomerX, organizationId: stressOrgX, name: 'Cust X' } });
       await prisma.customer.create({ data: { id: stressCustomerY, organizationId: stressOrgY, name: 'Cust Y' } });
       await prisma.product.create({ data: { id: stressProductX, organizationId: stressOrgX, name: 'Prod X', sku: `SKU-SX-${Date.now()}` } });
