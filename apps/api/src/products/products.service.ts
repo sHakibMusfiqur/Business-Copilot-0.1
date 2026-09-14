@@ -166,7 +166,15 @@ export class ProductsService {
       ...(dto.supplierId !== undefined && { supplier: { connect: { id: dto.supplierId } } }),
     };
 
-    const product = await this.prisma.product.create({ data });
+    let product;
+    try {
+      product = await this.prisma.product.create({ data });
+    } catch (err) {
+      if ((err as Prisma.PrismaClientKnownRequestError)?.code === 'P2002') {
+        throw new BadRequestException('A product with this SKU already exists in this organization');
+      }
+      throw err;
+    }
 
     this.logger.log(`Product created: ${product.name} (${product.id}) by ${currentUserId}`);
     return product;
@@ -216,17 +224,28 @@ export class ProductsService {
         : { disconnect: true };
     }
 
-    const updated = await this.prisma.product.update({
-      where: { id: productId, organizationId: orgId },
-      data: updateData,
-      select: {
-        id: true,
-        name: true,
-        sku: true,
-        isActive: true,
-        updatedAt: true,
-      },
-    });
+    let updated;
+    try {
+      updated = await this.prisma.product.update({
+        where: { id: productId, organizationId: orgId },
+        data: updateData,
+        select: {
+          id: true,
+          name: true,
+          sku: true,
+          isActive: true,
+          updatedAt: true,
+        },
+      });
+    } catch (err) {
+      if ((err as Prisma.PrismaClientKnownRequestError)?.code === 'P2002') {
+        throw new BadRequestException('A product with this SKU already exists in this organization');
+      }
+      if ((err as Prisma.PrismaClientKnownRequestError)?.code === 'P2025') {
+        throw new NotFoundException('Product not found');
+      }
+      throw err;
+    }
 
     this.logger.log(`Product updated: ${updated.name} (${productId}) by ${currentUserId}`);
     return updated;
@@ -258,43 +277,43 @@ export class ProductsService {
   }
 
   async softDelete(orgId: string, currentUserId: string, productId: string) {
-    const product = await this.prisma.product.findFirst({
-      where: { id: productId, organizationId: orgId, deletedAt: null },
-    });
-
-    if (!product) {
-      throw new NotFoundException('Product not found');
+    let product;
+    try {
+      product = await this.prisma.product.update({
+        where: { id: productId, organizationId: orgId, deletedAt: null },
+        data: { deletedAt: new Date(), isActive: false },
+      });
+    } catch (err) {
+      if ((err as Prisma.PrismaClientKnownRequestError)?.code === 'P2025') {
+        throw new NotFoundException('Product not found');
+      }
+      throw err;
     }
-
-    await this.prisma.product.update({
-      where: { id: productId, organizationId: orgId },
-      data: { deletedAt: new Date(), isActive: false },
-    });
 
     this.logger.log(`Product soft-deleted: ${product.name} (${productId}) by ${currentUserId}`);
     return { message: 'Product deleted successfully' };
   }
 
   async updateStatus(orgId: string, currentUserId: string, productId: string, dto: UpdateProductStatusDto) {
-    const product = await this.prisma.product.findFirst({
-      where: { id: productId, organizationId: orgId, deletedAt: null },
-    });
-
-    if (!product) {
-      throw new NotFoundException('Product not found');
+    let updated;
+    try {
+      updated = await this.prisma.product.update({
+        where: { id: productId, organizationId: orgId },
+        data: { isActive: dto.isActive },
+        select: {
+          id: true,
+          name: true,
+          sku: true,
+          isActive: true,
+          updatedAt: true,
+        },
+      });
+    } catch (err) {
+      if ((err as Prisma.PrismaClientKnownRequestError)?.code === 'P2025') {
+        throw new NotFoundException('Product not found');
+      }
+      throw err;
     }
-
-    const updated = await this.prisma.product.update({
-      where: { id: productId },
-      data: { isActive: dto.isActive },
-      select: {
-        id: true,
-        name: true,
-        sku: true,
-        isActive: true,
-        updatedAt: true,
-      },
-    });
 
     this.logger.log(`Product ${dto.isActive ? 'activated' : 'deactivated'}: ${updated.name} (${productId}) by ${currentUserId}`);
     return updated;
