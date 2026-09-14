@@ -5,7 +5,6 @@ import { ProductsService } from './products.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const ORG_ID = 'org-1';
-const OTHER_ORG = 'org-2';
 
 const p2025 = () =>
   new Prisma.PrismaClientKnownRequestError('Record not found', {
