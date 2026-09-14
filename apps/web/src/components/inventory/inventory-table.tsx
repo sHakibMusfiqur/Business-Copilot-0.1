@@ -270,23 +270,30 @@ export function InventoryTable({
                         </span>
                       </td>
                       <td className="p-4">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreHorizontal className="h-4 w-4" />
+                        <div className="flex items-center gap-1">
+                          {onAdjust && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 text-xs"
+                              onClick={() => onAdjust(product)}
+                            >
+                              Adjust
                             </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-44">
-                            {onAdjust && (
-                              <DropdownMenuItem onClick={() => onAdjust(product)}>
-                                Adjust stock
+                          )}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-44">
+                              <DropdownMenuItem onClick={() => onHistory(product)}>
+                                View history
                               </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem onClick={() => onHistory(product)}>
-                              View history
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </td>
                     </tr>
                   ))}

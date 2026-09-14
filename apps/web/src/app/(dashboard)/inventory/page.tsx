@@ -2,19 +2,21 @@
 
 import { useState, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Warehouse, AlertTriangle, Package, DollarSign } from 'lucide-react';
+import { Warehouse, AlertTriangle, Package, DollarSign, Plus } from 'lucide-react';
 
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { DashboardError } from '@/components/dashboard/dashboard-error';
 import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 import { InventoryTable } from '@/components/inventory/inventory-table';
 import { StockAdjustmentDialog } from '@/components/inventory/stock-adjustment-dialog';
 import { InventoryHistoryDialog } from '@/components/inventory/inventory-history-dialog';
+import { RequirePermission } from '@/components/rbac/require-permission';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { usePermissions } from '@/hooks/use-permissions';
 import { INVENTORY_READ, INVENTORY_ADJUST } from '@/lib/permissions';
 import { getInventory, getInventorySummary } from '@/lib/api';
 import type { InventoryProduct, InventoryResponse, InventoryMeta, InventorySummary } from '@/components/inventory/inventory-types';
-import { ForbiddenState } from '@/components/rbac/forbidden-state';
 
 export default function InventoryPage() {
   const queryClient = useQueryClient();
@@ -27,14 +29,24 @@ export default function InventoryPage() {
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState('updatedAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [lowStock, setLowStock] = useState(false);
+  const [outOfStock, setOutOfStock] = useState(false);
   const limit = 10;
 
   const [adjustProduct, setAdjustProduct] = useState<InventoryProduct | null>(null);
   const [historyProduct, setHistoryProduct] = useState<InventoryProduct | null>(null);
 
   const inventoryQuery = useQuery<InventoryResponse>({
-    queryKey: ['inventory', 'management', { page, limit, search, sortBy, sortOrder }],
-    queryFn: () => getInventory({ page, limit, search: search || undefined, sortBy, sortOrder }),
+    queryKey: ['inventory', 'management', { page, limit, search, sortBy, sortOrder, lowStock, outOfStock }],
+    queryFn: () => getInventory({
+      page,
+      limit,
+      search: search || undefined,
+      sortBy,
+      sortOrder,
+      lowStock: lowStock || undefined,
+      outOfStock: outOfStock || undefined,
+    }),
     enabled: canRead,
   });
 
@@ -97,6 +109,16 @@ export default function InventoryPage() {
             Manage stock levels and inventory movements
           </p>
         </div>
+        <RequirePermission permission={INVENTORY_ADJUST}>
+          <Button onClick={() => {
+            if (inventoryData.data.length > 0) {
+              setAdjustProduct(inventoryData.data[0]);
+            }
+          }} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Adjust Stock
+          </Button>
+        </RequirePermission>
       </div>
 
       {summary && (
