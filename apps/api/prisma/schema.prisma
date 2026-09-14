@@ -837,7 +837,7 @@ model PaymentAllocation {
 model Department {
   id             String        @id @default(cuid())
   name           String
-  code           String        @unique
+  code           String
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id])
   managerId      String?
@@ -849,7 +849,9 @@ model Department {
   users       User[]
   invitations Invitation[]
 
+  @@unique([organizationId, code])
   @@index([organizationId])
+  @@index([code])
 }
 
 model Invitation {

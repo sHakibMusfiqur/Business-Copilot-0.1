@@ -140,7 +140,7 @@ describe('DepartmentsService', () => {
       );
     });
 
-    it('should reject create with duplicate code', async () => {
+    it('should reject create with duplicate code in same organization', async () => {
       prisma.department.findFirst.mockResolvedValue({ id: 'existing', code: 'ENG' });
 
       await expect(
@@ -148,6 +148,35 @@ describe('DepartmentsService', () => {
       ).rejects.toThrow(BadRequestException);
 
       expect(prisma.department.create).not.toHaveBeenCalled();
+    });
+
+    it('should reject create with duplicate code matching shared department', async () => {
+      prisma.department.findFirst.mockResolvedValue({ id: 'shared', code: 'HR', organizationId: null });
+
+      await expect(
+        service.create('org-1', 'user-1', { name: 'Human Resources', code: 'HR' }),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(prisma.department.create).not.toHaveBeenCalled();
+    });
+
+    it('should allow creating with same code in different organization', async () => {
+      prisma.department.findFirst.mockResolvedValue(null);
+      prisma.department.create.mockResolvedValue({
+        id: '1', name: 'Engineering', code: 'ENG', organizationId: 'org-2', managerId: null, isActive: true,
+      });
+
+      await service.create('org-2', 'user-1', { name: 'Engineering', code: 'ENG' });
+
+      expect(prisma.department.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            code: 'ENG',
+            OR: [{ organizationId: 'org-2' }, { organizationId: null }],
+          }),
+        }),
+      );
+      expect(prisma.department.create).toHaveBeenCalled();
     });
 
     it('should allow creating with same code after normalization', async () => {
@@ -163,6 +192,20 @@ describe('DepartmentsService', () => {
           where: expect.objectContaining({ code: 'ENG' }),
         }),
       );
+    });
+
+    it('should handle concurrent duplicate creation via P2002 error', async () => {
+      prisma.department.findFirst.mockResolvedValue(null);
+      const p2002Error = Object.assign(new Error('Unique constraint failed'), {
+        code: 'P2002',
+        clientVersion: '6.0.0',
+        meta: { target: ['organizationId', 'code'] },
+      });
+      prisma.department.create.mockRejectedValue(p2002Error);
+
+      await expect(
+        service.create('org-1', 'user-1', { name: 'Engineering', code: 'ENG' }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -209,7 +252,7 @@ describe('DepartmentsService', () => {
       expect(result).toHaveProperty('isActive', false);
     });
 
-    it('should reject update with duplicate code', async () => {
+    it('should reject update with duplicate code in same organization', async () => {
       prisma.department.findFirst
         .mockResolvedValueOnce({ id: '1', name: 'Engineering', code: 'ENG' })
         .mockResolvedValueOnce({ id: '2', code: 'SALES' });
@@ -219,6 +262,28 @@ describe('DepartmentsService', () => {
       ).rejects.toThrow(BadRequestException);
 
       expect(prisma.department.update).not.toHaveBeenCalled();
+    });
+
+    it('should allow updating to code used by another organization', async () => {
+      prisma.department.findFirst
+        .mockResolvedValueOnce({ id: '1', name: 'Engineering', code: 'ENG' })
+        .mockResolvedValueOnce(null);
+      prisma.department.update.mockResolvedValue({
+        id: '1', name: 'Engineering', code: 'SALES', organizationId: 'org-1', managerId: null, isActive: true,
+      });
+
+      await service.update('org-1', 'user-1', '1', { code: 'SALES' });
+
+      expect(prisma.department.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            code: 'SALES',
+            id: { not: '1' },
+            OR: [{ organizationId: 'org-1' }, { organizationId: null }],
+          }),
+        }),
+      );
+      expect(prisma.department.update).toHaveBeenCalled();
     });
 
     it('should allow updating a department to retain its own existing code', async () => {
@@ -250,9 +315,26 @@ describe('DepartmentsService', () => {
           where: expect.objectContaining({
             code: 'NEW',
             id: { not: '1' },
+            OR: [{ organizationId: 'org-1' }, { organizationId: null }],
           }),
         }),
       );
+    });
+
+    it('should handle concurrent duplicate update via P2002 error', async () => {
+      prisma.department.findFirst
+        .mockResolvedValueOnce({ id: '1', name: 'Engineering', code: 'ENG' })
+        .mockResolvedValueOnce(null);
+      const p2002Error = Object.assign(new Error('Unique constraint failed'), {
+        code: 'P2002',
+        clientVersion: '6.0.0',
+        meta: { target: ['organizationId', 'code'] },
+      });
+      prisma.department.update.mockRejectedValue(p2002Error);
+
+      await expect(
+        service.update('org-1', 'user-1', '1', { code: 'NEW' }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

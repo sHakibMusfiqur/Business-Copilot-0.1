@@ -215,10 +215,10 @@ async function main() {
   // ─── Departments ───────────────────────────────────────────────
 
   await Promise.all([
-    prisma.department.upsert({ where: { code: 'ENG' }, update: {}, create: { code: 'ENG', name: 'Engineering' } }),
-    prisma.department.upsert({ where: { code: 'SALES' }, update: {}, create: { code: 'SALES', name: 'Sales' } }),
-    prisma.department.upsert({ where: { code: 'HR' }, update: {}, create: { code: 'HR', name: 'Human Resources' } }),
-    prisma.department.upsert({ where: { code: 'FIN' }, update: {}, create: { code: 'FIN', name: 'Finance' } }),
+    prisma.department.upsert({ where: { organizationId_code: { organizationId: null, code: 'ENG' } }, update: {}, create: { code: 'ENG', name: 'Engineering' } }),
+    prisma.department.upsert({ where: { organizationId_code: { organizationId: null, code: 'SALES' } }, update: {}, create: { code: 'SALES', name: 'Sales' } }),
+    prisma.department.upsert({ where: { organizationId_code: { organizationId: null, code: 'HR' } }, update: {}, create: { code: 'HR', name: 'Human Resources' } }),
+    prisma.department.upsert({ where: { organizationId_code: { organizationId: null, code: 'FIN' } }, update: {}, create: { code: 'FIN', name: 'Finance' } }),
   ]);
 
   console.log('Departments created');

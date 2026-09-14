@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
@@ -117,29 +118,43 @@ export class DepartmentsService {
     const normalizedCode = dto.code.trim().toUpperCase();
 
     const existingByCode = await this.prisma.department.findFirst({
-      where: { code: normalizedCode },
+      where: {
+        code: normalizedCode,
+        OR: [{ organizationId: orgId }, { organizationId: null }],
+      },
       select: { id: true },
     });
     if (existingByCode) {
       throw new BadRequestException(`Department code "${normalizedCode}" is already in use.`);
     }
 
-    const department = await this.prisma.department.create({
-      data: {
-        name: dto.name.trim(),
-        code: normalizedCode,
-        organizationId: orgId,
-        managerId: dto.managerId ?? null,
-      },
-      select: {
-        id: true,
-        name: true,
-        code: true,
-        organizationId: true,
-        managerId: true,
-        isActive: true,
-      },
-    });
+    let department;
+    try {
+      department = await this.prisma.department.create({
+        data: {
+          name: dto.name.trim(),
+          code: normalizedCode,
+          organizationId: orgId,
+          managerId: dto.managerId ?? null,
+        },
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          organizationId: true,
+          managerId: true,
+          isActive: true,
+        },
+      });
+    } catch (error) {
+      if (
+        (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') ||
+        (error instanceof Error && 'code' in error && (error as { code: string }).code === 'P2002')
+      ) {
+        throw new BadRequestException(`Department code "${normalizedCode}" is already in use.`);
+      }
+      throw error;
+    }
 
     await this.auditService.record({
       userId: actorId,
@@ -177,7 +192,11 @@ export class DepartmentsService {
     if (dto.code !== undefined) {
       const normalizedCode = dto.code.trim().toUpperCase();
       const existingByCode = await this.prisma.department.findFirst({
-        where: { code: normalizedCode, id: { not: departmentId } },
+        where: {
+          code: normalizedCode,
+          id: { not: departmentId },
+          OR: [{ organizationId: orgId }, { organizationId: null }],
+        },
         select: { id: true },
       });
       if (existingByCode) {
@@ -191,18 +210,30 @@ export class DepartmentsService {
     if (dto.managerId !== undefined) updateData.managerId = dto.managerId;
     if (dto.isActive !== undefined) updateData.isActive = dto.isActive;
 
-    const updated = await this.prisma.department.update({
-      where: { id: departmentId },
-      data: updateData,
-      select: {
-        id: true,
-        name: true,
-        code: true,
-        organizationId: true,
-        managerId: true,
-        isActive: true,
-      },
-    });
+    let updated;
+    try {
+      updated = await this.prisma.department.update({
+        where: { id: departmentId },
+        data: updateData,
+        select: {
+          id: true,
+          name: true,
+          code: true,
+          organizationId: true,
+          managerId: true,
+          isActive: true,
+        },
+      });
+    } catch (error) {
+      if (
+        (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') ||
+        (error instanceof Error && 'code' in error && (error as { code: string }).code === 'P2002')
+      ) {
+        const code = dto.code?.trim().toUpperCase();
+        throw new BadRequestException(`Department code "${code}" is already in use.`);
+      }
+      throw error;
+    }
 
     await this.auditService.record({
       userId: actorId,
