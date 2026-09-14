@@ -1,8 +1,16 @@
 'use client';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import type { PayrollDetail } from '@/lib/api/payroll';
+import type { PayrollDetail, PayrollStatus } from '@/lib/api/payroll';
 import { formatCurrency } from '@/lib/utils';
+
+const STATUS_CONFIG: Record<PayrollStatus, { label: string; className: string }> = {
+  DRAFT: { label: 'Draft', className: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' },
+  PENDING: { label: 'Pending', className: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-800 dark:text-yellow-300' },
+  APPROVED: { label: 'Approved', className: 'bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-300' },
+  REJECTED: { label: 'Rejected', className: 'bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-300' },
+  PAID: { label: 'Paid', className: 'bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-300' },
+};
 
 interface PayrollDetailsDialogProps {
   record: PayrollDetail | null;
@@ -12,6 +20,8 @@ interface PayrollDetailsDialogProps {
 
 export function PayrollDetailsDialog({ record, open, onClose }: PayrollDetailsDialogProps) {
   if (!record) return null;
+
+  const statusCfg = STATUS_CONFIG[record.status];
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
@@ -28,6 +38,13 @@ export function PayrollDetailsDialog({ record, open, onClose }: PayrollDetailsDi
               <p className="font-medium">{record.employee.firstName} {record.employee.lastName}</p>
               <p className="text-xs text-muted-foreground">{record.employee.employeeCode} · {record.employee.department?.name ?? 'No department'}</p>
             </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Status:</span>
+            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${statusCfg.className}`}>
+              {statusCfg.label}
+            </span>
           </div>
 
           <div className="rounded-lg bg-muted/50 p-4">
@@ -78,6 +95,24 @@ export function PayrollDetailsDialog({ record, open, onClose }: PayrollDetailsDi
               <p className="font-medium">{formatCurrency(Number(record.employee.salary))}</p>
             </div>
           </div>
+
+          {record.status === 'APPROVED' && record.approvedAt && (
+            <div className="rounded-lg bg-green-50 dark:bg-green-900/20 p-3 text-sm">
+              <p className="text-green-700 dark:text-green-300 font-medium">Approved</p>
+              <p className="text-green-600 dark:text-green-400 text-xs mt-1">
+                {new Date(record.approvedAt).toLocaleString()}
+              </p>
+            </div>
+          )}
+
+          {record.status === 'REJECTED' && record.rejectedAt && (
+            <div className="rounded-lg bg-red-50 dark:bg-red-900/20 p-3 text-sm">
+              <p className="text-red-700 dark:text-red-300 font-medium">Rejected</p>
+              <p className="text-red-600 dark:text-red-400 text-xs mt-1">
+                {new Date(record.rejectedAt).toLocaleString()}
+              </p>
+            </div>
+          )}
 
           {record.notes && (
             <div>

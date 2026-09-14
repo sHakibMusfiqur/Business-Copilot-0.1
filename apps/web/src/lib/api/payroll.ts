@@ -2,6 +2,8 @@ import { api } from './client';
 import { API_ROUTES } from './routes';
 import type { Meta } from '@/lib/types';
 
+export type PayrollStatus = 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'PAID';
+
 export interface PayrollRecord {
   id: string;
   employeeId: string;
@@ -14,6 +16,11 @@ export interface PayrollRecord {
   netSalary: number;
   paymentDate?: string;
   notes?: string;
+  status: PayrollStatus;
+  approvedBy?: string;
+  approvedAt?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
   createdAt: string;
   updatedAt?: string;
   employee: {
@@ -143,4 +150,29 @@ export async function updatePayroll(id: string, data: UpdatePayrollData): Promis
 
 export async function deletePayroll(id: string): Promise<void> {
   await api.delete(`${API_ROUTES.PAYROLL.ROOT}/${id}`);
+}
+
+export async function submitPayroll(id: string): Promise<PayrollRecord> {
+  const response = await api.post<PayrollRecord>(`${API_ROUTES.PAYROLL.ROOT}/${id}/submit`);
+  return response.data;
+}
+
+export async function approvePayroll(id: string): Promise<PayrollRecord> {
+  const response = await api.post<PayrollRecord>(`${API_ROUTES.PAYROLL.ROOT}/${id}/approve`);
+  return response.data;
+}
+
+export async function rejectPayroll(id: string): Promise<PayrollRecord> {
+  const response = await api.post<PayrollRecord>(`${API_ROUTES.PAYROLL.ROOT}/${id}/reject`);
+  return response.data;
+}
+
+export interface MarkAsPaidData {
+  paymentDate?: string;
+  notes?: string;
+}
+
+export async function markPayrollAsPaid(id: string, data?: MarkAsPaidData): Promise<PayrollRecord> {
+  const response = await api.post<PayrollRecord>(`${API_ROUTES.PAYROLL.ROOT}/${id}/pay`, data);
+  return response.data;
 }

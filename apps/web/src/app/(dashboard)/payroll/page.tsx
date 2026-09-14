@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Plus,
   Search,
@@ -19,6 +19,11 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  Send,
+  Check,
+  X,
+  CreditCard,
+  Loader2,
 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -29,14 +34,22 @@ import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
 import { useToast } from '@/components/ui/use-toast';
 import { usePermissions } from '@/hooks/use-permissions';
-import { PAYROLL_READ, PAYROLL_CREATE, PAYROLL_UPDATE, PAYROLL_DELETE } from '@/lib/permissions';
-import { getPayroll, getPayrollRecord, getPayrollStats, deletePayroll, type PayrollRecord, type PayrollDetail, type PayrollStats, type PayrollResponse, type PayrollSortField } from '@/lib/api/payroll';
+import { PAYROLL_READ, PAYROLL_CREATE, PAYROLL_UPDATE, PAYROLL_DELETE, PAYROLL_APPROVE, PAYROLL_REJECT } from '@/lib/permissions';
+import { getPayroll, getPayrollRecord, getPayrollStats, deletePayroll, submitPayroll, approvePayroll, rejectPayroll, markPayrollAsPaid, type PayrollRecord, type PayrollDetail, type PayrollStats, type PayrollResponse, type PayrollSortField, type PayrollStatus, type MarkAsPaidData } from '@/lib/api/payroll';
 import { getEmployees, type EmployeeListResponse } from '@/lib/api/employees';
 import { formatCurrency } from '@/lib/utils';
 import { CreatePayrollDialog } from '@/components/payroll/create-payroll-dialog';
 import { EditPayrollDialog } from '@/components/payroll/edit-payroll-dialog';
 import { PayrollDetailsDialog } from '@/components/payroll/payroll-details-dialog';
 import { useQuery as useEmpQuery } from '@tanstack/react-query';
+
+const STATUS_CONFIG: Record<PayrollStatus, { label: string; className: string }> = {
+  DRAFT: { label: 'Draft', className: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300' },
+  PENDING: { label: 'Pending', className: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-800 dark:text-yellow-300' },
+  APPROVED: { label: 'Approved', className: 'bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-300' },
+  REJECTED: { label: 'Rejected', className: 'bg-red-100 text-red-700 dark:bg-red-800 dark:text-red-300' },
+  PAID: { label: 'Paid', className: 'bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-300' },
+};
 
 function SortIcon({ field, sortBy, sortOrder }: { field: string; sortBy: string; sortOrder: string }) {
   if (field !== sortBy) return <ArrowUpDown className="h-3 w-3 ml-1 text-muted-foreground/50" />;
@@ -52,12 +65,15 @@ export default function PayrollPage() {
   const canCreate = isLoaded && hasPermission(PAYROLL_CREATE);
   const canUpdate = isLoaded && hasPermission(PAYROLL_UPDATE);
   const canDelete = isLoaded && hasPermission(PAYROLL_DELETE);
+  const canApprove = isLoaded && hasPermission(PAYROLL_APPROVE);
+  const canReject = isLoaded && hasPermission(PAYROLL_REJECT);
 
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [employeeFilter, setEmployeeFilter] = useState('');
   const [periodStart, setPeriodStart] = useState('');
   const [periodEnd, setPeriodEnd] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState<PayrollSortField>('periodEnd');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
@@ -66,6 +82,12 @@ export default function PayrollPage() {
   const [deleteRecordTarget, setDeleteRecordTarget] = useState<PayrollRecord | null>(null);
   const [viewRecord, setViewRecord] = useState<PayrollDetail | null>(null);
   const [viewOpen, setViewOpen] = useState(false);
+
+  const [submitTarget, setSubmitTarget] = useState<PayrollRecord | null>(null);
+  const [approveTarget, setApproveTarget] = useState<PayrollRecord | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<PayrollRecord | null>(null);
+  const [markPaidTarget, setMarkPaidTarget] = useState<PayrollRecord | null>(null);
+  const [markPaidData, setMarkPaidData] = useState<MarkAsPaidData>({});
 
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -82,7 +104,7 @@ export default function PayrollPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [employeeFilter, periodStart, periodEnd]);
+  }, [employeeFilter, periodStart, periodEnd, statusFilter]);
 
   const employeesQuery = useEmpQuery<EmployeeListResponse>({
     queryKey: ['employees', { isActive: true }],
@@ -115,6 +137,25 @@ export default function PayrollPage() {
     queryClient.invalidateQueries({ queryKey: ['payroll'] });
     queryClient.invalidateQueries({ queryKey: ['reports'] });
   }
+
+  function closeSubmitDialog() { setSubmitTarget(null); }
+  function closeApproveDialog() { setApproveTarget(null); }
+  function closeRejectDialog() { setRejectTarget(null); }
+  function closeMarkPaidDialog() { setMarkPaidTarget(null); setMarkPaidData({}); }
+
+
+
+  const markPaidMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data?: MarkAsPaidData }) => markPayrollAsPaid(id, data),
+    onSuccess: () => {
+      toast({ title: 'Payroll marked as paid' });
+      invalidate();
+      closeMarkPaidDialog();
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
 
   async function handleViewDetail(record: PayrollRecord) {
     try {
@@ -151,6 +192,9 @@ export default function PayrollPage() {
   const meta = payrollQuery.data?.meta ?? null;
   const employees = (employeesQuery.data as EmployeeListResponse | undefined)?.data ?? [];
   const stats = statsQuery.data;
+
+  // Client-side status filtering (until backend supports it)
+  const filteredPayroll = statusFilter ? payroll.filter((r) => r.status === statusFilter) : payroll;
 
   return (
     <div className="space-y-6">
@@ -200,7 +244,7 @@ export default function PayrollPage() {
       )}
 
       <div className="space-y-4">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
@@ -234,6 +278,18 @@ export default function PayrollPage() {
               <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName}</option>
             ))}
           </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+          >
+            <option value="">All Statuses</option>
+            <option value="DRAFT">Draft</option>
+            <option value="PENDING">Pending</option>
+            <option value="APPROVED">Approved</option>
+            <option value="REJECTED">Rejected</option>
+            <option value="PAID">Paid</option>
+          </select>
         </div>
 
         {payrollQuery.isLoading ? (
@@ -249,12 +305,12 @@ export default function PayrollPage() {
           </div>
         ) : payrollQuery.error ? (
           <DashboardError status={500} message={(payrollQuery.error as Error).message} />
-        ) : payroll.length === 0 ? (
+        ) : filteredPayroll.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border/50 bg-muted/20 py-16">
             <Wallet className="h-12 w-12 text-muted-foreground/50" />
             <p className="mt-4 text-sm font-medium text-muted-foreground">No payroll records found</p>
             <p className="mt-1 text-xs text-muted-foreground/70">
-              {search || employeeFilter || periodStart || periodEnd ? 'Try adjusting your filters.' : canCreate ? 'Create your first payroll record to get started.' : 'Payroll records will appear here once created.'}
+              {search || employeeFilter || periodStart || periodEnd || statusFilter ? 'Try adjusting your filters.' : canCreate ? 'Create your first payroll record to get started.' : 'Payroll records will appear here once created.'}
             </p>
           </div>
         ) : (
@@ -301,6 +357,7 @@ export default function PayrollPage() {
                           <SortIcon field="netSalary" sortBy={sortBy} sortOrder={sortOrder} />
                         </span>
                       </th>
+                      <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
                       <th className="px-4 py-3 text-left font-medium text-muted-foreground">
                         <span className="inline-flex items-center cursor-pointer select-none hover:text-foreground transition-colors" onClick={() => handleSort('paymentDate')}>
                           Payment Date
@@ -311,7 +368,7 @@ export default function PayrollPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {payroll.map((record) => (
+                    {filteredPayroll.map((record) => (
                       <tr key={record.id} className="border-b border-border last:border-0 hover:bg-muted/30">
                         <td className="px-4 py-3">
                           <div>
@@ -338,6 +395,11 @@ export default function PayrollPage() {
                         <td className="px-4 py-3 text-right font-mono font-medium">
                           {formatCurrency(Number(record.netSalary))}
                         </td>
+                        <td className="px-4 py-3">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_CONFIG[record.status].className}`}>
+                            {STATUS_CONFIG[record.status].label}
+                          </span>
+                        </td>
                         <td className="px-4 py-3 text-muted-foreground">
                           {record.paymentDate ? new Date(record.paymentDate).toLocaleDateString() : '—'}
                         </td>
@@ -350,7 +412,7 @@ export default function PayrollPage() {
                             >
                               <Eye className="h-4 w-4" />
                             </button>
-                            {canUpdate && (
+                            {record.status === 'DRAFT' && canUpdate && (
                               <button
                                 onClick={() => setEditRecord(record)}
                                 className="inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-muted"
@@ -359,13 +421,49 @@ export default function PayrollPage() {
                                 <Pencil className="h-4 w-4" />
                               </button>
                             )}
-                            {canDelete && (
+                            {record.status === 'DRAFT' && canDelete && (
                               <button
                                 onClick={() => setDeleteRecordTarget(record)}
                                 className="inline-flex items-center justify-center rounded-md p-1.5 text-red-600 hover:bg-red-500/10"
                                 title="Delete"
                               >
                                 <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
+                            {record.status === 'DRAFT' && canUpdate && (
+                              <button
+                                onClick={() => setSubmitTarget(record)}
+                                className="inline-flex items-center justify-center rounded-md p-1.5 text-muted-foreground hover:bg-muted"
+                                title="Submit"
+                              >
+                                <Send className="h-4 w-4" />
+                              </button>
+                            )}
+                            {record.status === 'PENDING' && canApprove && (
+                              <button
+                                onClick={() => setApproveTarget(record)}
+                                className="inline-flex items-center justify-center rounded-md p-1.5 text-green-600 hover:bg-green-500/10"
+                                title="Approve"
+                              >
+                                <Check className="h-4 w-4" />
+                              </button>
+                            )}
+                            {record.status === 'PENDING' && canReject && (
+                              <button
+                                onClick={() => setRejectTarget(record)}
+                                className="inline-flex items-center justify-center rounded-md p-1.5 text-red-600 hover:bg-red-500/10"
+                                title="Reject"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            )}
+                            {record.status === 'APPROVED' && canUpdate && (
+                              <button
+                                onClick={() => { setMarkPaidTarget(record); setMarkPaidData({}); }}
+                                className="inline-flex items-center justify-center rounded-md p-1.5 text-blue-600 hover:bg-blue-500/10"
+                                title="Mark as Paid"
+                              >
+                                <CreditCard className="h-4 w-4" />
                               </button>
                             )}
                           </div>
@@ -434,6 +532,123 @@ export default function PayrollPage() {
         onDeleted={invalidate}
         deleteFn={() => deleteRecordTarget ? deletePayroll(deleteRecordTarget.id) : Promise.resolve()}
       />
+
+      {/* Submit Confirmation Dialog */}
+      <ConfirmDeleteDialog
+        entityName={submitTarget ? `${submitTarget.employee.firstName} ${submitTarget.employee.lastName} (${new Date(submitTarget.periodStart).toLocaleDateString()} - ${new Date(submitTarget.periodEnd).toLocaleDateString()})` : null}
+        title="Submit Payroll for Approval"
+        description="This will submit the payroll record for manager review. You will not be able to edit or delete it after submission."
+        buttonLabel="Submit"
+        successTitle="Payroll submitted"
+        errorFallback="Failed to submit payroll."
+        open={submitTarget !== null}
+        onClose={closeSubmitDialog}
+        onDeleted={invalidate}
+        deleteFn={() => submitTarget ? submitPayroll(submitTarget.id) : Promise.resolve()}
+        buttonVariant="default"
+        actionVerb="submit"
+        pendingLabel="Submitting..."
+      />
+
+      {/* Approve Confirmation Dialog */}
+      <ConfirmDeleteDialog
+        entityName={approveTarget ? `${approveTarget.employee.firstName} ${approveTarget.employee.lastName} (${new Date(approveTarget.periodStart).toLocaleDateString()} - ${new Date(approveTarget.periodEnd).toLocaleDateString()})` : null}
+        title="Approve Payroll"
+        description="This will approve the payroll record. It can then be marked as paid."
+        buttonLabel="Approve"
+        successTitle="Payroll approved"
+        errorFallback="Failed to approve payroll."
+        open={approveTarget !== null}
+        onClose={closeApproveDialog}
+        onDeleted={invalidate}
+        deleteFn={() => approveTarget ? approvePayroll(approveTarget.id) : Promise.resolve()}
+        buttonVariant="default"
+        actionVerb="approve"
+        pendingLabel="Approving..."
+      />
+
+      {/* Reject Confirmation Dialog */}
+      <ConfirmDeleteDialog
+        entityName={rejectTarget ? `${rejectTarget.employee.firstName} ${rejectTarget.employee.lastName} (${new Date(rejectTarget.periodStart).toLocaleDateString()} - ${new Date(rejectTarget.periodEnd).toLocaleDateString()})` : null}
+        title="Reject Payroll"
+        description="This will reject the payroll record. This action cannot be undone."
+        buttonLabel="Reject"
+        successTitle="Payroll rejected"
+        errorFallback="Failed to reject payroll."
+        open={rejectTarget !== null}
+        onClose={closeRejectDialog}
+        onDeleted={invalidate}
+        deleteFn={() => rejectTarget ? rejectPayroll(rejectTarget.id) : Promise.resolve()}
+        buttonVariant="destructive"
+        actionVerb="reject"
+        pendingLabel="Rejecting..."
+      />
+
+      {/* Mark as Paid Dialog */}
+      {markPaidTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Mark as Paid"
+        >
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={closeMarkPaidDialog} />
+          <div className="relative z-50 w-full max-w-md rounded-xl border bg-card p-6 shadow-xl">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Mark as Paid</h2>
+              <button onClick={closeMarkPaidDialog} aria-label="Close" className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mb-6">
+              <p className="text-sm text-muted-foreground">
+                Mark payroll for <span className="font-medium text-foreground">{markPaidTarget.employee.firstName} {markPaidTarget.employee.lastName}</span> as paid.
+              </p>
+            </div>
+
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="text-sm font-medium text-muted-foreground mb-1 block">Payment Date</label>
+                <input
+                  type="date"
+                  value={markPaidData.paymentDate ?? ''}
+                  onChange={(e) => setMarkPaidData({ ...markPaidData, paymentDate: e.target.value || undefined })}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+                <p className="text-xs text-muted-foreground mt-1">Leave blank to use today's date.</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-muted-foreground mb-1 block">Notes (optional)</label>
+                <Input
+                  placeholder="Payment reference or notes..."
+                  value={markPaidData.notes ?? ''}
+                  onChange={(e) => setMarkPaidData({ ...markPaidData, notes: e.target.value || undefined })}
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3">
+              <Button variant="outline" onClick={closeMarkPaidDialog}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => markPaidMutation.mutate({ id: markPaidTarget.id, data: markPaidData })}
+                disabled={markPaidMutation.isPending}
+              >
+                {markPaidMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Marking as paid...
+                  </>
+                ) : (
+                  'Mark as Paid'
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

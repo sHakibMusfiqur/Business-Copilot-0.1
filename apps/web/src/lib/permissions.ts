@@ -96,6 +96,8 @@ export const PAYROLL_READ = 'payroll.read' as const;
 export const PAYROLL_CREATE = 'payroll.create' as const;
 export const PAYROLL_UPDATE = 'payroll.update' as const;
 export const PAYROLL_DELETE = 'payroll.delete' as const;
+export const PAYROLL_APPROVE = 'payroll.approve' as const;
+export const PAYROLL_REJECT = 'payroll.reject' as const;
 
 // ── CRM ──────────────────────────────────────────────────────────────────────
 export const CRM_READ = 'crm.read' as const;
