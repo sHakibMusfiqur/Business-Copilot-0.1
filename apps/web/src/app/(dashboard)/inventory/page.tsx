@@ -29,8 +29,8 @@ export default function InventoryPage() {
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState('updatedAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [lowStock, setLowStock] = useState(false);
-  const [outOfStock, setOutOfStock] = useState(false);
+  const [lowStock] = useState(false);
+  const [outOfStock] = useState(false);
   const limit = 10;
 
   const [adjustProduct, setAdjustProduct] = useState<InventoryProduct | null>(null);
