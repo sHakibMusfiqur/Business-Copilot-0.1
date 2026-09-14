@@ -113,12 +113,13 @@ export default function PayrollPage() {
   });
 
   const payrollQuery = useQuery<PayrollResponse>({
-    queryKey: ['payroll', { search, employeeId: employeeFilter || undefined, periodStart: periodStart || undefined, periodEnd: periodEnd || undefined, page, limit: 20, sortBy, sortOrder }],
+    queryKey: ['payroll', { search, employeeId: employeeFilter || undefined, periodStart: periodStart || undefined, periodEnd: periodEnd || undefined, status: statusFilter || undefined, page, limit: 20, sortBy, sortOrder }],
     queryFn: ({ signal }) => getPayroll({
       search: search || undefined,
       employeeId: employeeFilter || undefined,
       periodStart: periodStart || undefined,
       periodEnd: periodEnd || undefined,
+      status: (statusFilter || undefined) as PayrollStatus | undefined,
       page,
       limit: 20,
       sortBy,
@@ -192,9 +193,6 @@ export default function PayrollPage() {
   const meta = payrollQuery.data?.meta ?? null;
   const employees = (employeesQuery.data as EmployeeListResponse | undefined)?.data ?? [];
   const stats = statsQuery.data;
-
-  // Client-side status filtering (until backend supports it)
-  const filteredPayroll = statusFilter ? payroll.filter((r) => r.status === statusFilter) : payroll;
 
   return (
     <div className="space-y-6">
@@ -305,7 +303,7 @@ export default function PayrollPage() {
           </div>
         ) : payrollQuery.error ? (
           <DashboardError status={500} message={(payrollQuery.error as Error).message} />
-        ) : filteredPayroll.length === 0 ? (
+        ) : payroll.length === 0 ? (
           <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border/50 bg-muted/20 py-16">
             <Wallet className="h-12 w-12 text-muted-foreground/50" />
             <p className="mt-4 text-sm font-medium text-muted-foreground">No payroll records found</p>
@@ -368,7 +366,7 @@ export default function PayrollPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredPayroll.map((record) => (
+                    {payroll.map((record) => (
                       <tr key={record.id} className="border-b border-border last:border-0 hover:bg-muted/30">
                         <td className="px-4 py-3">
                           <div>

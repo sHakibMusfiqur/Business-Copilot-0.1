@@ -67,6 +67,10 @@ export class PayrollService {
       andConditions.push({ employeeId: query.employeeId });
     }
 
+    if (query.status) {
+      andConditions.push({ status: query.status });
+    }
+
     if (query.periodStart) {
       andConditions.push({ periodStart: { gte: new Date(query.periodStart) } });
     }

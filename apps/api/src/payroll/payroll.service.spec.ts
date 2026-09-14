@@ -243,6 +243,112 @@ describe('PayrollService', () => {
       expect(callArgs.select.rejectedBy).toBe(true);
       expect(callArgs.select.rejectedAt).toBe(true);
     });
+
+    it('should filter by status', async () => {
+      prisma.payroll.findMany.mockResolvedValue([]);
+      prisma.payroll.count.mockResolvedValue(0);
+
+      await service.findAll('org-1', { status: 'DRAFT' });
+
+      const callArgs = prisma.payroll.findMany.mock.calls[0][0];
+      expect(callArgs.where.AND).toContainEqual({ status: 'DRAFT' });
+    });
+
+    it('should filter by PENDING status', async () => {
+      prisma.payroll.findMany.mockResolvedValue([]);
+      prisma.payroll.count.mockResolvedValue(0);
+
+      await service.findAll('org-1', { status: 'PENDING' });
+
+      const callArgs = prisma.payroll.findMany.mock.calls[0][0];
+      expect(callArgs.where.AND).toContainEqual({ status: 'PENDING' });
+    });
+
+    it('should filter by PAID status', async () => {
+      prisma.payroll.findMany.mockResolvedValue([]);
+      prisma.payroll.count.mockResolvedValue(0);
+
+      await service.findAll('org-1', { status: 'PAID' });
+
+      const callArgs = prisma.payroll.findMany.mock.calls[0][0];
+      expect(callArgs.where.AND).toContainEqual({ status: 'PAID' });
+    });
+
+    it('should combine status and employeeId filters', async () => {
+      prisma.payroll.findMany.mockResolvedValue([]);
+      prisma.payroll.count.mockResolvedValue(0);
+
+      await service.findAll('org-1', { status: 'APPROVED', employeeId: 'emp-1' });
+
+      const callArgs = prisma.payroll.findMany.mock.calls[0][0];
+      expect(callArgs.where.AND).toContainEqual({ status: 'APPROVED' });
+      expect(callArgs.where.AND).toContainEqual({ employeeId: 'emp-1' });
+    });
+
+    it('should combine status and search filters', async () => {
+      prisma.payroll.findMany.mockResolvedValue([]);
+      prisma.payroll.count.mockResolvedValue(0);
+
+      await service.findAll('org-1', { status: 'REJECTED', search: 'john' });
+
+      const callArgs = prisma.payroll.findMany.mock.calls[0][0];
+      expect(callArgs.where.AND).toContainEqual({ status: 'REJECTED' });
+      const searchCondition = callArgs.where.AND.find(
+        (c: Record<string, unknown>) => Array.isArray(c.OR),
+      );
+      expect(searchCondition).toBeDefined();
+    });
+
+    it('should combine status and period filters', async () => {
+      prisma.payroll.findMany.mockResolvedValue([]);
+      prisma.payroll.count.mockResolvedValue(0);
+
+      await service.findAll('org-1', { status: 'DRAFT', periodStart: '2026-01-01', periodEnd: '2026-06-30' });
+
+      const callArgs = prisma.payroll.findMany.mock.calls[0][0];
+      expect(callArgs.where.AND).toContainEqual({ status: 'DRAFT' });
+      expect(callArgs.where.AND).toContainEqual({ periodStart: { gte: new Date('2026-01-01') } });
+      expect(callArgs.where.AND).toContainEqual({ periodEnd: { lte: new Date('2026-06-30') } });
+    });
+
+    it('should enforce tenant isolation with status filter', async () => {
+      prisma.payroll.findMany.mockResolvedValue([]);
+      prisma.payroll.count.mockResolvedValue(0);
+
+      await service.findAll('org-1', { status: 'PAID' });
+
+      const callArgs = prisma.payroll.findMany.mock.calls[0][0];
+      expect(callArgs.where.AND).toContainEqual({ employee: { organizationId: 'org-1' } });
+      expect(callArgs.where.AND).toContainEqual({ status: 'PAID' });
+    });
+
+    it('should maintain correct pagination when filtering by status', async () => {
+      prisma.payroll.findMany.mockResolvedValue([]);
+      prisma.payroll.count.mockResolvedValue(5);
+
+      const result = await service.findAll('org-1', { status: 'DRAFT', page: 2, limit: 10 });
+
+      expect(result.meta.total).toBe(5);
+      expect(result.meta.page).toBe(2);
+      expect(result.meta.limit).toBe(10);
+      expect(result.meta.totalPages).toBe(1);
+      const callArgs = prisma.payroll.findMany.mock.calls[0][0];
+      expect(callArgs.skip).toBe(10);
+      expect(callArgs.take).toBe(10);
+    });
+
+    it('should not filter by status when omitted', async () => {
+      prisma.payroll.findMany.mockResolvedValue([]);
+      prisma.payroll.count.mockResolvedValue(0);
+
+      await service.findAll('org-1');
+
+      const callArgs = prisma.payroll.findMany.mock.calls[0][0];
+      const hasStatus = callArgs.where.AND.some(
+        (c: Record<string, unknown>) => 'status' in c,
+      );
+      expect(hasStatus).toBe(false);
+    });
   });
 
   describe('create', () => {

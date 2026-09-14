@@ -83,6 +83,7 @@ export interface GetPayrollParams {
   employeeId?: string;
   periodStart?: string;
   periodEnd?: string;
+  status?: PayrollStatus;
   page?: number;
   limit?: number;
   sortBy?: PayrollSortField;
@@ -95,6 +96,7 @@ export async function getPayroll(params?: GetPayrollParams, signal?: AbortSignal
   if (params?.employeeId) searchParams.set('employeeId', params.employeeId);
   if (params?.periodStart) searchParams.set('periodStart', params.periodStart);
   if (params?.periodEnd) searchParams.set('periodEnd', params.periodEnd);
+  if (params?.status) searchParams.set('status', params.status);
   if (params?.page) searchParams.set('page', String(params.page));
   if (params?.limit) searchParams.set('limit', String(params.limit));
   if (params?.sortBy) searchParams.set('sortBy', params.sortBy);

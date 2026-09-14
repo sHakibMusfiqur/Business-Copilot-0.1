@@ -131,4 +131,53 @@ describe('QueryPayrollDto', () => {
     const errors = await validate(dto);
     expect(errors).toEqual([]);
   });
+
+  it('should accept valid DRAFT status', async () => {
+    const dto = plainToInstance(QueryPayrollDto, { status: 'DRAFT' });
+    const errors = await validate(dto);
+    expect(errors).toEqual([]);
+    expect(dto.status).toBe('DRAFT');
+  });
+
+  it('should accept valid PENDING status', async () => {
+    const dto = plainToInstance(QueryPayrollDto, { status: 'PENDING' });
+    const errors = await validate(dto);
+    expect(errors).toEqual([]);
+    expect(dto.status).toBe('PENDING');
+  });
+
+  it('should accept valid APPROVED status', async () => {
+    const dto = plainToInstance(QueryPayrollDto, { status: 'APPROVED' });
+    const errors = await validate(dto);
+    expect(errors).toEqual([]);
+    expect(dto.status).toBe('APPROVED');
+  });
+
+  it('should accept valid REJECTED status', async () => {
+    const dto = plainToInstance(QueryPayrollDto, { status: 'REJECTED' });
+    const errors = await validate(dto);
+    expect(errors).toEqual([]);
+    expect(dto.status).toBe('REJECTED');
+  });
+
+  it('should accept valid PAID status', async () => {
+    const dto = plainToInstance(QueryPayrollDto, { status: 'PAID' });
+    const errors = await validate(dto);
+    expect(errors).toEqual([]);
+    expect(dto.status).toBe('PAID');
+  });
+
+  it('should reject invalid status value', async () => {
+    const dto = plainToInstance(QueryPayrollDto, { status: 'INVALID' });
+    const errors = await validate(dto);
+    expect(errors).toHaveLength(1);
+    expect(errors[0].property).toBe('status');
+  });
+
+  it('should accept omitted status', async () => {
+    const dto = plainToInstance(QueryPayrollDto, {});
+    const errors = await validate(dto);
+    expect(errors).toEqual([]);
+    expect(dto.status).toBeUndefined();
+  });
 });

@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsOptional, IsInt, Min, Max, IsString, IsIn, IsDateString } from 'class-validator';
+import { IsOptional, IsInt, Min, Max, IsString, IsIn, IsDateString, IsEnum } from 'class-validator';
+import { PayrollStatus } from '@prisma/client';
 
 const allowedSortFields = [
   'periodStart',
@@ -61,4 +62,9 @@ export class QueryPayrollDto {
   @IsOptional()
   @IsIn(['asc', 'desc'])
   sortOrder?: 'asc' | 'desc' = 'desc';
+
+  @ApiPropertyOptional({ enum: PayrollStatus, description: 'Filter by payroll status' })
+  @IsOptional()
+  @IsEnum(PayrollStatus)
+  status?: PayrollStatus;
 }
