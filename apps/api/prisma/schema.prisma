@@ -56,6 +56,14 @@ enum PurchaseStatus {
   CANCELLED
 }
 
+enum PayrollStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+}
+
 enum OrderStatus {
   DRAFT
   PENDING
@@ -919,22 +927,29 @@ model Leave {
 }
 
 model Payroll {
-  id          String    @id @default(cuid())
+  id          String         @id @default(cuid())
   employeeId  String
-  employee    Employee  @relation(fields: [employeeId], references: [id])
+  employee    Employee       @relation(fields: [employeeId], references: [id])
   periodStart DateTime
   periodEnd   DateTime
-  basicSalary Decimal   @default(0)
-  allowances  Decimal   @default(0)
-  deductions  Decimal   @default(0)
-  tax         Decimal   @default(0)
-  netSalary   Decimal   @default(0)
+  basicSalary Decimal        @default(0)
+  allowances  Decimal        @default(0)
+  deductions  Decimal        @default(0)
+  tax         Decimal        @default(0)
+  netSalary   Decimal        @default(0)
+  status      PayrollStatus  @default(DRAFT)
   paymentDate DateTime?
+  approvedBy  String?
+  approvedAt  DateTime?
+  rejectedBy  String?
+  rejectedAt  DateTime?
   notes       String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
 
   @@index([employeeId])
+  @@index([status])
+  @@index([employeeId, status])
 }
 
 model Lead {

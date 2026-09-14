@@ -8,12 +8,16 @@ import { PERMISSIONS_KEY } from '../common/decorators/permissions.decorator';
 describe('PayrollController', () => {
   function buildController() {
     const service = {
-      findAll: jest.fn(async () => ({ data: [], meta: { total: 0, page: 1, limit: 50, totalPages: 0 } })),
-      findOne: jest.fn(async () => ({ id: 'payroll-1', netSalary: 5000 })),
-      create: jest.fn(async () => ({ id: 'payroll-1', netSalary: 5000 })),
-      update: jest.fn(async () => ({ id: 'payroll-1', netSalary: 6000 })),
+      findAll: jest.fn(async () => ({ data: [], meta: { total: 0, page: 1, limit: 20, totalPages: 0 } })),
+      findOne: jest.fn(async () => ({ id: 'payroll-1', netSalary: 5000, status: 'DRAFT' })),
+      create: jest.fn(async () => ({ id: 'payroll-1', netSalary: 5000, status: 'DRAFT' })),
+      update: jest.fn(async () => ({ id: 'payroll-1', netSalary: 6000, status: 'DRAFT' })),
       remove: jest.fn(async () => ({ message: 'Payroll record deleted successfully' })),
       getStats: jest.fn(async () => ({ total: 0, totalNetSalary: 0, totalBasicSalary: 0, totalAllowances: 0, totalDeductions: 0, totalTax: 0, byMonth: [] })),
+      submit: jest.fn(async () => ({ id: 'payroll-1', status: 'PENDING' })),
+      approve: jest.fn(async () => ({ id: 'payroll-1', status: 'APPROVED' })),
+      reject: jest.fn(async () => ({ id: 'payroll-1', status: 'REJECTED' })),
+      markAsPaid: jest.fn(async () => ({ id: 'payroll-1', status: 'PAID' })),
     } as unknown as PayrollService;
 
     const controller = new PayrollController(service);
@@ -160,6 +164,83 @@ describe('PayrollController', () => {
     });
   });
 
+  describe('submit', () => {
+    it('should call service.submit with orgId and userId', async () => {
+      const { controller, service } = buildController();
+      await controller.submit(makeUser(), 'payroll-1' as never);
+      expect(service.submit).toHaveBeenCalledWith('org-1', 'user-1', 'payroll-1');
+    });
+
+    it('should throw ForbiddenException when user has no organization', async () => {
+      const { controller } = buildController();
+      await expect(controller.submit(makeUser({ organizationId: undefined }), 'payroll-1' as never)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should forward userId from CurrentUser', async () => {
+      const { controller, service } = buildController();
+      await controller.submit({ id: 'user-99', email: 'x@x.com', role: 'ADMIN', organizationId: 'org-1' }, 'payroll-1' as never);
+      expect(service.submit).toHaveBeenCalledWith('org-1', 'user-99', 'payroll-1');
+    });
+  });
+
+  describe('approve', () => {
+    it('should call service.approve with orgId and userId', async () => {
+      const { controller, service } = buildController();
+      await controller.approve(makeUser(), 'payroll-1' as never);
+      expect(service.approve).toHaveBeenCalledWith('org-1', 'user-1', 'payroll-1');
+    });
+
+    it('should throw ForbiddenException when user has no organization', async () => {
+      const { controller } = buildController();
+      await expect(controller.approve(makeUser({ organizationId: undefined }), 'payroll-1' as never)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should forward userId from CurrentUser', async () => {
+      const { controller, service } = buildController();
+      await controller.approve({ id: 'user-99', email: 'x@x.com', role: 'ADMIN', organizationId: 'org-1' }, 'payroll-1' as never);
+      expect(service.approve).toHaveBeenCalledWith('org-1', 'user-99', 'payroll-1');
+    });
+  });
+
+  describe('reject', () => {
+    it('should call service.reject with orgId and userId', async () => {
+      const { controller, service } = buildController();
+      await controller.reject(makeUser(), 'payroll-1' as never);
+      expect(service.reject).toHaveBeenCalledWith('org-1', 'user-1', 'payroll-1');
+    });
+
+    it('should throw ForbiddenException when user has no organization', async () => {
+      const { controller } = buildController();
+      await expect(controller.reject(makeUser({ organizationId: undefined }), 'payroll-1' as never)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should forward userId from CurrentUser', async () => {
+      const { controller, service } = buildController();
+      await controller.reject({ id: 'user-99', email: 'x@x.com', role: 'ADMIN', organizationId: 'org-1' }, 'payroll-1' as never);
+      expect(service.reject).toHaveBeenCalledWith('org-1', 'user-99', 'payroll-1');
+    });
+  });
+
+  describe('markAsPaid', () => {
+    it('should call service.markAsPaid with orgId, userId, and dto', async () => {
+      const { controller, service } = buildController();
+      const dto = { paymentDate: '2026-01-15' };
+      await controller.markAsPaid(makeUser(), 'payroll-1' as never, dto as never);
+      expect(service.markAsPaid).toHaveBeenCalledWith('org-1', 'user-1', 'payroll-1', dto);
+    });
+
+    it('should throw ForbiddenException when user has no organization', async () => {
+      const { controller } = buildController();
+      await expect(controller.markAsPaid(makeUser({ organizationId: undefined }), 'payroll-1' as never, {} as never)).rejects.toThrow(ForbiddenException);
+    });
+
+    it('should forward userId from CurrentUser', async () => {
+      const { controller, service } = buildController();
+      await controller.markAsPaid({ id: 'user-99', email: 'x@x.com', role: 'ADMIN', organizationId: 'org-1' }, 'payroll-1' as never, {} as never);
+      expect(service.markAsPaid).toHaveBeenCalledWith('org-1', 'user-99', 'payroll-1', {});
+    });
+  });
+
   describe('permission metadata', () => {
     const reflector = new Reflector();
 
@@ -198,6 +279,26 @@ describe('PayrollController', () => {
       expect(getPermissions(controller.remove)).toEqual(['payroll.delete']);
     });
 
+    it('POST /:id/submit should require payroll.update', () => {
+      const { controller } = buildController();
+      expect(getPermissions(controller.submit)).toEqual(['payroll.update']);
+    });
+
+    it('POST /:id/approve should require payroll.approve', () => {
+      const { controller } = buildController();
+      expect(getPermissions(controller.approve)).toEqual(['payroll.approve']);
+    });
+
+    it('POST /:id/reject should require payroll.reject', () => {
+      const { controller } = buildController();
+      expect(getPermissions(controller.reject)).toEqual(['payroll.reject']);
+    });
+
+    it('POST /:id/pay should require payroll.update', () => {
+      const { controller } = buildController();
+      expect(getPermissions(controller.markAsPaid)).toEqual(['payroll.update']);
+    });
+
     it('should not reference employees.* permissions', () => {
       const { controller } = buildController();
       const allHandlers = [
@@ -207,6 +308,10 @@ describe('PayrollController', () => {
         controller.create,
         controller.update,
         controller.remove,
+        controller.submit,
+        controller.approve,
+        controller.reject,
+        controller.markAsPaid,
       ];
       for (const handler of allHandlers) {
         const perms = getPermissions(handler);

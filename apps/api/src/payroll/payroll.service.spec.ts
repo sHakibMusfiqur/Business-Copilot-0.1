@@ -18,6 +18,7 @@ describe('PayrollService', () => {
         count: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
         delete: jest.fn(),
         aggregate: jest.fn(),
         groupBy: jest.fn(),
@@ -49,7 +50,7 @@ describe('PayrollService', () => {
   describe('findAll', () => {
     it('should return payroll records for organization', async () => {
       const records = [
-        { id: '1', employeeId: 'emp-1', periodStart: new Date(), periodEnd: new Date(), netSalary: 5000 },
+        { id: '1', employeeId: 'emp-1', periodStart: new Date(), periodEnd: new Date(), netSalary: 5000, status: 'DRAFT' },
       ];
       prisma.payroll.findMany.mockResolvedValue(records);
       prisma.payroll.count.mockResolvedValue(1);
@@ -63,8 +64,8 @@ describe('PayrollService', () => {
 
     it('should return { data, meta } shape matching frontend contract', async () => {
       const records = [
-        { id: '1', employeeId: 'emp-1', periodStart: new Date(), periodEnd: new Date(), netSalary: 5000 },
-        { id: '2', employeeId: 'emp-2', periodStart: new Date(), periodEnd: new Date(), netSalary: 3000 },
+        { id: '1', employeeId: 'emp-1', periodStart: new Date(), periodEnd: new Date(), netSalary: 5000, status: 'DRAFT' },
+        { id: '2', employeeId: 'emp-2', periodStart: new Date(), periodEnd: new Date(), netSalary: 3000, status: 'PENDING' },
       ];
       prisma.payroll.findMany.mockResolvedValue(records);
       prisma.payroll.count.mockResolvedValue(2);
@@ -81,7 +82,7 @@ describe('PayrollService', () => {
     it('should return updatedAt in each record', async () => {
       const now = new Date();
       const records = [
-        { id: '1', employeeId: 'emp-1', periodStart: now, periodEnd: now, netSalary: 5000, updatedAt: now },
+        { id: '1', employeeId: 'emp-1', periodStart: now, periodEnd: now, netSalary: 5000, status: 'DRAFT', updatedAt: now },
       ];
       prisma.payroll.findMany.mockResolvedValue(records);
       prisma.payroll.count.mockResolvedValue(1);
@@ -228,27 +229,24 @@ describe('PayrollService', () => {
       const callArgs = prisma.payroll.findMany.mock.calls[0][0];
       expect(callArgs.take).toBe(20);
     });
-  });
 
-  describe('findOne', () => {
-    it('should return payroll record by id', async () => {
-      const record = { id: '1', employeeId: 'emp-1', netSalary: 5000 };
-      prisma.payroll.findFirst.mockResolvedValue(record);
+    it('should include status in select', async () => {
+      prisma.payroll.findMany.mockResolvedValue([]);
+      prisma.payroll.count.mockResolvedValue(0);
 
-      const result = await service.findOne('org-1', '1');
+      await service.findAll('org-1');
 
-      expect(result).toEqual(record);
-    });
-
-    it('should throw NotFoundException if record not found', async () => {
-      prisma.payroll.findFirst.mockResolvedValue(null);
-
-      await expect(service.findOne('org-1', 'nonexistent')).rejects.toThrow(NotFoundException);
+      const callArgs = prisma.payroll.findMany.mock.calls[0][0];
+      expect(callArgs.select.status).toBe(true);
+      expect(callArgs.select.approvedBy).toBe(true);
+      expect(callArgs.select.approvedAt).toBe(true);
+      expect(callArgs.select.rejectedBy).toBe(true);
+      expect(callArgs.select.rejectedAt).toBe(true);
     });
   });
 
   describe('create', () => {
-    it('should create payroll record with correct net salary', async () => {
+    it('should create payroll record with correct net salary and DRAFT status', async () => {
       prisma.employee.findFirst.mockResolvedValue({ id: 'emp-1', firstName: 'John', lastName: 'Doe' });
       prisma.payroll.findFirst.mockResolvedValue(null);
       prisma.payroll.create.mockResolvedValue({
@@ -261,6 +259,7 @@ describe('PayrollService', () => {
         deductions: 200,
         tax: 300,
         netSalary: 5000,
+        status: 'DRAFT',
         createdAt: new Date(),
       });
 
@@ -275,6 +274,7 @@ describe('PayrollService', () => {
       });
 
       expect(result.netSalary).toBe(5000);
+      expect(result.status).toBe('DRAFT');
       expect(auditService.record).toHaveBeenCalled();
     });
 
@@ -325,9 +325,9 @@ describe('PayrollService', () => {
   });
 
   describe('update', () => {
-    it('should update payroll record', async () => {
+    it('should update DRAFT payroll record', async () => {
       prisma.payroll.findFirst
-        .mockResolvedValueOnce({ id: '1', employeeId: 'emp-1', basicSalary: 5000, allowances: 500, deductions: 200, tax: 300 })
+        .mockResolvedValueOnce({ id: '1', employeeId: 'emp-1', basicSalary: 5000, allowances: 500, deductions: 200, tax: 300, status: 'DRAFT' })
         .mockResolvedValueOnce(null);
       prisma.payroll.update.mockResolvedValue({
         id: '1',
@@ -337,6 +337,7 @@ describe('PayrollService', () => {
         deductions: 200,
         tax: 300,
         netSalary: 6000,
+        status: 'DRAFT',
         updatedAt: new Date(),
       });
 
@@ -347,7 +348,7 @@ describe('PayrollService', () => {
     });
 
     it('should recalculate net salary on update', async () => {
-      prisma.payroll.findFirst.mockResolvedValue({ id: '1', employeeId: 'emp-1', basicSalary: 5000, allowances: 500, deductions: 200, tax: 300 });
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', employeeId: 'emp-1', basicSalary: 5000, allowances: 500, deductions: 200, tax: 300, status: 'DRAFT' });
       prisma.payroll.update.mockImplementation(async (args) => ({
         id: '1',
         ...args.data,
@@ -364,15 +365,40 @@ describe('PayrollService', () => {
 
       await expect(service.update('org-1', 'actor-1', 'nonexistent', { basicSalary: 6000 })).rejects.toThrow(NotFoundException);
     });
+
+    it('should throw BadRequestException when updating PENDING payroll', async () => {
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', employeeId: 'emp-1', basicSalary: 5000, allowances: 500, deductions: 200, tax: 300, status: 'PENDING' });
+
+      await expect(service.update('org-1', 'actor-1', '1', { basicSalary: 6000 })).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when updating APPROVED payroll', async () => {
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', employeeId: 'emp-1', basicSalary: 5000, allowances: 500, deductions: 200, tax: 300, status: 'APPROVED' });
+
+      await expect(service.update('org-1', 'actor-1', '1', { basicSalary: 6000 })).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when updating REJECTED payroll', async () => {
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', employeeId: 'emp-1', basicSalary: 5000, allowances: 500, deductions: 200, tax: 300, status: 'REJECTED' });
+
+      await expect(service.update('org-1', 'actor-1', '1', { basicSalary: 6000 })).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when updating PAID payroll', async () => {
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', employeeId: 'emp-1', basicSalary: 5000, allowances: 500, deductions: 200, tax: 300, status: 'PAID' });
+
+      await expect(service.update('org-1', 'actor-1', '1', { basicSalary: 6000 })).rejects.toThrow(BadRequestException);
+    });
   });
 
   describe('remove', () => {
-    it('should delete payroll record', async () => {
+    it('should delete DRAFT payroll record', async () => {
       prisma.payroll.findFirst.mockResolvedValue({
         id: '1',
         employeeId: 'emp-1',
         periodStart: new Date('2026-01-01'),
         periodEnd: new Date('2026-01-31'),
+        status: 'DRAFT',
       });
       prisma.payroll.delete.mockResolvedValue({});
 
@@ -386,6 +412,285 @@ describe('PayrollService', () => {
       prisma.payroll.findFirst.mockResolvedValue(null);
 
       await expect(service.remove('org-1', 'actor-1', 'nonexistent')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when deleting PENDING payroll', async () => {
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', status: 'PENDING' });
+
+      await expect(service.remove('org-1', 'actor-1', '1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when deleting APPROVED payroll', async () => {
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', status: 'APPROVED' });
+
+      await expect(service.remove('org-1', 'actor-1', '1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when deleting REJECTED payroll', async () => {
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', status: 'REJECTED' });
+
+      await expect(service.remove('org-1', 'actor-1', '1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when deleting PAID payroll', async () => {
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', status: 'PAID' });
+
+      await expect(service.remove('org-1', 'actor-1', '1')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('submit', () => {
+    it('should transition DRAFT to PENDING', async () => {
+      prisma.payroll.findFirst
+        .mockResolvedValueOnce({ id: '1', status: 'DRAFT' })
+        .mockResolvedValueOnce({ id: '1', status: 'PENDING', employee: { id: 'emp-1' } });
+      prisma.payroll.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.submit('org-1', 'actor-1', '1');
+
+      expect(prisma.payroll.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'PENDING' }) }),
+      );
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'PAYROLL_SUBMITTED' }),
+      );
+    });
+
+    it('should throw NotFoundException if record not found', async () => {
+      prisma.payroll.findFirst.mockResolvedValue(null);
+
+      await expect(service.submit('org-1', 'actor-1', 'nonexistent')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when submitting PENDING payroll', async () => {
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', status: 'PENDING' });
+
+      await expect(service.submit('org-1', 'actor-1', '1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when submitting APPROVED payroll', async () => {
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', status: 'APPROVED' });
+
+      await expect(service.submit('org-1', 'actor-1', '1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when concurrent modification detected', async () => {
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', status: 'DRAFT' });
+      prisma.payroll.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.submit('org-1', 'actor-1', '1')).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('approve', () => {
+    it('should transition PENDING to APPROVED with approvedBy and approvedAt', async () => {
+      prisma.payroll.findFirst
+        .mockResolvedValueOnce({ id: '1', status: 'PENDING' })
+        .mockResolvedValueOnce({ id: '1', status: 'APPROVED', approvedBy: 'actor-1', employee: { id: 'emp-1' } });
+      prisma.payroll.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.approve('org-1', 'actor-1', '1');
+
+      expect(prisma.payroll.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'APPROVED',
+            approvedBy: 'actor-1',
+            approvedAt: expect.any(Date),
+          }),
+        }),
+      );
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'PAYROLL_APPROVED' }),
+      );
+    });
+
+    it('should throw NotFoundException if record not found', async () => {
+      prisma.payroll.findFirst.mockResolvedValue(null);
+
+      await expect(service.approve('org-1', 'actor-1', 'nonexistent')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when approving DRAFT payroll', async () => {
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', status: 'DRAFT' });
+
+      await expect(service.approve('org-1', 'actor-1', '1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when approving APPROVED payroll', async () => {
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', status: 'APPROVED' });
+
+      await expect(service.approve('org-1', 'actor-1', '1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when approving REJECTED payroll', async () => {
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', status: 'REJECTED' });
+
+      await expect(service.approve('org-1', 'actor-1', '1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when approving PAID payroll', async () => {
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', status: 'PAID' });
+
+      await expect(service.approve('org-1', 'actor-1', '1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should not modify salary fields during approval', async () => {
+      prisma.payroll.findFirst
+        .mockResolvedValueOnce({ id: '1', status: 'PENDING' })
+        .mockResolvedValueOnce({ id: '1', status: 'APPROVED', basicSalary: 5000, netSalary: 5000, employee: { id: 'emp-1' } });
+      prisma.payroll.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.approve('org-1', 'actor-1', '1');
+
+      const updateCall = prisma.payroll.updateMany.mock.calls[0][0];
+      expect(updateCall.data).not.toHaveProperty('basicSalary');
+      expect(updateCall.data).not.toHaveProperty('netSalary');
+    });
+  });
+
+  describe('reject', () => {
+    it('should transition PENDING to REJECTED with rejectedBy and rejectedAt', async () => {
+      prisma.payroll.findFirst
+        .mockResolvedValueOnce({ id: '1', status: 'PENDING' })
+        .mockResolvedValueOnce({ id: '1', status: 'REJECTED', rejectedBy: 'actor-1', employee: { id: 'emp-1' } });
+      prisma.payroll.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.reject('org-1', 'actor-1', '1');
+
+      expect(prisma.payroll.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'REJECTED',
+            rejectedBy: 'actor-1',
+            rejectedAt: expect.any(Date),
+          }),
+        }),
+      );
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'PAYROLL_REJECTED' }),
+      );
+    });
+
+    it('should throw NotFoundException if record not found', async () => {
+      prisma.payroll.findFirst.mockResolvedValue(null);
+
+      await expect(service.reject('org-1', 'actor-1', 'nonexistent')).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when rejecting DRAFT payroll', async () => {
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', status: 'DRAFT' });
+
+      await expect(service.reject('org-1', 'actor-1', '1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when rejecting APPROVED payroll', async () => {
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', status: 'APPROVED' });
+
+      await expect(service.reject('org-1', 'actor-1', '1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when rejecting REJECTED payroll', async () => {
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', status: 'REJECTED' });
+
+      await expect(service.reject('org-1', 'actor-1', '1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when rejecting PAID payroll', async () => {
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', status: 'PAID' });
+
+      await expect(service.reject('org-1', 'actor-1', '1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('should not modify salary fields during rejection', async () => {
+      prisma.payroll.findFirst
+        .mockResolvedValueOnce({ id: '1', status: 'PENDING' })
+        .mockResolvedValueOnce({ id: '1', status: 'REJECTED', basicSalary: 5000, netSalary: 5000, employee: { id: 'emp-1' } });
+      prisma.payroll.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.reject('org-1', 'actor-1', '1');
+
+      const updateCall = prisma.payroll.updateMany.mock.calls[0][0];
+      expect(updateCall.data).not.toHaveProperty('basicSalary');
+      expect(updateCall.data).not.toHaveProperty('netSalary');
+    });
+  });
+
+  describe('markAsPaid', () => {
+    it('should transition APPROVED to PAID with paymentDate', async () => {
+      prisma.payroll.findFirst
+        .mockResolvedValueOnce({ id: '1', status: 'APPROVED' })
+        .mockResolvedValueOnce({ id: '1', status: 'PAID', paymentDate: new Date('2026-01-15'), employee: { id: 'emp-1' } });
+      prisma.payroll.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.markAsPaid('org-1', 'actor-1', '1', { paymentDate: '2026-01-15' });
+
+      expect(prisma.payroll.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'PAID',
+            paymentDate: expect.any(Date),
+          }),
+        }),
+      );
+      expect(auditService.record).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'PAYROLL_PAID' }),
+      );
+    });
+
+    it('should default paymentDate to today when not provided', async () => {
+      prisma.payroll.findFirst
+        .mockResolvedValueOnce({ id: '1', status: 'APPROVED' })
+        .mockResolvedValueOnce({ id: '1', status: 'PAID', paymentDate: new Date(), employee: { id: 'emp-1' } });
+      prisma.payroll.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.markAsPaid('org-1', 'actor-1', '1', {});
+
+      const updateCall = prisma.payroll.updateMany.mock.calls[0][0];
+      expect(updateCall.data.paymentDate).toBeInstanceOf(Date);
+    });
+
+    it('should throw NotFoundException if record not found', async () => {
+      prisma.payroll.findFirst.mockResolvedValue(null);
+
+      await expect(service.markAsPaid('org-1', 'actor-1', 'nonexistent', {})).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when marking DRAFT as paid', async () => {
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', status: 'DRAFT' });
+
+      await expect(service.markAsPaid('org-1', 'actor-1', '1', {})).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when marking PENDING as paid', async () => {
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', status: 'PENDING' });
+
+      await expect(service.markAsPaid('org-1', 'actor-1', '1', {})).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when marking REJECTED as paid', async () => {
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', status: 'REJECTED' });
+
+      await expect(service.markAsPaid('org-1', 'actor-1', '1', {})).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when marking PAID as paid', async () => {
+      prisma.payroll.findFirst.mockResolvedValue({ id: '1', status: 'PAID' });
+
+      await expect(service.markAsPaid('org-1', 'actor-1', '1', {})).rejects.toThrow(BadRequestException);
+    });
+
+    it('should not modify salary fields during pay', async () => {
+      prisma.payroll.findFirst
+        .mockResolvedValueOnce({ id: '1', status: 'APPROVED' })
+        .mockResolvedValueOnce({ id: '1', status: 'PAID', basicSalary: 5000, netSalary: 5000, employee: { id: 'emp-1' } });
+      prisma.payroll.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.markAsPaid('org-1', 'actor-1', '1', {});
+
+      const updateCall = prisma.payroll.updateMany.mock.calls[0][0];
+      expect(updateCall.data).not.toHaveProperty('basicSalary');
+      expect(updateCall.data).not.toHaveProperty('netSalary');
     });
   });
 

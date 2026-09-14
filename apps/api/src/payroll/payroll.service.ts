@@ -4,7 +4,48 @@ import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
 
 import type { CreatePayrollDto, UpdatePayrollDto } from './dto/create-payroll.dto';
+import type { MarkAsPaidDto } from './dto/mark-as-paid.dto';
 import type { QueryPayrollDto } from './dto/query-payroll.dto';
+
+const VALID_TRANSITIONS: Record<string, string[]> = {
+  DRAFT: ['PENDING'],
+  PENDING: ['APPROVED', 'REJECTED'],
+  APPROVED: ['PAID'],
+  REJECTED: [],
+  PAID: [],
+};
+
+const SELECT_FIELDS = {
+  id: true,
+  employeeId: true,
+  periodStart: true,
+  periodEnd: true,
+  basicSalary: true,
+  allowances: true,
+  deductions: true,
+  tax: true,
+  netSalary: true,
+  status: true,
+  paymentDate: true,
+  approvedBy: true,
+  approvedAt: true,
+  rejectedBy: true,
+  rejectedAt: true,
+  notes: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
+const EMPLOYEE_SELECT = {
+  id: true,
+  employeeCode: true,
+  firstName: true,
+  lastName: true,
+  email: true,
+  department: {
+    select: { id: true, name: true, code: true },
+  },
+} as const;
 
 @Injectable()
 export class PayrollService {
@@ -56,31 +97,8 @@ export class PayrollService {
         skip,
         take: limit,
         select: {
-          id: true,
-          employeeId: true,
-          periodStart: true,
-          periodEnd: true,
-          basicSalary: true,
-          allowances: true,
-          deductions: true,
-          tax: true,
-          netSalary: true,
-          paymentDate: true,
-          notes: true,
-          createdAt: true,
-          updatedAt: true,
-          employee: {
-            select: {
-              id: true,
-              employeeCode: true,
-              firstName: true,
-              lastName: true,
-              email: true,
-              department: {
-                select: { id: true, name: true, code: true },
-              },
-            },
-          },
+          ...SELECT_FIELDS,
+          employee: { select: EMPLOYEE_SELECT },
         },
       }),
       this.prisma.payroll.count({ where }),
@@ -96,31 +114,12 @@ export class PayrollService {
     const payroll = await this.prisma.payroll.findFirst({
       where: { id: payrollId, employee: { organizationId: orgId } },
       select: {
-        id: true,
-        employeeId: true,
-        periodStart: true,
-        periodEnd: true,
-        basicSalary: true,
-        allowances: true,
-        deductions: true,
-        tax: true,
-        netSalary: true,
-        paymentDate: true,
-        notes: true,
-        createdAt: true,
-        updatedAt: true,
+        ...SELECT_FIELDS,
         employee: {
           select: {
-            id: true,
-            employeeCode: true,
-            firstName: true,
-            lastName: true,
-            email: true,
+            ...EMPLOYEE_SELECT,
             position: true,
             salary: true,
-            department: {
-              select: { id: true, name: true, code: true },
-            },
           },
         },
       },
@@ -181,21 +180,12 @@ export class PayrollService {
         deductions: dto.deductions ?? 0,
         tax: dto.tax ?? 0,
         netSalary,
+        status: 'DRAFT',
         paymentDate: dto.paymentDate ? new Date(dto.paymentDate) : null,
         notes: dto.notes?.trim() ?? null,
       },
       select: {
-        id: true,
-        employeeId: true,
-        periodStart: true,
-        periodEnd: true,
-        basicSalary: true,
-        allowances: true,
-        deductions: true,
-        tax: true,
-        netSalary: true,
-        paymentDate: true,
-        createdAt: true,
+        ...SELECT_FIELDS,
       },
     });
 
@@ -219,11 +209,15 @@ export class PayrollService {
   async update(orgId: string, actorId: string, payrollId: string, dto: UpdatePayrollDto) {
     const payroll = await this.prisma.payroll.findFirst({
       where: { id: payrollId, employee: { organizationId: orgId } },
-      select: { id: true, employeeId: true, periodStart: true, periodEnd: true, basicSalary: true, allowances: true, deductions: true, tax: true },
+      select: { id: true, employeeId: true, periodStart: true, periodEnd: true, basicSalary: true, allowances: true, deductions: true, tax: true, status: true },
     });
 
     if (!payroll) {
       throw new NotFoundException('Payroll record not found');
+    }
+
+    if (payroll.status !== 'DRAFT') {
+      throw new BadRequestException(`Cannot edit payroll in ${payroll.status} status. Only DRAFT payroll can be edited.`);
     }
 
     const periodStart = dto.periodStart ? new Date(dto.periodStart) : payroll.periodStart;
@@ -275,17 +269,7 @@ export class PayrollService {
         ...(dto.notes !== undefined && { notes: dto.notes?.trim() ?? null }),
       },
       select: {
-        id: true,
-        employeeId: true,
-        periodStart: true,
-        periodEnd: true,
-        basicSalary: true,
-        allowances: true,
-        deductions: true,
-        tax: true,
-        netSalary: true,
-        paymentDate: true,
-        updatedAt: true,
+        ...SELECT_FIELDS,
       },
     });
 
@@ -305,11 +289,15 @@ export class PayrollService {
   async remove(orgId: string, actorId: string, payrollId: string) {
     const payroll = await this.prisma.payroll.findFirst({
       where: { id: payrollId, employee: { organizationId: orgId } },
-      select: { id: true, employeeId: true, periodStart: true, periodEnd: true },
+      select: { id: true, employeeId: true, periodStart: true, periodEnd: true, status: true },
     });
 
     if (!payroll) {
       throw new NotFoundException('Payroll record not found');
+    }
+
+    if (payroll.status !== 'DRAFT') {
+      throw new BadRequestException(`Cannot delete payroll in ${payroll.status} status. Only DRAFT payroll can be deleted.`);
     }
 
     await this.prisma.payroll.delete({ where: { id: payrollId, employee: { organizationId: orgId } } });
@@ -321,10 +309,197 @@ export class PayrollService {
       entity: 'Payroll',
       entityId: payrollId,
       status: 'SUCCESS',
-      metadata: { period: `${payroll.periodStart} to ${payroll.periodEnd}` },
+      metadata: { period: `${payroll.periodStart} to ${payroll.periodEnd}`, previousStatus: payroll.status },
     });
 
     return { message: 'Payroll record deleted successfully' };
+  }
+
+  async submit(orgId: string, actorId: string, payrollId: string) {
+    return this.transitionStatus(orgId, actorId, payrollId, 'PENDING', 'PAYROLL_SUBMITTED');
+  }
+
+  async approve(orgId: string, actorId: string, payrollId: string) {
+    const payroll = await this.prisma.payroll.findFirst({
+      where: { id: payrollId, employee: { organizationId: orgId } },
+      select: { id: true, status: true },
+    });
+
+    if (!payroll) {
+      throw new NotFoundException('Payroll record not found');
+    }
+
+    if (payroll.status !== 'PENDING') {
+      throw new BadRequestException(`Cannot approve payroll in ${payroll.status} status. Only PENDING payroll can be approved.`);
+    }
+
+    const result = await this.prisma.payroll.updateMany({
+      where: {
+        id: payrollId,
+        employee: { organizationId: orgId },
+        status: 'PENDING',
+      },
+      data: {
+        status: 'APPROVED',
+        approvedBy: actorId,
+        approvedAt: new Date(),
+      },
+    });
+
+    if (result.count === 0) {
+      throw new BadRequestException('Concurrent modification detected. Please retry.');
+    }
+
+    await this.auditService.record({
+      userId: actorId,
+      organizationId: orgId,
+      action: 'PAYROLL_APPROVED',
+      entity: 'Payroll',
+      entityId: payrollId,
+      status: 'SUCCESS',
+      metadata: { previousStatus: 'PENDING', newStatus: 'APPROVED' },
+    });
+
+    return this.findOne(orgId, payrollId);
+  }
+
+  async reject(orgId: string, actorId: string, payrollId: string) {
+    const payroll = await this.prisma.payroll.findFirst({
+      where: { id: payrollId, employee: { organizationId: orgId } },
+      select: { id: true, status: true },
+    });
+
+    if (!payroll) {
+      throw new NotFoundException('Payroll record not found');
+    }
+
+    if (payroll.status !== 'PENDING') {
+      throw new BadRequestException(`Cannot reject payroll in ${payroll.status} status. Only PENDING payroll can be rejected.`);
+    }
+
+    const result = await this.prisma.payroll.updateMany({
+      where: {
+        id: payrollId,
+        employee: { organizationId: orgId },
+        status: 'PENDING',
+      },
+      data: {
+        status: 'REJECTED',
+        rejectedBy: actorId,
+        rejectedAt: new Date(),
+      },
+    });
+
+    if (result.count === 0) {
+      throw new BadRequestException('Concurrent modification detected. Please retry.');
+    }
+
+    await this.auditService.record({
+      userId: actorId,
+      organizationId: orgId,
+      action: 'PAYROLL_REJECTED',
+      entity: 'Payroll',
+      entityId: payrollId,
+      status: 'SUCCESS',
+      metadata: { previousStatus: 'PENDING', newStatus: 'REJECTED' },
+    });
+
+    return this.findOne(orgId, payrollId);
+  }
+
+  async markAsPaid(orgId: string, actorId: string, payrollId: string, dto: MarkAsPaidDto) {
+    const payroll = await this.prisma.payroll.findFirst({
+      where: { id: payrollId, employee: { organizationId: orgId } },
+      select: { id: true, status: true },
+    });
+
+    if (!payroll) {
+      throw new NotFoundException('Payroll record not found');
+    }
+
+    if (payroll.status !== 'APPROVED') {
+      throw new BadRequestException(`Cannot mark payroll as paid in ${payroll.status} status. Only APPROVED payroll can be marked as paid.`);
+    }
+
+    const paymentDate = dto.paymentDate ? new Date(dto.paymentDate) : new Date();
+
+    const result = await this.prisma.payroll.updateMany({
+      where: {
+        id: payrollId,
+        employee: { organizationId: orgId },
+        status: 'APPROVED',
+      },
+      data: {
+        status: 'PAID',
+        paymentDate,
+        ...(dto.notes !== undefined && { notes: dto.notes?.trim() ?? null }),
+      },
+    });
+
+    if (result.count === 0) {
+      throw new BadRequestException('Concurrent modification detected. Please retry.');
+    }
+
+    await this.auditService.record({
+      userId: actorId,
+      organizationId: orgId,
+      action: 'PAYROLL_PAID',
+      entity: 'Payroll',
+      entityId: payrollId,
+      status: 'SUCCESS',
+      metadata: { previousStatus: 'APPROVED', newStatus: 'PAID', paymentDate: paymentDate.toISOString() },
+    });
+
+    return this.findOne(orgId, payrollId);
+  }
+
+  private async transitionStatus(
+    orgId: string,
+    actorId: string,
+    payrollId: string,
+    targetStatus: string,
+    auditAction: string,
+  ) {
+    const payroll = await this.prisma.payroll.findFirst({
+      where: { id: payrollId, employee: { organizationId: orgId } },
+      select: { id: true, status: true },
+    });
+
+    if (!payroll) {
+      throw new NotFoundException('Payroll record not found');
+    }
+
+    const allowed = VALID_TRANSITIONS[payroll.status] ?? [];
+    if (!allowed.includes(targetStatus)) {
+      throw new BadRequestException(
+        `Cannot transition from ${payroll.status} to ${targetStatus}`,
+      );
+    }
+
+    const result = await this.prisma.payroll.updateMany({
+      where: {
+        id: payrollId,
+        employee: { organizationId: orgId },
+        status: payroll.status,
+      },
+      data: { status: targetStatus as never },
+    });
+
+    if (result.count === 0) {
+      throw new BadRequestException('Concurrent modification detected. Please retry.');
+    }
+
+    await this.auditService.record({
+      userId: actorId,
+      organizationId: orgId,
+      action: auditAction,
+      entity: 'Payroll',
+      entityId: payrollId,
+      status: 'SUCCESS',
+      metadata: { previousStatus: payroll.status, newStatus: targetStatus },
+    });
+
+    return this.findOne(orgId, payrollId);
   }
 
   async getStats(orgId: string) {

@@ -23,6 +23,7 @@ import { Permissions } from '../common/decorators/permissions.decorator';
 
 import { PayrollService } from './payroll.service';
 import { CreatePayrollDto, UpdatePayrollDto } from './dto/create-payroll.dto';
+import { MarkAsPaidDto } from './dto/mark-as-paid.dto';
 import { QueryPayrollDto } from './dto/query-payroll.dto';
 
 @ApiTags('Payroll')
@@ -120,5 +121,66 @@ export class PayrollController {
   ) {
     const orgId = this.requireOrg(user);
     return this.payrollService.remove(orgId, user.id, payrollId);
+  }
+
+  @Post(':id/submit')
+  @UseGuards(PermissionGuard)
+  @Permissions(['payroll.update'])
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Submit payroll for approval' })
+  @ApiOkResponse({ description: 'Payroll submitted' })
+  async submit(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id', ParseCuidPipe) payrollId: string,
+  ) {
+    const orgId = this.requireOrg(user);
+    return this.payrollService.submit(orgId, user.id, payrollId);
+  }
+
+  @Post(':id/approve')
+  @UseGuards(PermissionGuard)
+  @Permissions(['payroll.approve'])
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Approve pending payroll' })
+  @ApiOkResponse({ description: 'Payroll approved' })
+  async approve(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id', ParseCuidPipe) payrollId: string,
+  ) {
+    const orgId = this.requireOrg(user);
+    return this.payrollService.approve(orgId, user.id, payrollId);
+  }
+
+  @Post(':id/reject')
+  @UseGuards(PermissionGuard)
+  @Permissions(['payroll.reject'])
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Reject pending payroll' })
+  @ApiOkResponse({ description: 'Payroll rejected' })
+  async reject(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id', ParseCuidPipe) payrollId: string,
+  ) {
+    const orgId = this.requireOrg(user);
+    return this.payrollService.reject(orgId, user.id, payrollId);
+  }
+
+  @Post(':id/pay')
+  @UseGuards(PermissionGuard)
+  @Permissions(['payroll.update'])
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Mark approved payroll as paid' })
+  @ApiOkResponse({ description: 'Payroll marked as paid' })
+  async markAsPaid(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id', ParseCuidPipe) payrollId: string,
+    @Body() dto: MarkAsPaidDto,
+  ) {
+    const orgId = this.requireOrg(user);
+    return this.payrollService.markAsPaid(orgId, user.id, payrollId, dto);
   }
 }
