@@ -52,6 +52,7 @@ describe('Permission Isolation', () => {
       expect(perms).toContain('invoices.read');
       expect(perms).toContain('payments.read');
       expect(perms).toContain('accounting.read');
+      expect(perms).toContain('accounting.accounts.read');
       expect(perms).toContain('reports.finance');
       expect(perms).toContain('purchase.read');
     });
@@ -119,6 +120,7 @@ describe('Permission Isolation', () => {
       expect(buildQueryPlan(['monthlyRevenue'], ['invoices.read']).finance).toBe(true);
       expect(buildQueryPlan(['monthlyRevenue'], ['payments.read']).finance).toBe(true);
       expect(buildQueryPlan(['monthlyRevenue'], ['accounting.read']).finance).toBe(true);
+      expect(buildQueryPlan(['monthlyRevenue'], ['accounting.accounts.read']).finance).toBe(true);
       expect(buildQueryPlan(['monthlyRevenue'], ['reports.finance']).finance).toBe(true);
       expect(buildQueryPlan(['monthlyRevenue'], ['purchase.read']).finance).toBe(true);
     });

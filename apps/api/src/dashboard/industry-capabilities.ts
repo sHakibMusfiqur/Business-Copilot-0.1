@@ -53,8 +53,8 @@ export const WIDGET_SOURCES: Record<string, WidgetSourceDef> = {
   // ─── Sales & Orders ───
   todaySales:         { source: 'todaySales',         capability: 'sales',     permission: ['sales.read', 'invoices.read'],          supported: true },
   todayOrders:        { source: 'todayOrders',        capability: 'sales',     permission: ['sales.read'],                           supported: true },
-  todayRevenue:       { source: 'todayRevenue',       capability: 'sales',     permission: ['invoices.read', 'accounting.read'],      supported: true },
-  todayExpenses:      { source: 'todayExpenses',      capability: 'purchasing', permission: ['purchase.read', 'accounting.read'],     supported: true },
+  todayRevenue:       { source: 'todayRevenue',       capability: 'sales',     permission: ['invoices.read', 'accounting.read', 'accounting.accounts.read'], supported: true },
+  todayExpenses:      { source: 'todayExpenses',      capability: 'purchasing', permission: ['purchase.read', 'accounting.read', 'accounting.accounts.read'], supported: true },
   pendingOrders:      { source: 'pendingOrders',      capability: 'sales',     permission: ['sales.read'],                           supported: true },
   completedOrders:    { source: 'completedOrders',    capability: 'sales',     permission: ['sales.read'],                           supported: true },
   cancelledOrders:    { source: 'cancelledOrders',    capability: 'sales',     permission: ['sales.read'],                           supported: true },
@@ -76,9 +76,9 @@ export const WIDGET_SOURCES: Record<string, WidgetSourceDef> = {
   monthlyPayroll:     { source: 'monthlyPayroll',     capability: 'payroll',   permission: ['payroll.read'],                         supported: true },
 
   // ─── Finance ───
-  monthlyRevenue:     { source: 'monthlyRevenue',     capability: 'accounting', permission: ['invoices.read', 'accounting.read'],     supported: true },
-  revenue:            { source: 'revenue',            capability: 'accounting', permission: ['invoices.read', 'accounting.read'],     supported: true },
-  cashFlow:           { source: 'cashFlow',           capability: 'accounting', permission: ['invoices.read', 'accounting.read'],     supported: true },
+  monthlyRevenue:     { source: 'monthlyRevenue',     capability: 'accounting', permission: ['invoices.read', 'accounting.read', 'accounting.accounts.read'], supported: true },
+  revenue:            { source: 'revenue',            capability: 'accounting', permission: ['invoices.read', 'accounting.read', 'accounting.accounts.read'], supported: true },
+  cashFlow:           { source: 'cashFlow',           capability: 'accounting', permission: ['invoices.read', 'accounting.read', 'accounting.accounts.read'], supported: true },
 
   // ─── System ───
   activity:           { source: 'activity',           capability: 'audit',     permission: ['audit.read'],                           supported: true },

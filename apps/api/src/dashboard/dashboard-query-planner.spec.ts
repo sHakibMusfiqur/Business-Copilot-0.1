@@ -19,7 +19,7 @@ const ALL_PERMISSIONS = [
 const SALES_ONLY = ['sales.read', 'invoices.read'];
 const SALES_ONLY_NO_INVOICES = ['sales.read'];
 const INVENTORY_ONLY = ['inventory.read'];
-const FINANCE_ONLY = ['invoices.read', 'payments.read', 'accounting.read', 'reports.finance'];
+const FINANCE_ONLY = ['invoices.read', 'payments.read', 'accounting.read', 'accounting.accounts.read', 'reports.finance'];
 const PURCHASE_ONLY = ['purchase.read'];
 const EMPLOYEE_ONLY = ['employees.read', 'payroll.read'];
 const AUDIT_ONLY = ['audit.read'];
@@ -178,6 +178,11 @@ describe('buildQueryPlan', () => {
       expect(plan.finance).toBe(true);
     });
 
+    it('allows finance group when user has only accounting.accounts.read', () => {
+      const plan = buildQueryPlan(['monthlyRevenue'], ['accounting.accounts.read']);
+      expect(plan.finance).toBe(true);
+    });
+
     it('blocks inventory group when user lacks inventory.read', () => {
       const plan = buildQueryPlan(['lowStock', 'inventoryValue'], SALES_ONLY);
       expect(plan.inventory).toBe(false);
@@ -271,6 +276,7 @@ describe('getGroupPermissions', () => {
     expect(perms).toContain('purchase.read');
     expect(perms).toContain('invoices.read');
     expect(perms).toContain('accounting.read');
+    expect(perms).toContain('accounting.accounts.read');
   });
 
   it('sales group includes invoices.read', () => {

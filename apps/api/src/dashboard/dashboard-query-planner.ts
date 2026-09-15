@@ -87,7 +87,7 @@ const GROUP_PERMISSIONS: Record<QueryGroup, string[]> = {
   employees: ['employees.read'],
   leaves:    ['employees.read'],
   payroll:   ['payroll.read'],
-  finance:   ['invoices.read', 'payments.read', 'accounting.read', 'reports.finance', 'purchase.read'],
+  finance:   ['invoices.read', 'payments.read', 'accounting.read', 'accounting.accounts.read', 'reports.finance', 'purchase.read'],
   audit:     ['audit.read'],
   people:    ['users.read'],
 };

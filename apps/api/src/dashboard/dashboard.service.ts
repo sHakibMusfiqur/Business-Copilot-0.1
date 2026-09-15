@@ -93,12 +93,8 @@ export interface DashboardOverview {
   aiInsights: DashboardAiInsight[];
 }
 
-/**
- * Permissions that grant access to the finance view of the dashboard. Finance
- * aggregates (revenue / expenses / net profit) are only computed for users that
- * hold any of these.
- */
-const FINANCE_PERMISSIONS = ['invoices.read', 'payments.read', 'accounting.read', 'reports.finance'];
+
+const FINANCE_PERMISSIONS = ['invoices.read', 'payments.read', 'accounting.read', 'accounting.accounts.read', 'reports.finance'];
 
 const ACTIVITY_ENTITY_PERMISSIONS: Array<[RegExp, string[]]> = [
   [/invoice|payment|account|journal|receivable|payable/i, FINANCE_PERMISSIONS],
@@ -113,10 +109,7 @@ const ACTIVITY_ENTITY_PERMISSIONS: Array<[RegExp, string[]]> = [
 
 // ─── Per-Group Cached Data ─────────────────────────────────────────────────────
 
-/**
- * Partial data structure for a single cached group.
- * Each group stores only the fields it owns.
- */
+
 interface CachedGroupData {
   // Sales group
   totalSalesOrders?: number;
@@ -230,11 +223,7 @@ export class DashboardService {
 
   // ─── Per-Group Cache + Fetch ────────────────────────────────────────────────
 
-  /**
-   * Fetch data for each active group, using cache where possible.
-   * Only groups that are both active in the plan AND authorized by permissions are fetched.
-   * Returns a merged CachedGroupData with all fetched fields.
-   */
+  
   private async fetchActiveGroups(
     orgId: string,
     permissions: string[],
@@ -255,7 +244,7 @@ export class DashboardService {
       employees: ['employees.read'],
       leaves:    ['employees.read'],
       payroll:   ['payroll.read'],
-      finance:   ['invoices.read', 'payments.read', 'accounting.read', 'reports.finance', 'purchase.read'],
+      finance:   ['invoices.read', 'payments.read', 'accounting.read', 'accounting.accounts.read', 'reports.finance', 'purchase.read'],
       audit:     ['audit.read'],
       people:    ['users.read'],
     };
@@ -298,10 +287,7 @@ export class DashboardService {
     return result;
   }
 
-  /**
-   * Fetch data for a single query group from the database.
-   * Returns only the fields owned by that group.
-   */
+  
   private async fetchGroupData(orgId: string, group: QueryGroup): Promise<CachedGroupData> {
     switch (group) {
       case 'sales':     return this.fetchSalesGroup(orgId);
@@ -540,14 +526,7 @@ export class DashboardService {
 
   // ─── AI Insights (Permission-Gated) ─────────────────────────────────────────
 
-  /**
-   * Build AI insights. Each insight is only generated if:
-   * 1. The relevant widget ID is in the dashboard config, AND
-   * 2. The user has permission to see the underlying data (field was queried).
-   *
-   * Fields that were not queried (group inactive) default to 0, so insights
-   * that check `> 0` naturally won't fire for unauthorized data.
-   */
+ 
   private buildAiInsights(
     statistics: DashboardStatistics,
     config: ResolvedDashboardConfig,
@@ -648,10 +627,7 @@ export class DashboardService {
     }
   }
 
-  /**
-   * Get organization metadata. Accepts pre-resolved industry to avoid
-   * duplicate OrganizationSettings query (DashboardConfigService already read it).
-   */
+  
   private async getOrganization(orgId: string, industry: IndustryKey | null): Promise<DashboardOrganization> {
     const org = await this.prisma.organization.findUnique({
       where: { id: orgId },

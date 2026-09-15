@@ -54,7 +54,7 @@ export type IndustryKey =
   | 'it-services'
   | 'general';
 
-const FINANCE_PERMS = ['invoices.read', 'payments.read', 'accounting.read', 'reports.finance'];
+const FINANCE_PERMS = ['invoices.read', 'payments.read', 'accounting.read', 'accounting.accounts.read', 'reports.finance'];
 const SALES_PERMS = ['sales.read', 'invoices.read'];
 const INVENTORY_PERMS = ['inventory.read'];
 const EMPLOYEE_PERMS = ['employees.read'];

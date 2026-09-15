@@ -104,7 +104,7 @@ export class CopilotDataService {
   }
 
   private async revenue(orgId: string, has: HasPermission): Promise<AiQueryData> {
-    if (!has('invoices.read') && !has('accounting.read') && !has('payments.read') && !has('reports.finance')) {
+    if (!has('invoices.read') && !has('accounting.read') && !has('accounting.accounts.read') && !has('payments.read') && !has('reports.finance')) {
       return this.notPermitted('revenue', 'Revenue');
     }
     const startOfMonth = new Date();
@@ -142,7 +142,7 @@ export class CopilotDataService {
   }
 
   private async expenses(orgId: string, has: HasPermission): Promise<AiQueryData> {
-    if (!has('purchase.read') && !has('accounting.read') && !has('reports.finance')) {
+    if (!has('purchase.read') && !has('accounting.read') && !has('accounting.accounts.read') && !has('reports.finance')) {
       return this.notPermitted('expenses', 'Expenses');
     }
     const startOfMonth = new Date();
@@ -198,7 +198,7 @@ export class CopilotDataService {
   }
 
   private async receivables(orgId: string, has: HasPermission): Promise<AiQueryData> {
-    if (!has('invoices.read') && !has('accounting.receivables.read') && !has('accounting.read')) {
+    if (!has('invoices.read') && !has('accounting.receivables.read') && !has('accounting.read') && !has('accounting.accounts.read')) {
       return this.notPermitted('receivables', 'Receivables');
     }
     const outstanding = await this.prisma.invoice.aggregate({
@@ -242,7 +242,7 @@ export class CopilotDataService {
   }
 
   private async payables(orgId: string, has: HasPermission): Promise<AiQueryData> {
-    if (!has('purchase.read') && !has('accounting.payables.read') && !has('accounting.read')) {
+    if (!has('purchase.read') && !has('accounting.payables.read') && !has('accounting.read') && !has('accounting.accounts.read')) {
       return this.notPermitted('payables', 'Payables');
     }
     const due = await this.prisma.purchaseOrder.aggregate({
@@ -362,7 +362,7 @@ export class CopilotDataService {
   }
 
   private async trends(orgId: string, has: HasPermission): Promise<AiQueryData> {
-    if (!has('invoices.read') && !has('accounting.read') && !has('reports.finance')) {
+    if (!has('invoices.read') && !has('accounting.read') && !has('accounting.accounts.read') && !has('reports.finance')) {
       return this.notPermitted('trends', 'Trends');
     }
     const revenueRows = await this.prisma.$queryRaw<Array<{ month: string; total: number }>>`
@@ -405,7 +405,7 @@ export class CopilotDataService {
 
   private async performance(orgId: string, has: HasPermission): Promise<AiQueryData> {
     const canFinance =
-      has('invoices.read') || has('accounting.read') || has('payments.read') || has('reports.finance');
+      has('invoices.read') || has('accounting.read') || has('accounting.accounts.read') || has('payments.read') || has('reports.finance');
     if (!canFinance) {
       return this.notPermitted('performance', 'Business performance');
     }
