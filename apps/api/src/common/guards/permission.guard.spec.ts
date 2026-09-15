@@ -56,11 +56,11 @@ describe('PermissionGuard', () => {
   it('enforces AND mode by requiring every listed permission', async () => {
     const rbac = makeRbac(true);
     const guard = new PermissionGuard(
-      makeReflector({ permissions: ['crm.read', 'crm.activities'], mode: 'AND' }),
+      makeReflector({ permissions: ['crm.read', 'crm.create'], mode: 'AND' }),
       rbac,
     );
     await expect(guard.canActivate(makeContext({ user: { id: 'u1', organizationId: 'org-1' } }))).resolves.toBe(true);
-    expect(rbac.userHasAllPermissions).toHaveBeenCalledWith('u1', 'org-1', ['crm.read', 'crm.activities']);
+    expect(rbac.userHasAllPermissions).toHaveBeenCalledWith('u1', 'org-1', ['crm.read', 'crm.create']);
   });
 
   it('rejects with Forbidden in AND mode when any permission is missing', async () => {

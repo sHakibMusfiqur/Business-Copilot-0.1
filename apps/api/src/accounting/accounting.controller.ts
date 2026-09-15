@@ -49,7 +49,7 @@ export class AccountingController {
 
   @Get('summary')
   @UseGuards(PermissionGuard)
-  @Permissions(['accounting.accounts.read', 'reports.finance'])
+  @Permissions(['accounting.accounts.read', 'reports.finance'], 'OR')
   @ApiBearerAuth('access-token')
   async getSummary(@CurrentUser() user: CurrentUserPayload) {
     const orgId = this.requireOrg(user);
@@ -258,7 +258,7 @@ export class AccountingController {
 
   @Get('ledger')
   @UseGuards(PermissionGuard)
-  @Permissions(['accounting.journal.read', 'reports.finance'])
+  @Permissions(['accounting.journal.read', 'reports.finance'], 'OR')
   @ApiBearerAuth('access-token')
   async getGeneralLedger(
     @CurrentUser() user: CurrentUserPayload,
@@ -274,7 +274,7 @@ export class AccountingController {
 
   @Get('trial-balance')
   @UseGuards(PermissionGuard)
-  @Permissions(['accounting.journal.read', 'reports.finance'])
+  @Permissions(['accounting.journal.read', 'reports.finance'], 'OR')
   @ApiBearerAuth('access-token')
   async getTrialBalance(@CurrentUser() user: CurrentUserPayload) {
     const orgId = this.requireOrg(user);

@@ -164,7 +164,6 @@ export function PurchaseTable({
           <option value="PENDING">Pending</option>
           <option value="APPROVED">Approved</option>
           <option value="RECEIVED">Received</option>
-          <option value="CANCELLED">Cancelled</option>
         </select>
         <select
           value={supplierFilter}

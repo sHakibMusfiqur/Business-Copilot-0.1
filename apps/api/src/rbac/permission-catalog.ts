@@ -80,16 +80,11 @@ export const MODULE_ACTIONS: Record<string, string[]> = {
   ai: ['read'],
 };
 
-/**
- * Module / action specific permissions that do not fit the generic action
- * matrix (granular sub-resources, workflow actions, or owner-only toggles).
- */
+
 const EXTRA_PERMISSIONS: PermissionSeed[] = [
-  { name: 'inventory.manage', module: 'inventory', label: 'Manage Inventory' },
   { name: 'inventory.adjust', module: 'inventory', label: 'Adjust Stock' },
   { name: 'purchase.receive', module: 'purchase', label: 'Receive Purchase Orders' },
   { name: 'sales.deliver', module: 'sales', label: 'Deliver Sales Orders' },
-  { name: 'crm.activities', module: 'crm', label: 'Manage Activities' },
   { name: 'accounting.accounts.read', module: 'accounting', label: 'View Chart of Accounts' },
   { name: 'accounting.accounts.create', module: 'accounting', label: 'Create Accounts' },
   { name: 'accounting.accounts.update', module: 'accounting', label: 'Update Accounts' },
@@ -141,10 +136,7 @@ export const SEED_PERMISSIONS: PermissionSeed[] = dedupe([
   ...buildActionPermissions(),
 ]);
 
-/**
- * Permissions assigned to the seeded "Admin" system role. Everything except
- * organization-level management (reserved for the Owner).
- */
+
 export const ADMIN_PERMISSIONS: string[] = SEED_PERMISSIONS.map((p) => p.name).filter(
   (name) => name !== 'organization.manage',
 );
@@ -162,10 +154,7 @@ export async function upsertPermissions(db: DbClient) {
   return results;
 }
 
-/**
- * Refreshes the Owner + Admin system roles of a single organization so they
- * reflect the full catalog (used by the seed and the sync script).
- */
+
 export async function syncSystemRolesForOrg(
   db: DbClient,
   orgId: string,
