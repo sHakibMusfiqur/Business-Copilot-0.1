@@ -510,6 +510,56 @@ export class SalesService {
     return { message: 'Sales order deleted successfully' };
   }
 
+  async cancel(orgId: string, userId: string, saleId: string) {
+    const sale = await this.prisma.salesOrder.findFirst({
+      where: { id: saleId, organizationId: orgId, deletedAt: null },
+    });
+
+    if (!sale) {
+      throw new NotFoundException('Sales order not found');
+    }
+
+    const cancellableStatuses: SalesStatus[] = [SalesStatus.DRAFT, SalesStatus.PENDING, SalesStatus.CONFIRMED];
+    if (!cancellableStatuses.includes(sale.status)) {
+      throw new ConflictException(`Only DRAFT, PENDING, or CONFIRMED sales orders can be cancelled`);
+    }
+
+    const result = await this.prisma.salesOrder.updateMany({
+      where: {
+        id: saleId,
+        organizationId: orgId,
+        status: sale.status,
+        deletedAt: null,
+      },
+      data: { status: SalesStatus.CANCELLED },
+    });
+
+    if (result.count === 0) {
+      throw new ConflictException(`Only DRAFT, PENDING, or CONFIRMED sales orders can be cancelled`);
+    }
+
+    const updated = await this.prisma.salesOrder.findFirst({
+      where: { id: saleId, organizationId: orgId },
+      select: { id: true, orderNumber: true, status: true },
+    });
+
+    if (!updated) throw new NotFoundException('Sales order not found');
+
+    this.logger.log(`Sales order cancelled: ${updated.orderNumber} (${saleId}) by ${userId}`);
+
+    await this.auditService.record({
+      userId,
+      organizationId: orgId,
+      action: 'SALES_ORDER_CANCELLED',
+      entity: 'SalesOrder',
+      entityId: saleId,
+      status: 'SUCCESS',
+      metadata: { orderNumber: updated.orderNumber, previousStatus: sale.status },
+    });
+
+    return updated;
+  }
+
   private buildSaleItems(
     dtoItems: Array<{ productId: string; quantity: number; discount?: number; tax?: number }>,
     products: Array<{ id: string; name: string; unitPrice: unknown }>,

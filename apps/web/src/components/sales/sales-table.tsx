@@ -34,8 +34,17 @@ interface SaleTableProps {
   search: string;
   sortBy: string;
   sortOrder: 'asc' | 'desc';
+  statusFilter: string;
+  customerFilter: string;
+  dateFrom: string;
+  dateTo: string;
+  customers: Array<{ id: string; name: string }>;
   isLoading: boolean;
   onSearchChange: (search: string) => void;
+  onStatusChange: (status: string) => void;
+  onCustomerChange: (customerId: string) => void;
+  onDateFromChange: (date: string) => void;
+  onDateToChange: (date: string) => void;
   onPageChange: (page: number) => void;
   onSort: (field: string) => void;
   onView: (sale: Sale) => void;
@@ -43,6 +52,7 @@ interface SaleTableProps {
   onDelete?: (sale: Sale) => void;
   onConfirm?: (sale: Sale) => void;
   onDeliver?: (sale: Sale) => void;
+  onCancel?: (sale: Sale) => void;
   onCreateInvoice?: (sale: Sale) => void;
 }
 
@@ -96,8 +106,17 @@ export function SaleTable({
   search,
   sortBy,
   sortOrder,
+  statusFilter,
+  customerFilter,
+  dateFrom,
+  dateTo,
+  customers,
   isLoading,
   onSearchChange,
+  onStatusChange,
+  onCustomerChange,
+  onDateFromChange,
+  onDateToChange,
   onPageChange,
   onSort,
   onView,
@@ -105,6 +124,7 @@ export function SaleTable({
   onDelete,
   onConfirm,
   onDeliver,
+  onCancel,
   onCreateInvoice,
 }: SaleTableProps) {
   const [searchInput, setSearchInput] = useState('');
@@ -126,8 +146,8 @@ export function SaleTable({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search by order number or customer..."
@@ -136,6 +156,42 @@ export function SaleTable({
             className="pl-9"
           />
         </div>
+        <select
+          value={statusFilter}
+          onChange={(e) => onStatusChange(e.target.value)}
+          className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+        >
+          <option value="">All Status</option>
+          <option value="DRAFT">Draft</option>
+          <option value="PENDING">Pending</option>
+          <option value="CONFIRMED">Confirmed</option>
+          <option value="DELIVERED">Delivered</option>
+          <option value="CANCELLED">Cancelled</option>
+        </select>
+        <select
+          value={customerFilter}
+          onChange={(e) => onCustomerChange(e.target.value)}
+          className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+        >
+          <option value="">All Customers</option>
+          {customers.map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
+          ))}
+        </select>
+        <input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => onDateFromChange(e.target.value)}
+          placeholder="From date"
+          className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+        />
+        <input
+          type="date"
+          value={dateTo}
+          onChange={(e) => onDateToChange(e.target.value)}
+          placeholder="To date"
+          className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+        />
       </div>
 
       {isLoading ? (
@@ -232,6 +288,11 @@ export function SaleTable({
                             {onDeliver && sale.status === 'CONFIRMED' && (
                               <DropdownMenuItem onClick={() => onDeliver(sale)}>
                                 Deliver
+                              </DropdownMenuItem>
+                            )}
+                            {onCancel && (sale.status === 'DRAFT' || sale.status === 'PENDING' || sale.status === 'CONFIRMED') && (
+                              <DropdownMenuItem onClick={() => onCancel(sale)} className="text-destructive focus:text-destructive">
+                                Cancel order
                               </DropdownMenuItem>
                             )}
                             {onCreateInvoice && sale.status === 'DELIVERED' && (

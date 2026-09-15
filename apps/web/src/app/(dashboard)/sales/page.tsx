@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 
@@ -19,7 +19,7 @@ import { RequirePermission } from '@/components/rbac/require-permission';
 import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { usePermissions } from '@/hooks/use-permissions';
 import { SALES_READ, SALES_CREATE, SALES_UPDATE, SALES_DELETE, SALES_APPROVE, SALES_DELIVER, INVOICES_CREATE } from '@/lib/permissions';
-import { deleteSale as deleteSaleRequest, getSales, confirmSale } from '@/lib/api';
+import { deleteSale as deleteSaleRequest, getSales, confirmSale, getCustomers, cancelSale } from '@/lib/api';
 import type { Sale, SaleMeta, SaleListResponse } from '@/components/sales/sales-types';
 
 export default function SalesPage() {
@@ -38,6 +38,10 @@ export default function SalesPage() {
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [customerFilter, setCustomerFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const limit = 10;
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -46,10 +50,31 @@ export default function SalesPage() {
   const [deleteSale, setDeleteSale] = useState<Sale | null>(null);
   const [deliverSale, setDeliverSale] = useState<Sale | null>(null);
   const [createInvoiceTarget, setCreateInvoiceTarget] = useState<Sale | null>(null);
+  const [cancelSaleTarget, setCancelSaleTarget] = useState<Sale | null>(null);
+
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, customerFilter, dateFrom, dateTo]);
+
+  const customersQuery = useQuery({
+    queryKey: ['customers', 'filter'],
+    queryFn: ({ signal }) => getCustomers({ limit: 200, isActive: true }, signal),
+    staleTime: 5 * 60 * 1000,
+  });
 
   const salesQuery = useQuery<SaleListResponse>({
-    queryKey: ['sales', { page, limit, search, sortBy, sortOrder }],
-    queryFn: () => getSales({ page, limit, search: search || undefined, sortBy, sortOrder }),
+    queryKey: ['sales', { page, limit, search, sortBy, sortOrder, status: statusFilter, customerId: customerFilter, dateFrom, dateTo }],
+    queryFn: () => getSales({
+      page,
+      limit,
+      search: search || undefined,
+      sortBy,
+      sortOrder,
+      status: statusFilter || undefined,
+      customerId: customerFilter || undefined,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+    }),
     enabled: canRead,
   });
 
@@ -63,6 +88,21 @@ export default function SalesPage() {
       toast({
         title: 'Error',
         description: error.message ?? 'Failed to confirm sales order.',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: (id: string) => cancelSale(id),
+    onSuccess: () => {
+      toast({ title: 'Sales order cancelled' });
+      invalidate();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message ?? 'Failed to cancel sales order.',
         variant: 'destructive',
       });
     },
@@ -93,6 +133,10 @@ export default function SalesPage() {
   const handleConfirm = useCallback((sale: Sale) => {
     confirmMutation.mutate(sale.id);
   }, [confirmMutation]);
+
+  const handleCancel = useCallback((sale: Sale) => {
+    cancelMutation.mutate(sale.id);
+  }, [cancelMutation]);
 
   if (!canRead) {
     return <ForbiddenState title="Access restricted" description="You don't have permission to view sales. Contact your organization administrator." />;
@@ -137,8 +181,17 @@ export default function SalesPage() {
         search={search}
         sortBy={sortBy}
         sortOrder={sortOrder}
+        statusFilter={statusFilter}
+        customerFilter={customerFilter}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        customers={customersQuery.data?.data ?? []}
         isLoading={salesQuery.isLoading}
         onSearchChange={handleSearch}
+        onStatusChange={setStatusFilter}
+        onCustomerChange={setCustomerFilter}
+        onDateFromChange={setDateFrom}
+        onDateToChange={setDateTo}
         onPageChange={setPage}
         onSort={handleSort}
         onView={setViewSale}
@@ -146,6 +199,7 @@ export default function SalesPage() {
         onDelete={canDelete ? setDeleteSale : undefined}
         onConfirm={canApprove ? handleConfirm : undefined}
         onDeliver={canDeliver ? setDeliverSale : undefined}
+        onCancel={canUpdate ? setCancelSaleTarget : undefined}
         onCreateInvoice={canCreateInvoice ? setCreateInvoiceTarget : undefined}
       />
 
@@ -182,6 +236,24 @@ export default function SalesPage() {
           if (!deleteSale) throw new Error('No sale selected');
           return deleteSaleRequest(deleteSale.id);
         }}
+      />
+
+      <ConfirmDeleteDialog
+        entityName={cancelSaleTarget?.orderNumber ?? null}
+        title="Cancel Sales Order"
+        description="This will cancel the sales order. This action cannot be undone."
+        buttonLabel="Cancel Order"
+        successTitle="Sales order cancelled"
+        errorFallback="Failed to cancel sales order."
+        open={cancelSaleTarget !== null}
+        onClose={() => setCancelSaleTarget(null)}
+        onDeleted={invalidate}
+        deleteFn={() => {
+          if (!cancelSaleTarget) throw new Error('No sale selected');
+          return cancelSale(cancelSaleTarget.id);
+        }}
+        actionVerb="cancel"
+        pendingLabel="Cancelling..."
       />
 
       <DeliverSaleDialog

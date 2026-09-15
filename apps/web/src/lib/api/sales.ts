@@ -69,3 +69,8 @@ export async function deleteSale(id: string): Promise<{ message: string }> {
   const response = await api.delete(`${API_ROUTES.SALES.ROOT}/${id}`);
   return response.data;
 }
+
+export async function cancelSale(id: string): Promise<{ id: string; orderNumber: string; status: string }> {
+  const response = await api.post(`${API_ROUTES.SALES.ROOT}/${id}/cancel`);
+  return response.data;
+}

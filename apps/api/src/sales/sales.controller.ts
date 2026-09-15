@@ -129,6 +129,19 @@ export class SalesController {
     return this.salesService.deliver(orgId, user.id, id, dto.notes);
   }
 
+  @Post(':id/cancel')
+  @UseGuards(PermissionGuard)
+  @Permissions(['sales.update'])
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  async cancel(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id', ParseCuidPipe) id: string,
+  ) {
+    const orgId = this.requireOrg(user);
+    return this.salesService.cancel(orgId, user.id, id);
+  }
+
   @Delete(':id')
   @UseGuards(PermissionGuard)
   @Permissions(['sales.delete'])

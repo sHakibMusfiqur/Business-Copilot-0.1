@@ -555,3 +555,232 @@ describe('SalesService pricing validation (V-1)', () => {
     expect(transaction).toHaveBeenCalled();
   });
 });
+
+describe('SalesService findAll (filter query handling)', () => {
+  let service: SalesService;
+  let findMany: jest.Mock;
+  let count: jest.Mock;
+
+  beforeEach(() => {
+    findMany = jest.fn().mockResolvedValue([]);
+    count = jest.fn().mockResolvedValue(0);
+
+    service = new SalesService(
+      {
+        salesOrder: { findMany, count },
+      } as unknown as PrismaService,
+      {} as never,
+      { record: jest.fn().mockResolvedValue(undefined) } as never,
+    );
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it('findAll() passes status filter to Prisma where clause', async () => {
+    await service.findAll(ORG_ID, { status: 'CONFIRMED' });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ status: 'CONFIRMED' }),
+      }),
+    );
+  });
+
+  it('findAll() passes customerId filter to Prisma where clause', async () => {
+    await service.findAll(ORG_ID, { customerId: 'cust-1' });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ customerId: 'cust-1' }),
+      }),
+    );
+  });
+
+  it('findAll() passes dateFrom/dateTo as orderDate range', async () => {
+    await service.findAll(ORG_ID, { dateFrom: '2026-01-01', dateTo: '2026-01-31' });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          orderDate: {
+            gte: new Date('2026-01-01'),
+            lte: new Date('2026-01-31'),
+          },
+        }),
+      }),
+    );
+  });
+
+  it('findAll() passes only dateFrom when dateTo is absent', async () => {
+    await service.findAll(ORG_ID, { dateFrom: '2026-06-01' });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          orderDate: { gte: new Date('2026-06-01') },
+        }),
+      }),
+    );
+  });
+
+  it('findAll() scopes by organizationId', async () => {
+    await service.findAll(ORG_ID, {});
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ organizationId: ORG_ID }),
+      }),
+    );
+  });
+
+  it('findAll() combines multiple filters', async () => {
+    await service.findAll(ORG_ID, {
+      status: 'PENDING',
+      customerId: 'cust-2',
+      dateFrom: '2026-03-01',
+      dateTo: '2026-03-31',
+    });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          organizationId: ORG_ID,
+          status: 'PENDING',
+          customerId: 'cust-2',
+          orderDate: {
+            gte: new Date('2026-03-01'),
+            lte: new Date('2026-03-31'),
+          },
+        }),
+      }),
+    );
+  });
+});
+
+describe('SalesService cancel', () => {
+  let service: SalesService;
+  let saleFindFirst: jest.Mock;
+  let saleUpdateMany: jest.Mock;
+  let auditRecord: jest.Mock;
+
+  beforeEach(() => {
+    saleFindFirst = jest.fn();
+    saleUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+    auditRecord = jest.fn().mockResolvedValue(undefined);
+
+    service = new SalesService(
+      { salesOrder: { findFirst: saleFindFirst, updateMany: saleUpdateMany } } as unknown as PrismaService,
+      {} as never,
+      { record: auditRecord } as never,
+    );
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it('cancels a DRAFT order', async () => {
+    saleFindFirst
+      .mockResolvedValueOnce({ id: SALE_ID, orderNumber: 'SO-001', status: 'DRAFT' })
+      .mockResolvedValueOnce({ id: SALE_ID, orderNumber: 'SO-001', status: 'CANCELLED' });
+
+    const result = await service.cancel(ORG_ID, USER_ID, SALE_ID);
+
+    expect(result.status).toBe('CANCELLED');
+    expect(saleUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ status: 'DRAFT' }),
+        data: { status: 'CANCELLED' },
+      }),
+    );
+    expect(auditRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'SALES_ORDER_CANCELLED' }),
+    );
+  });
+
+  it('cancels a PENDING order', async () => {
+    saleFindFirst
+      .mockResolvedValueOnce({ id: SALE_ID, orderNumber: 'SO-001', status: 'PENDING' })
+      .mockResolvedValueOnce({ id: SALE_ID, orderNumber: 'SO-001', status: 'CANCELLED' });
+
+    const result = await service.cancel(ORG_ID, USER_ID, SALE_ID);
+
+    expect(result.status).toBe('CANCELLED');
+    expect(saleUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ status: 'PENDING' }),
+      }),
+    );
+  });
+
+  it('cancels a CONFIRMED order', async () => {
+    saleFindFirst
+      .mockResolvedValueOnce({ id: SALE_ID, orderNumber: 'SO-001', status: 'CONFIRMED' })
+      .mockResolvedValueOnce({ id: SALE_ID, orderNumber: 'SO-001', status: 'CANCELLED' });
+
+    const result = await service.cancel(ORG_ID, USER_ID, SALE_ID);
+
+    expect(result.status).toBe('CANCELLED');
+    expect(saleUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ status: 'CONFIRMED' }),
+      }),
+    );
+  });
+
+  it('rejects cancellation of a DELIVERED order', async () => {
+    saleFindFirst.mockResolvedValue({ id: SALE_ID, orderNumber: 'SO-001', status: 'DELIVERED' });
+
+    await expect(service.cancel(ORG_ID, USER_ID, SALE_ID)).rejects.toThrow(ConflictException);
+    expect(saleUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects cancellation of an already CANCELLED order', async () => {
+    saleFindFirst.mockResolvedValue({ id: SALE_ID, orderNumber: 'SO-001', status: 'CANCELLED' });
+
+    await expect(service.cancel(ORG_ID, USER_ID, SALE_ID)).rejects.toThrow(ConflictException);
+    expect(saleUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('throws NotFoundException when order does not exist', async () => {
+    saleFindFirst.mockResolvedValue(null);
+
+    await expect(service.cancel(ORG_ID, USER_ID, 'nonexistent')).rejects.toThrow(NotFoundException);
+    expect(saleUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('scopes cancellation by organizationId', async () => {
+    saleFindFirst.mockResolvedValue({ id: SALE_ID, orderNumber: 'SO-001', status: 'DRAFT' });
+
+    await service.cancel('other-org', USER_ID, SALE_ID);
+
+    expect(saleFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ organizationId: 'other-org' }),
+      }),
+    );
+  });
+
+  it('audit log includes previous status', async () => {
+    saleFindFirst.mockResolvedValue({ id: SALE_ID, orderNumber: 'SO-001', status: 'PENDING' });
+
+    await service.cancel(ORG_ID, USER_ID, SALE_ID);
+
+    expect(auditRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({ previousStatus: 'PENDING' }),
+      }),
+    );
+  });
+});
+
+describe('SalesController cancel endpoint permissions', () => {
+  it('cancel() must require sales.update permission', () => {
+    const metadata = Reflect.getMetadata(PERMISSIONS_KEY, SalesController.prototype.cancel);
+    expect(metadata).toEqual({ permissions: ['sales.update'], mode: 'AND' });
+  });
+
+  it('cancel() must not require sales.approve or sales.deliver', () => {
+    const metadata = Reflect.getMetadata(PERMISSIONS_KEY, SalesController.prototype.cancel);
+    expect(metadata.permissions).not.toContain('sales.approve');
+    expect(metadata.permissions).not.toContain('sales.deliver');
+  });
+});
