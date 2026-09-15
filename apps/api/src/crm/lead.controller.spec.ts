@@ -112,7 +112,7 @@ const ENDPOINTS: EndpointSpec[] = [
   {
     name: 'summary',
     method: 'getSummary',
-    permissions: ['crm.read', 'crm.activities'],
+    permissions: ['crm.read'],
     serviceCall: ({ controller }) => controller.getSummary(makeUser()),
     serviceMock: ({ lead }) => lead.getSummary as jest.Mock,
   },

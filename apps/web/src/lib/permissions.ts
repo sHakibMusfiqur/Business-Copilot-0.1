@@ -104,7 +104,6 @@ export const CRM_READ = 'crm.read' as const;
 export const CRM_CREATE = 'crm.create' as const;
 export const CRM_UPDATE = 'crm.update' as const;
 export const CRM_DELETE = 'crm.delete' as const;
-export const CRM_ACTIVITIES = 'crm.activities' as const;
 
 // ── Users ────────────────────────────────────────────────────────────────────
 export const USERS_READ = 'users.read' as const;

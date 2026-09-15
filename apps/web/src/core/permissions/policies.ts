@@ -4,7 +4,7 @@ export const POLICIES: Record<string, PolicyDef> = {
   'finance.read': {
     id: 'finance.read',
     label: 'Finance — read',
-    grants: ['invoices.read', 'accounting.read', 'payments.read'],
+    grants: ['invoices.read', 'accounting.read', 'accounting.accounts.read', 'payments.read'],
   },
   'operations.read': {
     id: 'operations.read',

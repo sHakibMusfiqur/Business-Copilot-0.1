@@ -56,7 +56,7 @@ export class LeadController {
 
   @Get('summary')
   @UseGuards(PermissionGuard)
-  @Permissions(['crm.read', 'crm.activities'])
+  @Permissions(['crm.read'])
   @ApiOperation({ summary: 'Get CRM summary' })
   async getSummary(@CurrentUser() user: CurrentUserPayload) {
     const orgId = this.requireOrg(user);
