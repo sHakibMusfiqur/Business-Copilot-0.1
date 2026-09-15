@@ -56,6 +56,11 @@ export async function approvePurchase(id: string) {
   return response.data;
 }
 
+export async function submitPurchase(id: string) {
+  const response = await api.post(`${API_ROUTES.PURCHASE.ROOT}/${id}/submit`);
+  return response.data;
+}
+
 export async function receivePurchase(id: string, notes?: string) {
   const response = await api.post(`${API_ROUTES.PURCHASE.ROOT}/${id}/receive`, { notes });
   return response.data;

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useCallback } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState, useCallback, useEffect } from 'react';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -17,9 +17,8 @@ import { RequirePermission } from '@/components/rbac/require-permission';
 import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { usePermissions } from '@/hooks/use-permissions';
 import { PURCHASE_READ, PURCHASE_CREATE, PURCHASE_UPDATE, PURCHASE_DELETE, PURCHASE_APPROVE, PURCHASE_RECEIVE } from '@/lib/permissions';
-import { deletePurchase as deletePurchaseRequest, getPurchases, approvePurchase } from '@/lib/api';
+import { deletePurchase as deletePurchaseRequest, getPurchases, approvePurchase, submitPurchase, getSuppliers } from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
-import { useMutation } from '@tanstack/react-query';
 import type { Purchase, PurchaseMeta, PurchaseListResponse } from '@/components/purchase/purchase-types';
 
 export default function PurchasesPage() {
@@ -37,6 +36,10 @@ export default function PurchasesPage() {
   const [page, setPage] = useState(1);
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [supplierFilter, setSupplierFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const limit = 10;
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -45,9 +48,29 @@ export default function PurchasesPage() {
   const [deletePurchase, setDeletePurchase] = useState<Purchase | null>(null);
   const [receivePurchase, setReceivePurchase] = useState<Purchase | null>(null);
 
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, supplierFilter, dateFrom, dateTo]);
+
+  const suppliersQuery = useQuery({
+    queryKey: ['suppliers', 'filter'],
+    queryFn: ({ signal }) => getSuppliers({ limit: 200, isActive: true }, signal),
+    staleTime: 5 * 60 * 1000,
+  });
+
   const purchasesQuery = useQuery<PurchaseListResponse>({
-    queryKey: ['purchases', { page, limit, search, sortBy, sortOrder }],
-    queryFn: () => getPurchases({ page, limit, search: search || undefined, sortBy, sortOrder }),
+    queryKey: ['purchases', { page, limit, search, sortBy, sortOrder, status: statusFilter, supplierId: supplierFilter, dateFrom, dateTo }],
+    queryFn: () => getPurchases({
+      page,
+      limit,
+      search: search || undefined,
+      sortBy,
+      sortOrder,
+      status: statusFilter || undefined,
+      supplierId: supplierFilter || undefined,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+    }),
     enabled: canRead,
   });
 
@@ -61,6 +84,21 @@ export default function PurchasesPage() {
       toast({
         title: 'Error',
         description: error.message ?? 'Failed to approve purchase order.',
+        variant: 'destructive',
+      });
+    },
+  });
+
+  const submitMutation = useMutation({
+    mutationFn: (id: string) => submitPurchase(id),
+    onSuccess: () => {
+      toast({ title: 'Purchase order submitted' });
+      invalidate();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message ?? 'Failed to submit purchase order.',
         variant: 'destructive',
       });
     },
@@ -91,6 +129,10 @@ export default function PurchasesPage() {
   const handleApprove = useCallback((purchase: Purchase) => {
     approveMutation.mutate(purchase.id);
   }, [approveMutation]);
+
+  const handleSubmit = useCallback((purchase: Purchase) => {
+    submitMutation.mutate(purchase.id);
+  }, [submitMutation]);
 
   if (!canRead) {
     return <ForbiddenState title="Access restricted" description="You don't have permission to view purchases. Contact your organization administrator." />;
@@ -135,14 +177,24 @@ export default function PurchasesPage() {
         search={search}
         sortBy={sortBy}
         sortOrder={sortOrder}
+        statusFilter={statusFilter}
+        supplierFilter={supplierFilter}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+        suppliers={suppliersQuery.data?.data ?? []}
         isLoading={purchasesQuery.isLoading}
         onSearchChange={handleSearch}
+        onStatusChange={setStatusFilter}
+        onSupplierChange={setSupplierFilter}
+        onDateFromChange={setDateFrom}
+        onDateToChange={setDateTo}
         onPageChange={setPage}
         onSort={handleSort}
         onView={setViewPurchase}
         onEdit={canUpdate ? setEditPurchase : undefined}
         onDelete={canDelete ? setDeletePurchase : undefined}
         onApprove={canApprove ? handleApprove : undefined}
+        onSubmit={canUpdate ? handleSubmit : undefined}
         onReceive={canReceive ? setReceivePurchase : undefined}
       />
 

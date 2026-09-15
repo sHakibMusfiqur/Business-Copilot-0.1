@@ -34,14 +34,24 @@ interface PurchaseTableProps {
   search: string;
   sortBy: string;
   sortOrder: 'asc' | 'desc';
+  statusFilter: string;
+  supplierFilter: string;
+  dateFrom: string;
+  dateTo: string;
+  suppliers: Array<{ id: string; name: string }>;
   isLoading: boolean;
   onSearchChange: (search: string) => void;
+  onStatusChange: (status: string) => void;
+  onSupplierChange: (supplierId: string) => void;
+  onDateFromChange: (date: string) => void;
+  onDateToChange: (date: string) => void;
   onPageChange: (page: number) => void;
   onSort: (field: string) => void;
   onView: (purchase: Purchase) => void;
   onEdit?: (purchase: Purchase) => void;
   onDelete?: (purchase: Purchase) => void;
   onApprove?: (purchase: Purchase) => void;
+  onSubmit?: (purchase: Purchase) => void;
   onReceive?: (purchase: Purchase) => void;
 }
 
@@ -95,14 +105,24 @@ export function PurchaseTable({
   search,
   sortBy,
   sortOrder,
+  statusFilter,
+  supplierFilter,
+  dateFrom,
+  dateTo,
+  suppliers,
   isLoading,
   onSearchChange,
+  onStatusChange,
+  onSupplierChange,
+  onDateFromChange,
+  onDateToChange,
   onPageChange,
   onSort,
   onView,
   onEdit,
   onDelete,
   onApprove,
+  onSubmit,
   onReceive,
 }: PurchaseTableProps) {
   const [searchInput, setSearchInput] = useState('');
@@ -124,8 +144,8 @@ export function PurchaseTable({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Search by order number or supplier..."
@@ -134,6 +154,42 @@ export function PurchaseTable({
             className="pl-9"
           />
         </div>
+        <select
+          value={statusFilter}
+          onChange={(e) => onStatusChange(e.target.value)}
+          className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+        >
+          <option value="">All Status</option>
+          <option value="DRAFT">Draft</option>
+          <option value="PENDING">Pending</option>
+          <option value="APPROVED">Approved</option>
+          <option value="RECEIVED">Received</option>
+          <option value="CANCELLED">Cancelled</option>
+        </select>
+        <select
+          value={supplierFilter}
+          onChange={(e) => onSupplierChange(e.target.value)}
+          className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+        >
+          <option value="">All Suppliers</option>
+          {suppliers.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
+        <input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => onDateFromChange(e.target.value)}
+          placeholder="From date"
+          className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+        />
+        <input
+          type="date"
+          value={dateTo}
+          onChange={(e) => onDateToChange(e.target.value)}
+          placeholder="To date"
+          className="rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+        />
       </div>
 
       {isLoading ? (
@@ -225,6 +281,11 @@ export function PurchaseTable({
                             {onApprove && purchase.status === 'PENDING' && (
                               <DropdownMenuItem onClick={() => onApprove(purchase)}>
                                 Approve
+                              </DropdownMenuItem>
+                            )}
+                            {onSubmit && purchase.status === 'DRAFT' && (
+                              <DropdownMenuItem onClick={() => onSubmit(purchase)}>
+                                Submit
                               </DropdownMenuItem>
                             )}
                             {onReceive && purchase.status === 'APPROVED' && (

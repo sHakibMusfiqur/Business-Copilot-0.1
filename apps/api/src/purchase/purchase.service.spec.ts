@@ -580,3 +580,142 @@ describe('PurchaseService pricing validation (V-1)', () => {
     expect(orderUpdate).toHaveBeenCalled();
   });
 });
+
+describe('PurchaseService findAll (filter query handling)', () => {
+  let service: PurchaseService;
+  let findMany: jest.Mock;
+  let count: jest.Mock;
+
+  beforeEach(() => {
+    findMany = jest.fn().mockResolvedValue([]);
+    count = jest.fn().mockResolvedValue(0);
+
+    service = new PurchaseService(
+      {
+        purchaseOrder: { findMany, count },
+      } as unknown as PrismaService,
+      {} as never,
+      { record: jest.fn().mockResolvedValue(undefined) } as never,
+    );
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it('findAll() passes status filter to Prisma where clause', async () => {
+    await service.findAll(ORG_ID, { status: 'APPROVED' });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ status: 'APPROVED' }),
+      }),
+    );
+  });
+
+  it('findAll() passes supplierId filter to Prisma where clause', async () => {
+    await service.findAll(ORG_ID, { supplierId: 'sup-1' });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ supplierId: 'sup-1' }),
+      }),
+    );
+  });
+
+  it('findAll() passes dateFrom/dateTo as orderDate range', async () => {
+    await service.findAll(ORG_ID, { dateFrom: '2026-01-01', dateTo: '2026-01-31' });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          orderDate: {
+            gte: new Date('2026-01-01'),
+            lte: new Date('2026-01-31'),
+          },
+        }),
+      }),
+    );
+  });
+
+  it('findAll() passes only dateFrom when dateTo is absent', async () => {
+    await service.findAll(ORG_ID, { dateFrom: '2026-06-01' });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          orderDate: { gte: new Date('2026-06-01') },
+        }),
+      }),
+    );
+  });
+
+  it('findAll() scopes by organizationId', async () => {
+    await service.findAll(ORG_ID, {});
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ organizationId: ORG_ID }),
+      }),
+    );
+  });
+
+  it('findAll() combines multiple filters', async () => {
+    await service.findAll(ORG_ID, {
+      status: 'PENDING',
+      supplierId: 'sup-2',
+      dateFrom: '2026-03-01',
+      dateTo: '2026-03-31',
+    });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          organizationId: ORG_ID,
+          status: 'PENDING',
+          supplierId: 'sup-2',
+          orderDate: {
+            gte: new Date('2026-03-01'),
+            lte: new Date('2026-03-31'),
+          },
+        }),
+      }),
+    );
+  });
+
+  it('findAll() falls back to createdAt for invalid sortBy', async () => {
+    await service.findAll(ORG_ID, { sortBy: 'invalidField', sortOrder: 'asc' });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: { createdAt: 'asc' },
+      }),
+    );
+  });
+
+  it('findAll() uses allowed sort field when valid', async () => {
+    await service.findAll(ORG_ID, { sortBy: 'total', sortOrder: 'desc' });
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: { total: 'desc' },
+      }),
+    );
+  });
+
+  it('findAll() accepts all valid sort fields', async () => {
+    const validFields = ['orderNumber', 'total', 'status', 'createdAt', 'orderDate'];
+
+    for (const field of validFields) {
+      jest.clearAllMocks();
+      findMany.mockResolvedValue([]);
+      count.mockResolvedValue(0);
+
+      await service.findAll(ORG_ID, { sortBy: field });
+
+      expect(findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: { [field]: 'desc' },
+        }),
+      );
+    }
+  });
+});
