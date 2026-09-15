@@ -93,21 +93,6 @@ export default function SalesPage() {
     },
   });
 
-  const cancelMutation = useMutation({
-    mutationFn: (id: string) => cancelSale(id),
-    onSuccess: () => {
-      toast({ title: 'Sales order cancelled' });
-      invalidate();
-    },
-    onError: (error: Error) => {
-      toast({
-        title: 'Error',
-        description: error.message ?? 'Failed to cancel sales order.',
-        variant: 'destructive',
-      });
-    },
-  });
-
   const invalidate = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['sales'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
@@ -133,10 +118,6 @@ export default function SalesPage() {
   const handleConfirm = useCallback((sale: Sale) => {
     confirmMutation.mutate(sale.id);
   }, [confirmMutation]);
-
-  const handleCancel = useCallback((sale: Sale) => {
-    cancelMutation.mutate(sale.id);
-  }, [cancelMutation]);
 
   if (!canRead) {
     return <ForbiddenState title="Access restricted" description="You don't have permission to view sales. Contact your organization administrator." />;
