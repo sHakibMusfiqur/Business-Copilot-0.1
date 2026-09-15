@@ -6,6 +6,7 @@ import {
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 
 import type { QuerySuppliersDto } from './dto/query-suppliers.dto';
 import type { CreateSupplierDto } from './dto/create-supplier.dto';
@@ -18,6 +19,7 @@ export class SuppliersService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
   ) {}
 
   async findAll(orgId: string, query: QuerySuppliersDto) {
@@ -156,6 +158,17 @@ export class SuppliersService {
     });
 
     this.logger.log(`Supplier created: ${supplier.name} (${supplier.id}) by ${currentUserId}`);
+
+    await this.auditService.record({
+      userId: currentUserId,
+      organizationId: orgId,
+      action: 'SUPPLIER_CREATED',
+      entity: 'Supplier',
+      entityId: supplier.id,
+      status: 'SUCCESS',
+      metadata: { name: supplier.name },
+    });
+
     return supplier;
   }
 
@@ -200,6 +213,17 @@ export class SuppliersService {
     }
 
     this.logger.log(`Supplier updated: ${updated.name} (${supplierId}) by ${currentUserId}`);
+
+    await this.auditService.record({
+      userId: currentUserId,
+      organizationId: orgId,
+      action: 'SUPPLIER_UPDATED',
+      entity: 'Supplier',
+      entityId: supplierId,
+      status: 'SUCCESS',
+      metadata: { name: updated.name, changes: Object.keys(dto) },
+    });
+
     return updated;
   }
 
@@ -214,6 +238,16 @@ export class SuppliersService {
     }
 
     this.logger.log(`Supplier soft-deleted: (${supplierId}) by ${currentUserId}`);
+
+    await this.auditService.record({
+      userId: currentUserId,
+      organizationId: orgId,
+      action: 'SUPPLIER_DELETED',
+      entity: 'Supplier',
+      entityId: supplierId,
+      status: 'SUCCESS',
+    });
+
     return { message: 'Supplier deleted successfully' };
   }
 
@@ -239,6 +273,17 @@ export class SuppliersService {
     }
 
     this.logger.log(`Supplier ${dto.isActive ? 'activated' : 'deactivated'}: ${updated.name} (${supplierId}) by ${currentUserId}`);
+
+    await this.auditService.record({
+      userId: currentUserId,
+      organizationId: orgId,
+      action: 'SUPPLIER_STATUS_CHANGED',
+      entity: 'Supplier',
+      entityId: supplierId,
+      status: 'SUCCESS',
+      metadata: { name: updated.name, isActive: dto.isActive },
+    });
+
     return updated;
   }
 }

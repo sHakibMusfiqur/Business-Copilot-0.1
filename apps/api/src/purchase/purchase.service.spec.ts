@@ -719,3 +719,105 @@ describe('PurchaseService findAll (filter query handling)', () => {
     }
   });
 });
+
+describe('PurchaseService CRUD audit logging', () => {
+  let service: PurchaseService;
+  let purchaseFindFirst: jest.Mock;
+  let purchaseFindMany: jest.Mock;
+  let purchaseCount: jest.Mock;
+  let purchaseCreate: jest.Mock;
+  let purchaseUpdate: jest.Mock;
+  let auditRecord: jest.Mock;
+
+  beforeEach(() => {
+    purchaseFindFirst = jest.fn();
+    purchaseFindMany = jest.fn().mockResolvedValue([]);
+    purchaseCount = jest.fn().mockResolvedValue(0);
+    purchaseCreate = jest.fn();
+    purchaseUpdate = jest.fn();
+    auditRecord = jest.fn().mockResolvedValue(undefined);
+
+    service = new PurchaseService(
+      {
+        purchaseOrder: {
+          findFirst: purchaseFindFirst,
+          findMany: purchaseFindMany,
+          count: purchaseCount,
+          create: purchaseCreate,
+          update: purchaseUpdate,
+        },
+        supplier: { findFirst: jest.fn().mockResolvedValue({ id: 'sup-1' }) },
+        product: { findMany: jest.fn().mockResolvedValue([{ id: 'p1', name: 'Widget', costPrice: 50 }]) },
+      } as unknown as PrismaService,
+      {} as never,
+      { record: auditRecord } as never,
+    );
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it('records PURCHASE_ORDER_CREATED on successful create', async () => {
+    purchaseCreate.mockResolvedValue({ id: 'po-1', orderNumber: 'PO-2026-000001', status: 'DRAFT', total: 50, createdAt: new Date() });
+
+    await service.create(ORG_ID, USER_ID, {
+      supplierId: 'sup-1',
+      items: [{ productId: 'p1', quantity: 1 }],
+    } as never);
+
+    expect(auditRecord).toHaveBeenCalledWith({
+      userId: USER_ID,
+      organizationId: ORG_ID,
+      action: 'PURCHASE_ORDER_CREATED',
+      entity: 'PurchaseOrder',
+      entityId: 'po-1',
+      status: 'SUCCESS',
+      metadata: { orderNumber: 'PO-2026-000001', total: 50 },
+    });
+  });
+
+  it('records PURCHASE_ORDER_UPDATED on successful update', async () => {
+    purchaseFindFirst.mockResolvedValue({ id: PURCHASE_ID, orderNumber: 'PO-001', status: 'DRAFT' });
+    purchaseUpdate.mockResolvedValue({ id: PURCHASE_ID, orderNumber: 'PO-001', status: 'DRAFT', total: 100, updatedAt: new Date() });
+
+    await service.update(ORG_ID, USER_ID, PURCHASE_ID, { notes: 'Updated' } as never);
+
+    expect(auditRecord).toHaveBeenCalledWith({
+      userId: USER_ID,
+      organizationId: ORG_ID,
+      action: 'PURCHASE_ORDER_UPDATED',
+      entity: 'PurchaseOrder',
+      entityId: PURCHASE_ID,
+      status: 'SUCCESS',
+      metadata: { orderNumber: 'PO-001', changes: ['notes'] },
+    });
+  });
+
+  it('records PURCHASE_ORDER_DELETED on successful softDelete', async () => {
+    purchaseFindFirst.mockResolvedValue({ id: PURCHASE_ID, orderNumber: 'PO-001', status: 'DRAFT' });
+    purchaseUpdate.mockResolvedValue({ id: PURCHASE_ID });
+
+    await service.softDelete(ORG_ID, USER_ID, PURCHASE_ID);
+
+    expect(auditRecord).toHaveBeenCalledWith({
+      userId: USER_ID,
+      organizationId: ORG_ID,
+      action: 'PURCHASE_ORDER_DELETED',
+      entity: 'PurchaseOrder',
+      entityId: PURCHASE_ID,
+      status: 'SUCCESS',
+      metadata: { orderNumber: 'PO-001' },
+    });
+  });
+
+  it('create still returns purchase when audit logging is present', async () => {
+    purchaseCreate.mockResolvedValue({ id: 'po-1', orderNumber: 'PO-2026-000001', status: 'DRAFT', total: 50, createdAt: new Date() });
+
+    const result = await service.create(ORG_ID, USER_ID, {
+      supplierId: 'sup-1',
+      items: [{ productId: 'p1', quantity: 1 }],
+    } as never);
+
+    expect(result.id).toBe('po-1');
+    expect(result.orderNumber).toBe('PO-2026-000001');
+  });
+});

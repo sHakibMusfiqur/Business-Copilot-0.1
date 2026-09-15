@@ -21,6 +21,7 @@ const buildService = (overrides: Record<string, jest.Mock> = {}) => {
   const supplierCreate = overrides.supplierCreate ?? jest.fn();
   const supplierUpdate = overrides.supplierUpdate ?? jest.fn();
   const supplierUpdateMany = overrides.supplierUpdateMany ?? jest.fn();
+  const auditRecord = overrides.auditRecord ?? jest.fn().mockResolvedValue(undefined);
 
   const service = new SuppliersService({
     supplier: {
@@ -31,7 +32,9 @@ const buildService = (overrides: Record<string, jest.Mock> = {}) => {
       update: supplierUpdate,
       updateMany: supplierUpdateMany,
     },
-  } as unknown as PrismaService);
+  } as unknown as PrismaService, {
+    record: auditRecord,
+  } as never);
 
   return {
     service,
@@ -41,6 +44,7 @@ const buildService = (overrides: Record<string, jest.Mock> = {}) => {
     supplierCreate,
     supplierUpdate,
     supplierUpdateMany,
+    auditRecord,
   };
 };
 
@@ -322,6 +326,85 @@ describe('SuppliersService', () => {
       supplierUpdate.mockRejectedValue(p2025());
 
       await expect(service.update(ORG_ID, 'u1', 's-other', { name: 'Hacked' } as never)).rejects.toThrow();
+    });
+  });
+
+  describe('audit logging', () => {
+    it('records SUPPLIER_CREATED on successful create', async () => {
+      const { service, supplierCreate, auditRecord } = buildService();
+      supplierCreate.mockResolvedValue({ id: 's1', name: 'Vendor', isActive: true, createdAt: new Date() });
+
+      await service.create(ORG_ID, 'u1', { name: 'Vendor' } as never);
+
+      expect(auditRecord).toHaveBeenCalledWith({
+        userId: 'u1',
+        organizationId: ORG_ID,
+        action: 'SUPPLIER_CREATED',
+        entity: 'Supplier',
+        entityId: 's1',
+        status: 'SUCCESS',
+        metadata: { name: 'Vendor' },
+      });
+    });
+
+    it('records SUPPLIER_UPDATED on successful update', async () => {
+      const { service, supplierUpdate, auditRecord } = buildService();
+      supplierUpdate.mockResolvedValue({ id: 's1', name: 'Updated', isActive: true, updatedAt: new Date() });
+
+      await service.update(ORG_ID, 'u1', 's1', { name: 'Updated' } as never);
+
+      expect(auditRecord).toHaveBeenCalledWith({
+        userId: 'u1',
+        organizationId: ORG_ID,
+        action: 'SUPPLIER_UPDATED',
+        entity: 'Supplier',
+        entityId: 's1',
+        status: 'SUCCESS',
+        metadata: { name: 'Updated', changes: ['name'] },
+      });
+    });
+
+    it('records SUPPLIER_DELETED on successful softDelete', async () => {
+      const { service, supplierUpdateMany, auditRecord } = buildService();
+      supplierUpdateMany.mockResolvedValue({ count: 1 });
+
+      await service.softDelete(ORG_ID, 'u1', 's1');
+
+      expect(auditRecord).toHaveBeenCalledWith({
+        userId: 'u1',
+        organizationId: ORG_ID,
+        action: 'SUPPLIER_DELETED',
+        entity: 'Supplier',
+        entityId: 's1',
+        status: 'SUCCESS',
+      });
+    });
+
+    it('records SUPPLIER_STATUS_CHANGED on successful updateStatus', async () => {
+      const { service, supplierUpdate, auditRecord } = buildService();
+      supplierUpdate.mockResolvedValue({ id: 's1', name: 'Vendor', isActive: false, updatedAt: new Date() });
+
+      await service.updateStatus(ORG_ID, 'u1', 's1', { isActive: false } as never);
+
+      expect(auditRecord).toHaveBeenCalledWith({
+        userId: 'u1',
+        organizationId: ORG_ID,
+        action: 'SUPPLIER_STATUS_CHANGED',
+        entity: 'Supplier',
+        entityId: 's1',
+        status: 'SUCCESS',
+        metadata: { name: 'Vendor', isActive: false },
+      });
+    });
+
+    it('create still returns supplier when audit logging is present', async () => {
+      const { service, supplierCreate } = buildService();
+      supplierCreate.mockResolvedValue({ id: 's1', name: 'Vendor', isActive: true, createdAt: new Date() });
+
+      const result = await service.create(ORG_ID, 'u1', { name: 'Vendor' } as never);
+
+      expect(result.id).toBe('s1');
+      expect(result.name).toBe('Vendor');
     });
   });
 });

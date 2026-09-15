@@ -784,3 +784,105 @@ describe('SalesController cancel endpoint permissions', () => {
     expect(metadata.permissions).not.toContain('sales.deliver');
   });
 });
+
+describe('SalesService CRUD audit logging', () => {
+  let service: SalesService;
+  let saleFindFirst: jest.Mock;
+  let saleFindMany: jest.Mock;
+  let saleCount: jest.Mock;
+  let saleCreate: jest.Mock;
+  let saleUpdate: jest.Mock;
+  let auditRecord: jest.Mock;
+
+  beforeEach(() => {
+    saleFindFirst = jest.fn();
+    saleFindMany = jest.fn().mockResolvedValue([]);
+    saleCount = jest.fn().mockResolvedValue(0);
+    saleCreate = jest.fn();
+    saleUpdate = jest.fn();
+    auditRecord = jest.fn().mockResolvedValue(undefined);
+
+    service = new SalesService(
+      {
+        salesOrder: {
+          findFirst: saleFindFirst,
+          findMany: saleFindMany,
+          count: saleCount,
+          create: saleCreate,
+          update: saleUpdate,
+        },
+        customer: { findFirst: jest.fn().mockResolvedValue({ id: 'cust-1' }) },
+        product: { findMany: jest.fn().mockResolvedValue([{ id: 'p1', name: 'Widget', unitPrice: 100 }]) },
+      } as unknown as PrismaService,
+      {} as never,
+      { record: auditRecord } as never,
+    );
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it('records SALES_ORDER_CREATED on successful create', async () => {
+    saleCreate.mockResolvedValue({ id: 'so-1', orderNumber: 'SO-2026-000001', status: 'DRAFT', total: 100, createdAt: new Date() });
+
+    await service.create(ORG_ID, USER_ID, {
+      customerId: 'cust-1',
+      items: [{ productId: 'p1', quantity: 1 }],
+    } as never);
+
+    expect(auditRecord).toHaveBeenCalledWith({
+      userId: USER_ID,
+      organizationId: ORG_ID,
+      action: 'SALES_ORDER_CREATED',
+      entity: 'SalesOrder',
+      entityId: 'so-1',
+      status: 'SUCCESS',
+      metadata: { orderNumber: 'SO-2026-000001', total: 100 },
+    });
+  });
+
+  it('records SALES_ORDER_UPDATED on successful update', async () => {
+    saleFindFirst.mockResolvedValue({ id: SALE_ID, orderNumber: 'SO-001', status: 'DRAFT' });
+    saleUpdate.mockResolvedValue({ id: SALE_ID, orderNumber: 'SO-001', status: 'DRAFT', total: 200, updatedAt: new Date() });
+
+    await service.update(ORG_ID, USER_ID, SALE_ID, { notes: 'Updated' } as never);
+
+    expect(auditRecord).toHaveBeenCalledWith({
+      userId: USER_ID,
+      organizationId: ORG_ID,
+      action: 'SALES_ORDER_UPDATED',
+      entity: 'SalesOrder',
+      entityId: SALE_ID,
+      status: 'SUCCESS',
+      metadata: { orderNumber: 'SO-001', changes: ['notes'] },
+    });
+  });
+
+  it('records SALES_ORDER_DELETED on successful softDelete', async () => {
+    saleFindFirst.mockResolvedValue({ id: SALE_ID, orderNumber: 'SO-001', status: 'DRAFT' });
+    saleUpdate.mockResolvedValue({ id: SALE_ID });
+
+    await service.softDelete(ORG_ID, USER_ID, SALE_ID);
+
+    expect(auditRecord).toHaveBeenCalledWith({
+      userId: USER_ID,
+      organizationId: ORG_ID,
+      action: 'SALES_ORDER_DELETED',
+      entity: 'SalesOrder',
+      entityId: SALE_ID,
+      status: 'SUCCESS',
+      metadata: { orderNumber: 'SO-001' },
+    });
+  });
+
+  it('create still returns sale when audit logging is present', async () => {
+    saleCreate.mockResolvedValue({ id: 'so-1', orderNumber: 'SO-2026-000001', status: 'DRAFT', total: 100, createdAt: new Date() });
+
+    const result = await service.create(ORG_ID, USER_ID, {
+      customerId: 'cust-1',
+      items: [{ productId: 'p1', quantity: 1 }],
+    } as never);
+
+    expect(result.id).toBe('so-1');
+    expect(result.orderNumber).toBe('SO-2026-000001');
+  });
+});

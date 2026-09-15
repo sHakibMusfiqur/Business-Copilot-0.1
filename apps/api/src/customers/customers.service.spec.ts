@@ -21,6 +21,7 @@ const buildService = (overrides: Record<string, jest.Mock> = {}) => {
   const customerCreate = overrides.customerCreate ?? jest.fn();
   const customerUpdate = overrides.customerUpdate ?? jest.fn();
   const customerUpdateMany = overrides.customerUpdateMany ?? jest.fn();
+  const auditRecord = overrides.auditRecord ?? jest.fn().mockResolvedValue(undefined);
 
   const service = new CustomersService({
     customer: {
@@ -31,7 +32,9 @@ const buildService = (overrides: Record<string, jest.Mock> = {}) => {
       update: customerUpdate,
       updateMany: customerUpdateMany,
     },
-  } as unknown as PrismaService);
+  } as unknown as PrismaService, {
+    record: auditRecord,
+  } as never);
 
   return {
     service,
@@ -41,6 +44,7 @@ const buildService = (overrides: Record<string, jest.Mock> = {}) => {
     customerCreate,
     customerUpdate,
     customerUpdateMany,
+    auditRecord,
   };
 };
 
@@ -322,6 +326,85 @@ describe('CustomersService', () => {
       customerUpdate.mockRejectedValue(p2025());
 
       await expect(service.update(ORG_ID, 'u1', 'c-other', { name: 'Hacked' } as never)).rejects.toThrow();
+    });
+  });
+
+  describe('audit logging', () => {
+    it('records CUSTOMER_CREATED on successful create', async () => {
+      const { service, customerCreate, auditRecord } = buildService();
+      customerCreate.mockResolvedValue({ id: 'c1', name: 'Acme', isActive: true, createdAt: new Date() });
+
+      await service.create(ORG_ID, 'u1', { name: 'Acme' } as never);
+
+      expect(auditRecord).toHaveBeenCalledWith({
+        userId: 'u1',
+        organizationId: ORG_ID,
+        action: 'CUSTOMER_CREATED',
+        entity: 'Customer',
+        entityId: 'c1',
+        status: 'SUCCESS',
+        metadata: { name: 'Acme' },
+      });
+    });
+
+    it('records CUSTOMER_UPDATED on successful update', async () => {
+      const { service, customerUpdate, auditRecord } = buildService();
+      customerUpdate.mockResolvedValue({ id: 'c1', name: 'Updated', isActive: true, updatedAt: new Date() });
+
+      await service.update(ORG_ID, 'u1', 'c1', { name: 'Updated' } as never);
+
+      expect(auditRecord).toHaveBeenCalledWith({
+        userId: 'u1',
+        organizationId: ORG_ID,
+        action: 'CUSTOMER_UPDATED',
+        entity: 'Customer',
+        entityId: 'c1',
+        status: 'SUCCESS',
+        metadata: { name: 'Updated', changes: ['name'] },
+      });
+    });
+
+    it('records CUSTOMER_DELETED on successful softDelete', async () => {
+      const { service, customerUpdateMany, auditRecord } = buildService();
+      customerUpdateMany.mockResolvedValue({ count: 1 });
+
+      await service.softDelete(ORG_ID, 'u1', 'c1');
+
+      expect(auditRecord).toHaveBeenCalledWith({
+        userId: 'u1',
+        organizationId: ORG_ID,
+        action: 'CUSTOMER_DELETED',
+        entity: 'Customer',
+        entityId: 'c1',
+        status: 'SUCCESS',
+      });
+    });
+
+    it('records CUSTOMER_STATUS_CHANGED on successful updateStatus', async () => {
+      const { service, customerUpdate, auditRecord } = buildService();
+      customerUpdate.mockResolvedValue({ id: 'c1', name: 'Acme', isActive: false, updatedAt: new Date() });
+
+      await service.updateStatus(ORG_ID, 'u1', 'c1', { isActive: false } as never);
+
+      expect(auditRecord).toHaveBeenCalledWith({
+        userId: 'u1',
+        organizationId: ORG_ID,
+        action: 'CUSTOMER_STATUS_CHANGED',
+        entity: 'Customer',
+        entityId: 'c1',
+        status: 'SUCCESS',
+        metadata: { name: 'Acme', isActive: false },
+      });
+    });
+
+    it('create still returns customer when audit logging is present', async () => {
+      const { service, customerCreate } = buildService();
+      customerCreate.mockResolvedValue({ id: 'c1', name: 'Acme', isActive: true, createdAt: new Date() });
+
+      const result = await service.create(ORG_ID, 'u1', { name: 'Acme' } as never);
+
+      expect(result.id).toBe('c1');
+      expect(result.name).toBe('Acme');
     });
   });
 });

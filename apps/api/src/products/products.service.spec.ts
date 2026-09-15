@@ -28,6 +28,7 @@ const buildService = (overrides: Record<string, jest.Mock> = {}) => {
   const productFindMany = overrides.productFindMany ?? jest.fn().mockResolvedValue([]);
   const productCount = overrides.productCount ?? jest.fn().mockResolvedValue(0);
   const productUpdate = overrides.productUpdate ?? jest.fn().mockResolvedValue({ id: 'p1', name: 'Product', sku: 'SKU-1', isActive: true, updatedAt: new Date() });
+  const auditRecord = overrides.auditRecord ?? jest.fn().mockResolvedValue(undefined);
 
   const service = new ProductsService({
     category: { findFirst: categoryFindFirst },
@@ -39,7 +40,9 @@ const buildService = (overrides: Record<string, jest.Mock> = {}) => {
       count: productCount,
       update: productUpdate,
     },
-  } as unknown as PrismaService);
+  } as unknown as PrismaService, {
+    record: auditRecord,
+  } as never);
 
   return {
     service,
@@ -50,6 +53,7 @@ const buildService = (overrides: Record<string, jest.Mock> = {}) => {
     productFindMany,
     productCount,
     productUpdate,
+    auditRecord,
   };
 };
 
@@ -364,6 +368,87 @@ describe('ProductsService', () => {
       expect(productFindMany).toHaveBeenCalledWith(
         expect.objectContaining({ orderBy: { createdAt: 'desc' } }),
       );
+    });
+  });
+
+  describe('audit logging', () => {
+    it('records PRODUCT_CREATED on successful create', async () => {
+      const { service, productCreate, auditRecord } = buildService();
+      productCreate.mockResolvedValue({ id: 'p1', name: 'Widget', sku: 'W-1' });
+
+      await service.create(ORG_ID, 'u1', { name: 'Widget', sku: 'W-1' } as never);
+
+      expect(auditRecord).toHaveBeenCalledWith({
+        userId: 'u1',
+        organizationId: ORG_ID,
+        action: 'PRODUCT_CREATED',
+        entity: 'Product',
+        entityId: 'p1',
+        status: 'SUCCESS',
+        metadata: { name: 'Widget', sku: 'W-1' },
+      });
+    });
+
+    it('records PRODUCT_UPDATED on successful update', async () => {
+      const { service, productFindFirst, productUpdate, auditRecord } = buildService();
+      productFindFirst.mockResolvedValue({ id: 'p1', organizationId: ORG_ID });
+      productUpdate.mockResolvedValue({ id: 'p1', name: 'Updated', sku: 'SKU-1', isActive: true, updatedAt: new Date() });
+
+      await service.update(ORG_ID, 'u1', 'p1', { name: 'Updated' } as never);
+
+      expect(auditRecord).toHaveBeenCalledWith({
+        userId: 'u1',
+        organizationId: ORG_ID,
+        action: 'PRODUCT_UPDATED',
+        entity: 'Product',
+        entityId: 'p1',
+        status: 'SUCCESS',
+        metadata: { name: 'Updated', changes: ['name'] },
+      });
+    });
+
+    it('records PRODUCT_DELETED on successful softDelete', async () => {
+      const { service, productUpdate, auditRecord } = buildService();
+      productUpdate.mockResolvedValue({ id: 'p1', name: 'Widget' });
+
+      await service.softDelete(ORG_ID, 'u1', 'p1');
+
+      expect(auditRecord).toHaveBeenCalledWith({
+        userId: 'u1',
+        organizationId: ORG_ID,
+        action: 'PRODUCT_DELETED',
+        entity: 'Product',
+        entityId: 'p1',
+        status: 'SUCCESS',
+        metadata: { name: 'Widget' },
+      });
+    });
+
+    it('records PRODUCT_STATUS_CHANGED on successful updateStatus', async () => {
+      const { service, productUpdate, auditRecord } = buildService();
+      productUpdate.mockResolvedValue({ id: 'p1', name: 'Widget', sku: 'SKU-1', isActive: false, updatedAt: new Date() });
+
+      await service.updateStatus(ORG_ID, 'u1', 'p1', { isActive: false });
+
+      expect(auditRecord).toHaveBeenCalledWith({
+        userId: 'u1',
+        organizationId: ORG_ID,
+        action: 'PRODUCT_STATUS_CHANGED',
+        entity: 'Product',
+        entityId: 'p1',
+        status: 'SUCCESS',
+        metadata: { name: 'Widget', isActive: false },
+      });
+    });
+
+    it('create still returns product when audit logging is present', async () => {
+      const { service, productCreate } = buildService();
+      productCreate.mockResolvedValue({ id: 'p1', name: 'Widget', sku: 'W-1' });
+
+      const result = await service.create(ORG_ID, 'u1', { name: 'Widget', sku: 'W-1' } as never);
+
+      expect(result.id).toBe('p1');
+      expect(result.name).toBe('Widget');
     });
   });
 });

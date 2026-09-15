@@ -7,6 +7,7 @@ import {
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 
 import type { QueryProductsDto } from './dto/query-products.dto';
 import type { CreateProductDto } from './dto/create-product.dto';
@@ -19,6 +20,7 @@ export class ProductsService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
   ) {}
 
   async findAll(orgId: string, query: QueryProductsDto) {
@@ -177,6 +179,17 @@ export class ProductsService {
     }
 
     this.logger.log(`Product created: ${product.name} (${product.id}) by ${currentUserId}`);
+
+    await this.auditService.record({
+      userId: currentUserId,
+      organizationId: orgId,
+      action: 'PRODUCT_CREATED',
+      entity: 'Product',
+      entityId: product.id,
+      status: 'SUCCESS',
+      metadata: { name: product.name, sku: product.sku },
+    });
+
     return product;
   }
 
@@ -248,6 +261,17 @@ export class ProductsService {
     }
 
     this.logger.log(`Product updated: ${updated.name} (${productId}) by ${currentUserId}`);
+
+    await this.auditService.record({
+      userId: currentUserId,
+      organizationId: orgId,
+      action: 'PRODUCT_UPDATED',
+      entity: 'Product',
+      entityId: productId,
+      status: 'SUCCESS',
+      metadata: { name: updated.name, changes: Object.keys(dto) },
+    });
+
     return updated;
   }
 
@@ -291,6 +315,17 @@ export class ProductsService {
     }
 
     this.logger.log(`Product soft-deleted: ${product.name} (${productId}) by ${currentUserId}`);
+
+    await this.auditService.record({
+      userId: currentUserId,
+      organizationId: orgId,
+      action: 'PRODUCT_DELETED',
+      entity: 'Product',
+      entityId: productId,
+      status: 'SUCCESS',
+      metadata: { name: product.name },
+    });
+
     return { message: 'Product deleted successfully' };
   }
 
@@ -316,6 +351,17 @@ export class ProductsService {
     }
 
     this.logger.log(`Product ${dto.isActive ? 'activated' : 'deactivated'}: ${updated.name} (${productId}) by ${currentUserId}`);
+
+    await this.auditService.record({
+      userId: currentUserId,
+      organizationId: orgId,
+      action: 'PRODUCT_STATUS_CHANGED',
+      entity: 'Product',
+      entityId: productId,
+      status: 'SUCCESS',
+      metadata: { name: updated.name, isActive: dto.isActive },
+    });
+
     return updated;
   }
 }

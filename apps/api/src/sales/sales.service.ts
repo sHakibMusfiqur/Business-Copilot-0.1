@@ -197,6 +197,17 @@ export class SalesService {
         });
 
         this.logger.log(`Sales order created: ${sale.orderNumber} (${sale.id}) by ${userId}`);
+
+        await this.auditService.record({
+          userId,
+          organizationId: orgId,
+          action: 'SALES_ORDER_CREATED',
+          entity: 'SalesOrder',
+          entityId: sale.id,
+          status: 'SUCCESS',
+          metadata: { orderNumber: sale.orderNumber, total: sale.total },
+        });
+
         return sale;
       } catch (err) {
         if ((err as Prisma.PrismaClientKnownRequestError)?.code === 'P2002' && attempt < maxRetries) {
@@ -297,6 +308,17 @@ export class SalesService {
     });
 
     this.logger.log(`Sales order updated: ${updated.orderNumber} (${saleId}) by ${userId}`);
+
+    await this.auditService.record({
+      userId,
+      organizationId: orgId,
+      action: 'SALES_ORDER_UPDATED',
+      entity: 'SalesOrder',
+      entityId: saleId,
+      status: 'SUCCESS',
+      metadata: { orderNumber: updated.orderNumber, changes: Object.keys(dto) },
+    });
+
     return updated;
   }
 
@@ -507,6 +529,17 @@ export class SalesService {
     });
 
     this.logger.log(`Sales order deleted: ${sale.orderNumber} (${saleId}) by ${userId}`);
+
+    await this.auditService.record({
+      userId,
+      organizationId: orgId,
+      action: 'SALES_ORDER_DELETED',
+      entity: 'SalesOrder',
+      entityId: saleId,
+      status: 'SUCCESS',
+      metadata: { orderNumber: sale.orderNumber },
+    });
+
     return { message: 'Sales order deleted successfully' };
   }
 

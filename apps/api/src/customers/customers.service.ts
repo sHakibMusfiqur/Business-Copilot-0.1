@@ -6,6 +6,7 @@ import {
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { AuditService } from '../audit/audit.service';
 
 import type { QueryCustomersDto } from './dto/query-customers.dto';
 import type { CreateCustomerDto } from './dto/create-customer.dto';
@@ -18,6 +19,7 @@ export class CustomersService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly auditService: AuditService,
   ) {}
 
   async findAll(orgId: string, query: QueryCustomersDto) {
@@ -154,6 +156,16 @@ export class CustomersService {
 
     this.logger.log(`Customer created: ${customer.name} (${customer.id}) by ${currentUserId}`);
 
+    await this.auditService.record({
+      userId: currentUserId,
+      organizationId: orgId,
+      action: 'CUSTOMER_CREATED',
+      entity: 'Customer',
+      entityId: customer.id,
+      status: 'SUCCESS',
+      metadata: { name: customer.name },
+    });
+
     return customer;
   }
 
@@ -197,6 +209,17 @@ export class CustomersService {
     }
 
     this.logger.log(`Customer updated: ${updated.name} (${customerId}) by ${currentUserId}`);
+
+    await this.auditService.record({
+      userId: currentUserId,
+      organizationId: orgId,
+      action: 'CUSTOMER_UPDATED',
+      entity: 'Customer',
+      entityId: customerId,
+      status: 'SUCCESS',
+      metadata: { name: updated.name, changes: Object.keys(dto) },
+    });
+
     return updated;
   }
 
@@ -211,6 +234,16 @@ export class CustomersService {
     }
 
     this.logger.log(`Customer soft-deleted: (${customerId}) by ${currentUserId}`);
+
+    await this.auditService.record({
+      userId: currentUserId,
+      organizationId: orgId,
+      action: 'CUSTOMER_DELETED',
+      entity: 'Customer',
+      entityId: customerId,
+      status: 'SUCCESS',
+    });
+
     return { message: 'Customer deleted successfully' };
   }
 
@@ -236,6 +269,17 @@ export class CustomersService {
     }
 
     this.logger.log(`Customer ${dto.isActive ? 'activated' : 'deactivated'}: ${updated.name} (${customerId}) by ${currentUserId}`);
+
+    await this.auditService.record({
+      userId: currentUserId,
+      organizationId: orgId,
+      action: 'CUSTOMER_STATUS_CHANGED',
+      entity: 'Customer',
+      entityId: customerId,
+      status: 'SUCCESS',
+      metadata: { name: updated.name, isActive: dto.isActive },
+    });
+
     return updated;
   }
 }

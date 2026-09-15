@@ -197,6 +197,17 @@ export class PurchaseService {
         });
 
         this.logger.log(`Purchase created: ${purchase.orderNumber} (${purchase.id}) by ${userId}`);
+
+        await this.auditService.record({
+          userId,
+          organizationId: orgId,
+          action: 'PURCHASE_ORDER_CREATED',
+          entity: 'PurchaseOrder',
+          entityId: purchase.id,
+          status: 'SUCCESS',
+          metadata: { orderNumber: purchase.orderNumber, total: purchase.total },
+        });
+
         return purchase;
       } catch (err) {
         if ((err as Prisma.PrismaClientKnownRequestError)?.code === 'P2002' && attempt < maxRetries) {
@@ -297,6 +308,17 @@ export class PurchaseService {
     });
 
     this.logger.log(`Purchase updated: ${updated.orderNumber} (${purchaseId}) by ${userId}`);
+
+    await this.auditService.record({
+      userId,
+      organizationId: orgId,
+      action: 'PURCHASE_ORDER_UPDATED',
+      entity: 'PurchaseOrder',
+      entityId: purchaseId,
+      status: 'SUCCESS',
+      metadata: { orderNumber: updated.orderNumber, changes: Object.keys(dto) },
+    });
+
     return updated;
   }
 
@@ -517,6 +539,17 @@ export class PurchaseService {
     });
 
     this.logger.log(`Purchase deleted: ${purchase.orderNumber} (${purchaseId}) by ${userId}`);
+
+    await this.auditService.record({
+      userId,
+      organizationId: orgId,
+      action: 'PURCHASE_ORDER_DELETED',
+      entity: 'PurchaseOrder',
+      entityId: purchaseId,
+      status: 'SUCCESS',
+      metadata: { orderNumber: purchase.orderNumber },
+    });
+
     return { message: 'Purchase order deleted successfully' };
   }
 
