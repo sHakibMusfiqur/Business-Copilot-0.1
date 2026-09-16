@@ -6,10 +6,12 @@ import {
   ConflictException,
   InternalServerErrorException,
 } from '@nestjs/common';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { MailService } from '../mail/mail.service';
 
 import type { QueryInvoiceDto } from './dto/query-invoice.dto';
 import type { CreateInvoiceDto } from './dto/create-invoice.dto';
@@ -22,6 +24,7 @@ export class InvoicesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly mailService: MailService,
   ) {}
 
   async findAll(orgId: string, query: QueryInvoiceDto) {
@@ -465,6 +468,151 @@ export class InvoicesService {
     }
 
     return result.count;
+  }
+
+  async generatePdf(orgId: string, invoiceId: string): Promise<Buffer> {
+    const invoice = await this.prisma.invoice.findFirst({
+      where: { id: invoiceId, organizationId: orgId },
+      include: {
+        items: true,
+        customer: true,
+        organization: true,
+      },
+    });
+
+    if (!invoice) throw new NotFoundException('Invoice not found');
+
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const PDFDocument = require('pdfkit');
+
+    return new Promise<Buffer>((resolve, reject) => {
+      const doc = new PDFDocument({ margin: 50 });
+      const chunks: Buffer[] = [];
+
+      doc.on('data', (chunk: Buffer) => chunks.push(chunk));
+      doc.on('end', () => resolve(Buffer.concat(chunks)));
+      doc.on('error', reject);
+
+      if (invoice.organization?.name) {
+        doc.fontSize(20).text(invoice.organization.name, { align: 'left' });
+      }
+      doc.fontSize(10).text('INVOICE', { align: 'right' });
+      doc.moveDown();
+
+      doc.fontSize(12).text(`Invoice #: ${invoice.invoiceNumber}`);
+      doc.text(`Issue Date: ${invoice.issueDate ? new Date(invoice.issueDate).toLocaleDateString() : 'N/A'}`);
+      doc.text(`Due Date: ${invoice.dueDate ? new Date(invoice.dueDate).toLocaleDateString() : 'N/A'}`);
+      doc.moveDown();
+
+      if (invoice.customer) {
+        doc.fontSize(12).text('Bill To:');
+        doc.fontSize(10).text(invoice.customer.name || '');
+        if (invoice.customer.email) doc.text(invoice.customer.email);
+        if (invoice.customer.phone) doc.text(invoice.customer.phone);
+        doc.moveDown();
+      }
+
+      doc.fontSize(12).text('Items');
+      doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+      doc.moveDown(0.5);
+
+      const headerY = doc.y;
+      doc.fontSize(10).text('Description', 50, headerY, { width: 200 })
+        .text('Qty', 260, headerY, { width: 50, align: 'right' })
+        .text('Unit Price', 320, headerY, { width: 80, align: 'right' })
+        .text('Total', 480, headerY, { width: 70, align: 'right' });
+      doc.moveDown();
+
+      for (const item of invoice.items) {
+        const y = doc.y;
+        doc.text(item.description || '', 50, y, { width: 200 })
+          .text(String(item.quantity), 260, y, { width: 50, align: 'right' })
+          .text(`$${Number(item.unitPrice).toFixed(2)}`, 320, y, { width: 80, align: 'right' })
+          .text(`$${Number(item.total).toFixed(2)}`, 480, y, { width: 70, align: 'right' });
+        doc.moveDown();
+      }
+
+      doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+      doc.moveDown();
+
+      doc.fontSize(10)
+        .text(`Subtotal: $${Number(invoice.subtotal).toFixed(2)}`, 350, doc.y, { align: 'right', width: 200 })
+        .text(`Tax: $${Number(invoice.taxTotal).toFixed(2)}`, 350, doc.y, { align: 'right', width: 200 })
+        .text(`Discount: $${Number(invoice.discountTotal).toFixed(2)}`, 350, doc.y, { align: 'right', width: 200 });
+      doc.moveDown();
+      doc.fontSize(14).text(`Total: $${Number(invoice.total).toFixed(2)}`, 350, doc.y, { align: 'right', width: 200 });
+      doc.fontSize(10).text(`Paid: $${Number(invoice.paidAmount).toFixed(2)}`, 350, doc.y, { align: 'right', width: 200 });
+      doc.fontSize(12).text(`Balance Due: $${(Number(invoice.total) - Number(invoice.paidAmount)).toFixed(2)}`, 350, doc.y, { align: 'right', width: 200 });
+
+      doc.end();
+    }).then(async (buffer) => {
+      await this.auditService.record({
+        userId: 'system',
+        organizationId: orgId,
+        action: 'INVOICE_PDF_GENERATED',
+        entity: 'Invoice',
+        entityId: invoiceId,
+        status: 'SUCCESS',
+        metadata: { invoiceNumber: invoice.invoiceNumber },
+      });
+      return buffer;
+    });
+  }
+
+  async emailInvoice(orgId: string, invoiceId: string) {
+    const invoice = await this.prisma.invoice.findFirst({
+      where: { id: invoiceId, organizationId: orgId },
+      include: { customer: true, organization: true },
+    });
+
+    if (!invoice) throw new NotFoundException('Invoice not found');
+    if (!invoice.customer?.email) throw new BadRequestException('Customer has no email address');
+
+    try {
+      await this.mailService.sendOrgEmail(orgId, {
+        to: invoice.customer.email,
+        subject: `Invoice ${invoice.invoiceNumber}`,
+        type: 'invoice',
+        data: {
+          invoice: {
+            invoiceNumber: invoice.invoiceNumber,
+            amount: Number(invoice.total).toFixed(2),
+            dueDate: invoice.dueDate?.toISOString() || '',
+          },
+        },
+      });
+
+      await this.auditService.record({
+        userId: 'system',
+        organizationId: orgId,
+        action: 'INVOICE_EMAIL_SENT',
+        entity: 'Invoice',
+        entityId: invoiceId,
+        status: 'SUCCESS',
+        metadata: { invoiceNumber: invoice.invoiceNumber, recipient: invoice.customer.email },
+      });
+
+      return { message: 'Invoice emailed successfully' };
+    } catch (error) {
+      await this.auditService.record({
+        userId: 'system',
+        organizationId: orgId,
+        action: 'INVOICE_EMAIL_FAILED',
+        entity: 'Invoice',
+        entityId: invoiceId,
+        status: 'FAILURE',
+        metadata: { invoiceNumber: invoice.invoiceNumber, error: error instanceof Error ? error.message : String(error) },
+      });
+      throw new InternalServerErrorException('Failed to send invoice email');
+    }
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_6AM)
+  async handleOverdueInvoices() {
+    const organizations = await this.prisma.organization.findMany({ select: { id: true } });
+    for (const org of organizations) {
+      await this.updateOverdueStatuses(org.id);
+    }
   }
 
   private computeAdvisoryLockKey(orgId: string): number {

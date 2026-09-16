@@ -110,6 +110,16 @@ export class AuditService {
       ];
     }
 
+    if (query.dateFrom || query.dateTo) {
+      where.createdAt = {};
+      if (query.dateFrom) {
+        where.createdAt.gte = new Date(query.dateFrom);
+      }
+      if (query.dateTo) {
+        where.createdAt.lte = new Date(query.dateTo);
+      }
+    }
+
     const orderBy: Prisma.AuditLogOrderByWithRelationInput = {};
     orderBy.createdAt = query.sortOrder ?? 'desc';
 

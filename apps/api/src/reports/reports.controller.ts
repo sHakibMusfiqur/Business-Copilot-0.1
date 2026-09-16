@@ -3,8 +3,10 @@ import {
   ForbiddenException,
   Get,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiBearerAuth, ApiOkResponse, ApiTags, ApiOperation, ApiQuery } from '@nestjs/swagger';
 
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -104,5 +106,88 @@ export class ReportsController {
   async getEmployeeSummary(@CurrentUser() user: CurrentUserPayload) {
     const orgId = this.requireOrg(user);
     return this.reportsService.getEmployeeSummary(orgId);
+  }
+
+  private toCsv(headers: string[], rows: (string | number)[][]): string {
+    const escape = (val: string | number) => `"${String(val).replace(/"/g, '""')}"`;
+    const lines = [headers.map(escape).join(',')];
+    for (const row of rows) {
+      lines.push(row.map(escape).join(','));
+    }
+    return lines.join('\n');
+  }
+
+  @Get('sales/export')
+  @UseGuards(PermissionGuard)
+  @Permissions(['reports.export'])
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Export sales report as CSV' })
+  @ApiOkResponse({ description: 'CSV file' })
+  @ApiQuery({ name: 'startDate', required: false, description: 'Start date (ISO 8601)' })
+  @ApiQuery({ name: 'endDate', required: false, description: 'End date (ISO 8601)' })
+  async exportSalesCsv(
+    @CurrentUser() user: CurrentUserPayload,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Res() response?: Response,
+  ) {
+    const orgId = this.requireOrg(user);
+    const data = await this.reportsService.getSalesSummary(orgId, { startDate, endDate });
+    const csv = this.toCsv(
+      ['Status', 'Count', 'Total'],
+      data.byStatus.map((s) => [s.status, s.count, s.total]),
+    );
+    const filename = `sales-report-${new Date().toISOString().split('T')[0]}.csv`;
+    response?.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    response?.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    response?.send(csv);
+  }
+
+  @Get('purchases/export')
+  @UseGuards(PermissionGuard)
+  @Permissions(['reports.export'])
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Export purchases report as CSV' })
+  @ApiOkResponse({ description: 'CSV file' })
+  @ApiQuery({ name: 'startDate', required: false, description: 'Start date (ISO 8601)' })
+  @ApiQuery({ name: 'endDate', required: false, description: 'End date (ISO 8601)' })
+  async exportPurchasesCsv(
+    @CurrentUser() user: CurrentUserPayload,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Res() response?: Response,
+  ) {
+    const orgId = this.requireOrg(user);
+    const data = await this.reportsService.getPurchaseSummary(orgId, { startDate, endDate });
+    const csv = this.toCsv(
+      ['Status', 'Count', 'Total'],
+      data.byStatus.map((s) => [s.status, s.count, s.total]),
+    );
+    const filename = `purchases-report-${new Date().toISOString().split('T')[0]}.csv`;
+    response?.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    response?.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    response?.send(csv);
+  }
+
+  @Get('inventory/export')
+  @UseGuards(PermissionGuard)
+  @Permissions(['reports.export'])
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Export inventory report as CSV' })
+  @ApiOkResponse({ description: 'CSV file' })
+  async exportInventoryCsv(
+    @CurrentUser() user: CurrentUserPayload,
+    @Res() response?: Response,
+  ) {
+    const orgId = this.requireOrg(user);
+    const data = await this.reportsService.getInventorySummary(orgId);
+    const csv = this.toCsv(
+      ['Total Products', 'Total Inventory Items', 'Total Quantity'],
+      [[data.totalProducts, data.totalInventoryItems, data.totalQuantity]],
+    );
+    const filename = `inventory-report-${new Date().toISOString().split('T')[0]}.csv`;
+    response?.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    response?.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    response?.send(csv);
   }
 }

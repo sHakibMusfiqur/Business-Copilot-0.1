@@ -11,8 +11,11 @@ import {
   HttpCode,
   HttpStatus,
   ForbiddenException,
+  Res,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiOkResponse, ApiParam } from '@nestjs/swagger';
+
+import type { Response } from 'express';
 
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { PermissionGuard } from '../common/guards/permission.guard';
@@ -114,5 +117,36 @@ export class InvoicesController {
     const orgId = this.requireOrg(user);
     const count = await this.invoicesService.updateOverdueStatuses(orgId);
     return { updated: count };
+  }
+
+  @Get(':id/pdf')
+  @Permissions(['invoices.read'])
+  @ApiOperation({ summary: 'Generate PDF for an invoice' })
+  @ApiParam({ name: 'id', type: String })
+  async generatePdf(
+    @Param('id', ParseCuidPipe) id: string,
+    @CurrentUser() user: CurrentUserPayload,
+    @Res() res: Response,
+  ) {
+    const orgId = this.requireOrg(user);
+    const buffer = await this.invoicesService.generatePdf(orgId, id);
+    const invoice = await this.invoicesService.findById(orgId, id);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="invoice-${invoice.invoiceNumber}.pdf"`,
+    });
+    res.send(buffer);
+  }
+
+  @Post(':id/email')
+  @Permissions(['invoices.read'])
+  @ApiOperation({ summary: 'Email an invoice to the customer' })
+  @ApiParam({ name: 'id', type: String })
+  async emailInvoice(
+    @Param('id', ParseCuidPipe) id: string,
+    @CurrentUser() user: CurrentUserPayload,
+  ) {
+    const orgId = this.requireOrg(user);
+    return this.invoicesService.emailInvoice(orgId, id);
   }
 }

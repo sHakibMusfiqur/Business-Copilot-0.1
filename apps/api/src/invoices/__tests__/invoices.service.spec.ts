@@ -107,7 +107,8 @@ describe('InvoicesService', () => {
   beforeEach(() => {
     prismaMocks = mockPrismaService();
     auditService = mockAuditService();
-    service = new InvoicesService(prismaMocks.prisma, auditService as unknown as AuditService);
+    const mailService = { sendOrgEmail: jest.fn().mockResolvedValue({ sent: true }) } as never;
+    service = new InvoicesService(prismaMocks.prisma, auditService as unknown as AuditService, mailService);
   });
 
   describe('findAll', () => {

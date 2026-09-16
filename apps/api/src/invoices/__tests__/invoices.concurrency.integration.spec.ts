@@ -31,6 +31,10 @@ function createAuditService(): AuditService {
   return new AuditService(createPrismaService());
 }
 
+function createMailService() {
+  return { sendOrgEmail: jest.fn().mockResolvedValue({ sent: true }) } as never;
+}
+
 function formatError(reason: unknown): { constructor: string; message: string; prismaCode: string | null } {
   if (reason instanceof Error) {
     return {
@@ -123,8 +127,9 @@ async function seedBase() {
   });
 
   const auditService = createAuditService();
-  invoicesServiceA = new InvoicesService(createPrismaService(), auditService);
-  invoicesServiceB = new InvoicesService(createPrismaService(), auditService);
+  const mailService = createMailService();
+  invoicesServiceA = new InvoicesService(createPrismaService(), auditService, mailService);
+  invoicesServiceB = new InvoicesService(createPrismaService(), auditService, mailService);
 }
 
 async function createDeliveredSalesOrder(
@@ -425,7 +430,7 @@ describe('Invoice Concurrency Integration — Real Service', () => {
       });
 
       const auditService = createAuditService();
-      const freshService = new InvoicesService(createPrismaService(), auditService);
+      const freshService = new InvoicesService(createPrismaService(), auditService, createMailService());
 
       const COUNT = 8;
 
@@ -489,7 +494,7 @@ describe('Invoice Concurrency Integration — Real Service', () => {
       await prisma.product.create({ data: { id: stressProduct, organizationId: stressOrg, name: 'Stress Product', sku: `SKU-STRESS-${Date.now()}` } });
 
       const auditService = createAuditService();
-      const stressService = new InvoicesService(createPrismaService(), auditService);
+      const stressService = new InvoicesService(createPrismaService(), auditService, createMailService());
 
       const COUNT = 20;
       const salesOrders = await Promise.all(
@@ -564,8 +569,9 @@ describe('Invoice Concurrency Integration — Real Service', () => {
       await prisma.product.create({ data: { id: stressProductY, organizationId: stressOrgY, name: 'Prod Y', sku: `SKU-SY-${Date.now()}` } });
 
       const auditService = createAuditService();
-      const stressServiceX = new InvoicesService(createPrismaService(), auditService);
-      const stressServiceY = new InvoicesService(createPrismaService(), auditService);
+      const mailService = createMailService();
+      const stressServiceX = new InvoicesService(createPrismaService(), auditService, mailService);
+      const stressServiceY = new InvoicesService(createPrismaService(), auditService, mailService);
 
       const COUNT_PER_ORG = 20;
 

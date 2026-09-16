@@ -3,6 +3,11 @@
 import { useQuery } from '@tanstack/react-query';
 import { X, Loader2 } from 'lucide-react';
 
+import { Button } from '@/components/ui/button';
+import { RequirePermission } from '@/components/rbac/require-permission';
+import { useToast } from '@/components/ui/use-toast';
+import { getAccessToken } from '@/lib/api/client';
+import { INVOICES_READ } from '@/lib/permissions';
 import { formatDate, formatCurrency } from '@/lib/utils';
 import { getInvoice } from '@/lib/api';
 import type { Invoice, InvoiceStatus, PaymentStatus } from './invoices-types';
@@ -34,6 +39,7 @@ interface InvoiceDetailsDialogProps {
 }
 
 export function InvoiceDetailsDialog({ invoice, open, onClose }: InvoiceDetailsDialogProps) {
+  const { toast } = useToast();
   const { data: fullInvoice, isLoading, error } = useQuery<Invoice>({
     queryKey: ['invoice', invoice?.id],
     queryFn: ({ signal }) => getInvoice(String(invoice?.id), signal),
@@ -170,6 +176,56 @@ export function InvoiceDetailsDialog({ invoice, open, onClose }: InvoiceDetailsD
               </table>
             </div>
           </>
+        )}
+
+        {!isLoading && !error && (
+          <div className="flex items-center justify-end gap-2 mt-6 pt-4 border-t">
+            <RequirePermission permission={INVOICES_READ}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    const response = await fetch(`/api/invoices/${display.id}/pdf`, {
+                      headers: { Authorization: `Bearer ${getAccessToken()}` },
+                    });
+                    if (!response.ok) throw new Error('Failed to download');
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `invoice-${display.invoiceNumber}.pdf`;
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    toast({ title: 'PDF downloaded' });
+                  } catch {
+                    toast({ variant: 'destructive', title: 'Failed to download PDF' });
+                  }
+                }}
+              >
+                Download PDF
+              </Button>
+            </RequirePermission>
+            <RequirePermission permission={INVOICES_READ}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await fetch(`/api/invoices/${display.id}/email`, {
+                      method: 'POST',
+                      headers: { Authorization: `Bearer ${getAccessToken()}` },
+                    });
+                    toast({ title: 'Invoice emailed successfully' });
+                  } catch {
+                    toast({ variant: 'destructive', title: 'Failed to email invoice' });
+                  }
+                }}
+              >
+                Email Invoice
+              </Button>
+            </RequirePermission>
+          </div>
         )}
       </div>
     </div>
