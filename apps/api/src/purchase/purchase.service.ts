@@ -553,6 +553,47 @@ export class PurchaseService {
     return { message: 'Purchase order deleted successfully' };
   }
 
+  async cancel(orgId: string, userId: string, purchaseId: string) {
+    const result = await this.prisma.purchaseOrder.updateMany({
+      where: {
+        id: purchaseId,
+        organizationId: orgId,
+        status: { in: [PurchaseStatus.DRAFT, PurchaseStatus.PENDING, PurchaseStatus.APPROVED] },
+        deletedAt: null,
+      },
+      data: { status: PurchaseStatus.CANCELLED },
+    });
+
+    if (result.count === 0) {
+      const exists = await this.prisma.purchaseOrder.findFirst({
+        where: { id: purchaseId, organizationId: orgId, deletedAt: null },
+      });
+      if (!exists) throw new NotFoundException('Purchase order not found');
+      throw new ConflictException('Only DRAFT, PENDING, or APPROVED purchase orders can be cancelled');
+    }
+
+    const updated = await this.prisma.purchaseOrder.findFirst({
+      where: { id: purchaseId, organizationId: orgId },
+      select: { id: true, orderNumber: true, status: true },
+    });
+
+    if (!updated) throw new NotFoundException('Purchase order not found');
+
+    this.logger.log(`Purchase cancelled: ${updated.orderNumber} (${purchaseId}) by ${userId}`);
+
+    await this.auditService.record({
+      userId,
+      organizationId: orgId,
+      action: 'PURCHASE_ORDER_CANCELLED',
+      entity: 'PurchaseOrder',
+      entityId: purchaseId,
+      status: 'SUCCESS',
+      metadata: { orderNumber: updated.orderNumber },
+    });
+
+    return updated;
+  }
+
   private buildPurchaseItems(
     dtoItems: Array<{ productId: string; quantity: number; discount?: number; tax?: number }>,
     products: Array<{ id: string; name: string; costPrice: unknown }>,

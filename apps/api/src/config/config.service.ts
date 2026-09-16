@@ -7,7 +7,7 @@ const REQUIRED_ENV_VARS = ['DATABASE_URL', 'JWT_SECRET', 'JWT_REFRESH_SECRET'] a
 const JWT_SECRET_KEYS = ['JWT_SECRET', 'JWT_REFRESH_SECRET'] as const;
 
 /** Known placeholder shapes that must never be used as a production JWT secret. */
-const INSECURE_SECRET_PATTERN = /change[-_ ]?me|changeme|placeholder|your[-_ ]?(secret|jwt)|^your-/i;
+const INSECURE_SECRET_PATTERN = /change[-_ ]?me|changeme|placeholder|your[-_ ]?(secret|jwt)|^your-|super-secret|secret-jwt|secret-key|example|test-secret|dev-only|lorem|ipsum/i;
 
 /** The only NODE_ENV values the application understands. Anything else is rejected. */
 const VALID_NODE_ENV_VALUES: NodeEnv[] = ['development', 'production', 'test'];
@@ -25,6 +25,27 @@ const PORT_MAX = 65535;
  * the `ms`-style strings the existing JwtModule already accepts.
  */
 const JWT_EXPIRY_PATTERN = /^\d+(\.\d+)?(ms|s|m|h|d|w|y)?$/i;
+
+/**
+ * Checks whether a secret has sufficient character diversity. A secret made
+ * entirely of repeated characters (e.g. "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+ * or a simple keyboard pattern (e.g. "abcdefghijklmnopqrstuvwxyz123456")
+ * is rejected even if it meets the minimum length.
+ */
+function hasLowEntropy(value: string): boolean {
+  // All same character
+  if (/^(.)\1+$/.test(value)) return true;
+
+  // Sequential repeating patterns (abababab, 123123123)
+  const uniqueChars = new Set(value.split(''));
+  if (uniqueChars.size <= 3 && value.length > 12) return true;
+
+  // Simple keyboard walks
+  const lower = value.toLowerCase();
+  if (/^(qwerty|asdfgh|zxcvbn|123456|abcdef)/.test(lower)) return true;
+
+  return false;
+}
 
 /** Redis connection string must use redis:// or rediss://. */
 const REDIS_URL_PATTERN = /^rediss?:\/\/.+$/i;
@@ -326,6 +347,9 @@ export class ConfigService {
         }
         if (INSECURE_SECRET_PATTERN.test(value)) {
           problems.push(`${key} must not use a placeholder or insecure value in production.`);
+        }
+        if (hasLowEntropy(value)) {
+          problems.push(`${key} has insufficient entropy. Use cryptographically random data (e.g. openssl rand -base64 48).`);
         }
       }
     }

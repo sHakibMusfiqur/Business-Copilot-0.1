@@ -19,6 +19,7 @@ RUN npm run build --workspace=apps/api
 
 FROM base AS runner
 WORKDIR /app
+ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nestjs
 COPY --from=builder /app/apps/api/dist ./apps/api/dist

@@ -17,7 +17,7 @@ import { RequirePermission } from '@/components/rbac/require-permission';
 import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { usePermissions } from '@/hooks/use-permissions';
 import { PURCHASE_READ, PURCHASE_CREATE, PURCHASE_UPDATE, PURCHASE_DELETE, PURCHASE_APPROVE, PURCHASE_RECEIVE } from '@/lib/permissions';
-import { deletePurchase as deletePurchaseRequest, getPurchases, approvePurchase, submitPurchase, getSuppliers } from '@/lib/api';
+import { deletePurchase as deletePurchaseRequest, getPurchases, approvePurchase, submitPurchase, cancelPurchase, getSuppliers } from '@/lib/api';
 import { useToast } from '@/components/ui/use-toast';
 import type { Purchase, PurchaseMeta, PurchaseListResponse } from '@/components/purchase/purchase-types';
 
@@ -104,6 +104,21 @@ export default function PurchasesPage() {
     },
   });
 
+  const cancelMutation = useMutation({
+    mutationFn: (id: string) => cancelPurchase(id),
+    onSuccess: () => {
+      toast({ title: 'Purchase order cancelled' });
+      invalidate();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message ?? 'Failed to cancel purchase order.',
+        variant: 'destructive',
+      });
+    },
+  });
+
   const invalidate = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['purchases'] });
     queryClient.invalidateQueries({ queryKey: ['dashboard'] });
@@ -133,6 +148,10 @@ export default function PurchasesPage() {
   const handleSubmit = useCallback((purchase: Purchase) => {
     submitMutation.mutate(purchase.id);
   }, [submitMutation]);
+
+  const handleCancel = useCallback((purchase: Purchase) => {
+    cancelMutation.mutate(purchase.id);
+  }, [cancelMutation]);
 
   if (!canRead) {
     return <ForbiddenState title="Access restricted" description="You don't have permission to view purchases. Contact your organization administrator." />;
@@ -196,6 +215,7 @@ export default function PurchasesPage() {
         onApprove={canApprove ? handleApprove : undefined}
         onSubmit={canUpdate ? handleSubmit : undefined}
         onReceive={canReceive ? setReceivePurchase : undefined}
+        onCancel={canUpdate ? handleCancel : undefined}
       />
 
       <CreatePurchaseDialog

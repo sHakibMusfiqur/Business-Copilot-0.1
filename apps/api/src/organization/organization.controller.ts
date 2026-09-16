@@ -29,6 +29,8 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { PermissionGuard } from '../common/guards/permission.guard';
+import { Permissions } from '../common/decorators/permissions.decorator';
 import { ParseSlugPipe } from '../common/pipes/parse-slug.pipe';
 
 import { OrganizationService } from './organization.service';
@@ -44,7 +46,8 @@ export class OrganizationController {
     private readonly config: ConfigService,
   ) {}
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @Permissions(['organization.manage'])
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiBearerAuth('access-token')
@@ -81,7 +84,8 @@ export class OrganizationController {
     };
   }
 
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, PermissionGuard)
+  @Permissions(['organization.manage'])
   @Get('current')
   @ApiBearerAuth('access-token')
   @ApiOkResponse({ description: 'Current user organization info' })
@@ -111,6 +115,12 @@ export class OrganizationController {
   @ApiOkResponse({ description: 'Organization branding resolved by email address' })
   async getByEmail(@Body() dto: LookupByEmailDto) {
     const org = await this.organizationService.findPublicByEmail(dto.email);
-    return org ? { found: true, organization: org } : { found: false };
+    // Always return the same shape to prevent account enumeration.
+    // The `found` field indicates whether an org exists, but the
+    // organization data is only included when found.
+    if (!org) {
+      return { found: false, organization: null };
+    }
+    return { found: true, organization: org };
   }
 }

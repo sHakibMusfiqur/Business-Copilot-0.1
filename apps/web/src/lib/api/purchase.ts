@@ -70,3 +70,8 @@ export async function deletePurchase(id: string) {
   const response = await api.delete(`${API_ROUTES.PURCHASE.ROOT}/${id}`);
   return response.data;
 }
+
+export async function cancelPurchase(id: string) {
+  const response = await api.post(`${API_ROUTES.PURCHASE.ROOT}/${id}/cancel`);
+  return response.data;
+}

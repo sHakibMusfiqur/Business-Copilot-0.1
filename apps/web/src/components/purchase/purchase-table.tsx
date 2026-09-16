@@ -53,6 +53,7 @@ interface PurchaseTableProps {
   onApprove?: (purchase: Purchase) => void;
   onSubmit?: (purchase: Purchase) => void;
   onReceive?: (purchase: Purchase) => void;
+  onCancel?: (purchase: Purchase) => void;
 }
 
 const statusStyle: Record<string, string> = {
@@ -124,6 +125,7 @@ export function PurchaseTable({
   onApprove,
   onSubmit,
   onReceive,
+  onCancel,
 }: PurchaseTableProps) {
   const [searchInput, setSearchInput] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -291,6 +293,17 @@ export function PurchaseTable({
                               <DropdownMenuItem onClick={() => onReceive(purchase)}>
                                 Receive
                               </DropdownMenuItem>
+                            )}
+                            {onCancel && (purchase.status === 'DRAFT' || purchase.status === 'PENDING' || purchase.status === 'APPROVED') && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  onClick={() => onCancel(purchase)}
+                                  className="text-destructive focus:text-destructive"
+                                >
+                                  Cancel order
+                                </DropdownMenuItem>
+                              </>
                             )}
                             {onDelete && purchase.status === 'DRAFT' && (
                               <>

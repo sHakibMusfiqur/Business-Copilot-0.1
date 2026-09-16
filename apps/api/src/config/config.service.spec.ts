@@ -4,8 +4,8 @@ const BACKUP: Record<string, string | undefined> = {};
 
 const REQUIRED = {
   DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/business_copilot_test?schema=public',
-  JWT_SECRET: 'test-secret-32-chars-looooooong-string!!',
-  JWT_REFRESH_SECRET: 'test-refresh-secret-32-chars-looooooong!!',
+  JWT_SECRET: 'Kx9!mP2$vL5nQ8wR3yT6jF0bH4cD7eU1xZ4',
+  JWT_REFRESH_SECRET: 'Wq7@rT3kL9pY2sF5vN8hB1mC6dG4xA0jE',
 };
 
 const TRACKED_ENV_VARS = [
@@ -132,7 +132,26 @@ describe('ConfigService', () => {
       setEnv({ ...REQUIRED, NODE_ENV: 'production', JWT_SECRET: 'CHANGE_ME_IN_LOCAL_ENV' });
       const service = new ConfigService();
 
-      expect(() => service.validate()).toThrow(/strong|placeholder|32 characters/i);
+      expect(() => service.validate()).toThrow(/strong|placeholder|32 characters|insecure|entropy/i);
+    });
+
+    it('rejects known weak patterns in production JWT secrets', () => {
+      const weakSecrets = [
+        'super-secret-jwt-key-change-in-production-1234567890',
+        'secret-jwt-key-that-is-long-enough-but-insecure!!',
+        'test-secret-32-chars-but-known-pattern!!!',
+      ];
+      for (const secret of weakSecrets) {
+        setEnv({ ...REQUIRED, NODE_ENV: 'production', JWT_SECRET: secret });
+        expect(() => new ConfigService().validate()).toThrow(/placeholder|insecure|entropy/i);
+      }
+    });
+
+    it('rejects low-entropy production JWT secrets', () => {
+      setEnv({ ...REQUIRED, NODE_ENV: 'production', JWT_SECRET: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' });
+      const service = new ConfigService();
+
+      expect(() => service.validate()).toThrow(/entropy/i);
     });
 
     it('rejects short production JWT secrets', () => {
@@ -151,6 +170,14 @@ describe('ConfigService', () => {
 
     it('accepts valid strong production JWT secrets', () => {
       setEnv({ ...REQUIRED, NODE_ENV: 'production' });
+      const service = new ConfigService();
+
+      expect(() => service.validate()).not.toThrow();
+    });
+
+    it('accepts high-entropy production JWT secrets', () => {
+      const strongSecret = 'xK9#mP2$vL5@nQ8!wR3&yT6*jF0^bH4(cD7)eU1';
+      setEnv({ ...REQUIRED, NODE_ENV: 'production', JWT_SECRET: strongSecret, JWT_REFRESH_SECRET: strongSecret + 'x' });
       const service = new ConfigService();
 
       expect(() => service.validate()).not.toThrow();

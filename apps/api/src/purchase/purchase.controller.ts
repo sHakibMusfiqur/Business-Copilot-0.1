@@ -141,4 +141,17 @@ export class PurchaseController {
     const orgId = this.requireOrg(user);
     return this.purchaseService.softDelete(orgId, user.id, id);
   }
+
+  @Post(':id/cancel')
+  @UseGuards(PermissionGuard)
+  @Permissions(['purchase.update'])
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  async cancel(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id', ParseCuidPipe) id: string,
+  ) {
+    const orgId = this.requireOrg(user);
+    return this.purchaseService.cancel(orgId, user.id, id);
+  }
 }
