@@ -12,6 +12,7 @@ import { SalesStatus } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AccountingService } from '../accounting/accounting.service';
 import { AuditService } from '../audit/audit.service';
+import { InvoicesService } from '../invoices/invoices.service';
 
 import type { QuerySaleDto } from './dto/query-sale.dto';
 import type { CreateSaleDto } from './dto/create-sale.dto';
@@ -25,6 +26,7 @@ export class SalesService {
     private readonly prisma: PrismaService,
     private readonly accountingService: AccountingService,
     private readonly auditService: AuditService,
+    private readonly invoicesService: InvoicesService,
   ) {}
 
   async findAll(orgId: string, query: QuerySaleDto) {
@@ -408,7 +410,7 @@ export class SalesService {
       throw new ConflictException('Only CONFIRMED sales orders can be delivered');
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const saleResult = await this.prisma.$transaction(async (tx) => {
       const gate = await tx.salesOrder.updateMany({
         where: {
           id: saleId,
@@ -508,6 +510,16 @@ export class SalesService {
 
       return updated;
     });
+
+    try {
+      await this.invoicesService.createFromOrder(orgId, userId, saleId);
+      this.logger.log(`Auto-created invoice for delivered sales order ${saleId}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Failed to auto-create invoice for sales order ${saleId}: ${message}`);
+    }
+
+    return saleResult;
   }
 
   async softDelete(orgId: string, userId: string, saleId: string) {

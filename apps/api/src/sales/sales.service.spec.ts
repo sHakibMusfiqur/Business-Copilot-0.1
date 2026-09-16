@@ -78,6 +78,7 @@ describe('SalesService deliver (atomic status gate + guarded decrement)', () => 
         createCOGSJournalEntry: cogsJournal,
       } as never,
       { record: jest.fn().mockResolvedValue(undefined) } as never,
+      { createFromOrder: jest.fn().mockResolvedValue({}) } as never,
     );
   });
 
@@ -240,6 +241,7 @@ describe('SalesService pricing (server-authoritative / P3-M2)', () => {
       } as unknown as PrismaService,
       {} as never,
       { record: jest.fn().mockResolvedValue(undefined) } as never,
+      { createFromOrder: jest.fn().mockResolvedValue({}) } as never,
     );
   });
 
@@ -334,6 +336,7 @@ describe('SalesService submit + confirm lifecycle (P3-M3/P3-L1)', () => {
       } as unknown as PrismaService,
       {} as never,
       { record: jest.fn().mockResolvedValue(undefined) } as never,
+      { createFromOrder: jest.fn().mockResolvedValue({}) } as never,
     );
   });
 
@@ -442,6 +445,7 @@ describe('SalesService pricing validation (V-1)', () => {
       } as unknown as PrismaService,
       {} as never,
       { record: jest.fn().mockResolvedValue(undefined) } as never,
+      { createFromOrder: jest.fn().mockResolvedValue({}) } as never,
     );
   });
 
@@ -571,6 +575,7 @@ describe('SalesService findAll (filter query handling)', () => {
       } as unknown as PrismaService,
       {} as never,
       { record: jest.fn().mockResolvedValue(undefined) } as never,
+      { createFromOrder: jest.fn().mockResolvedValue({}) } as never,
     );
   });
 
@@ -672,6 +677,7 @@ describe('SalesService cancel', () => {
       { salesOrder: { findFirst: saleFindFirst, updateMany: saleUpdateMany } } as unknown as PrismaService,
       {} as never,
       { record: auditRecord } as never,
+      { createFromOrder: jest.fn().mockResolvedValue({}) } as never,
     );
   });
 
@@ -816,6 +822,7 @@ describe('SalesService CRUD audit logging', () => {
       } as unknown as PrismaService,
       {} as never,
       { record: auditRecord } as never,
+      { createFromOrder: jest.fn().mockResolvedValue({}) } as never,
     );
   });
 

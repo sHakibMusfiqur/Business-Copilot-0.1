@@ -4,10 +4,11 @@ import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { PayrollService } from './payroll.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { AccountingService } from '../accounting/accounting.service';
 
 describe('PayrollService', () => {
   let service: PayrollService;
-  let prisma: { payroll: Record<string, jest.Mock>; employee: Record<string, jest.Mock> };
+  let prisma: { payroll: Record<string, jest.Mock>; employee: Record<string, jest.Mock>; journalEntry: Record<string, jest.Mock>; account: Record<string, jest.Mock> };
   let auditService: { record: jest.Mock };
 
   beforeEach(async () => {
@@ -26,6 +27,13 @@ describe('PayrollService', () => {
       employee: {
         findFirst: jest.fn(),
       },
+      journalEntry: {
+        findFirst: jest.fn(),
+        create: jest.fn(),
+      },
+      account: {
+        findFirst: jest.fn(),
+      },
     };
 
     auditService = {
@@ -37,6 +45,7 @@ describe('PayrollService', () => {
         PayrollService,
         { provide: PrismaService, useValue: prisma },
         { provide: AuditService, useValue: auditService },
+        { provide: AccountingService, useValue: {} },
       ],
     }).compile();
 
@@ -591,9 +600,12 @@ describe('PayrollService', () => {
   describe('approve', () => {
     it('should transition PENDING to APPROVED with approvedBy and approvedAt', async () => {
       prisma.payroll.findFirst
-        .mockResolvedValueOnce({ id: '1', status: 'PENDING' })
+        .mockResolvedValueOnce({ id: '1', status: 'PENDING', netSalary: 5000, employee: { organizationId: 'org-1' } })
         .mockResolvedValueOnce({ id: '1', status: 'APPROVED', approvedBy: 'actor-1', employee: { id: 'emp-1' } });
       prisma.payroll.updateMany.mockResolvedValue({ count: 1 });
+      prisma.journalEntry.findFirst.mockResolvedValue(null);
+      prisma.account.findFirst.mockResolvedValue({ id: 'acc-1', code: '6000' });
+      prisma.journalEntry.create.mockResolvedValue({ id: 'je-1', entryNumber: 'JE-2026-000001' });
 
       await service.approve('org-1', 'actor-1', '1');
 
@@ -609,6 +621,7 @@ describe('PayrollService', () => {
       expect(auditService.record).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'PAYROLL_APPROVED' }),
       );
+      expect(prisma.journalEntry.create).toHaveBeenCalled();
     });
 
     it('should throw NotFoundException if record not found', async () => {
@@ -643,9 +656,12 @@ describe('PayrollService', () => {
 
     it('should not modify salary fields during approval', async () => {
       prisma.payroll.findFirst
-        .mockResolvedValueOnce({ id: '1', status: 'PENDING' })
+        .mockResolvedValueOnce({ id: '1', status: 'PENDING', netSalary: 5000, employee: { organizationId: 'org-1' } })
         .mockResolvedValueOnce({ id: '1', status: 'APPROVED', basicSalary: 5000, netSalary: 5000, employee: { id: 'emp-1' } });
       prisma.payroll.updateMany.mockResolvedValue({ count: 1 });
+      prisma.journalEntry.findFirst.mockResolvedValue(null);
+      prisma.account.findFirst.mockResolvedValue({ id: 'acc-1', code: '6000' });
+      prisma.journalEntry.create.mockResolvedValue({ id: 'je-1', entryNumber: 'JE-2026-000001' });
 
       await service.approve('org-1', 'actor-1', '1');
 
@@ -725,9 +741,12 @@ describe('PayrollService', () => {
   describe('markAsPaid', () => {
     it('should transition APPROVED to PAID with paymentDate', async () => {
       prisma.payroll.findFirst
-        .mockResolvedValueOnce({ id: '1', status: 'APPROVED' })
+        .mockResolvedValueOnce({ id: '1', status: 'APPROVED', netSalary: 5000, employee: { organizationId: 'org-1' } })
         .mockResolvedValueOnce({ id: '1', status: 'PAID', paymentDate: new Date('2026-01-15'), employee: { id: 'emp-1' } });
       prisma.payroll.updateMany.mockResolvedValue({ count: 1 });
+      prisma.journalEntry.findFirst.mockResolvedValue(null);
+      prisma.account.findFirst.mockResolvedValue({ id: 'acc-1', code: '2100' });
+      prisma.journalEntry.create.mockResolvedValue({ id: 'je-1', entryNumber: 'JE-2026-000001' });
 
       await service.markAsPaid('org-1', 'actor-1', '1', { paymentDate: '2026-01-15' });
 
@@ -742,13 +761,17 @@ describe('PayrollService', () => {
       expect(auditService.record).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'PAYROLL_PAID' }),
       );
+      expect(prisma.journalEntry.create).toHaveBeenCalled();
     });
 
     it('should default paymentDate to today when not provided', async () => {
       prisma.payroll.findFirst
-        .mockResolvedValueOnce({ id: '1', status: 'APPROVED' })
+        .mockResolvedValueOnce({ id: '1', status: 'APPROVED', netSalary: 5000, employee: { organizationId: 'org-1' } })
         .mockResolvedValueOnce({ id: '1', status: 'PAID', paymentDate: new Date(), employee: { id: 'emp-1' } });
       prisma.payroll.updateMany.mockResolvedValue({ count: 1 });
+      prisma.journalEntry.findFirst.mockResolvedValue(null);
+      prisma.account.findFirst.mockResolvedValue({ id: 'acc-1', code: '2100' });
+      prisma.journalEntry.create.mockResolvedValue({ id: 'je-1', entryNumber: 'JE-2026-000001' });
 
       await service.markAsPaid('org-1', 'actor-1', '1', {});
 
@@ -788,9 +811,12 @@ describe('PayrollService', () => {
 
     it('should not modify salary fields during pay', async () => {
       prisma.payroll.findFirst
-        .mockResolvedValueOnce({ id: '1', status: 'APPROVED' })
+        .mockResolvedValueOnce({ id: '1', status: 'APPROVED', netSalary: 5000, employee: { organizationId: 'org-1' } })
         .mockResolvedValueOnce({ id: '1', status: 'PAID', basicSalary: 5000, netSalary: 5000, employee: { id: 'emp-1' } });
       prisma.payroll.updateMany.mockResolvedValue({ count: 1 });
+      prisma.journalEntry.findFirst.mockResolvedValue(null);
+      prisma.account.findFirst.mockResolvedValue({ id: 'acc-1', code: '2100' });
+      prisma.journalEntry.create.mockResolvedValue({ id: 'je-1', entryNumber: 'JE-2026-000001' });
 
       await service.markAsPaid('org-1', 'actor-1', '1', {});
 

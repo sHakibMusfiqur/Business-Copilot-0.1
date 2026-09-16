@@ -528,6 +528,26 @@ export class AccountingService {
     };
   }
 
+  async updateReceivableOverdueStatuses(orgId: string): Promise<number> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const result = await this.prisma.receivable.updateMany({
+      where: {
+        organizationId: orgId,
+        dueDate: { lt: today },
+        status: { in: ['PENDING', 'PARTIALLY_PAID'] },
+      },
+      data: { status: 'OVERDUE' },
+    });
+
+    if (result.count > 0) {
+      this.logger.log(`Updated ${result.count} receivables to OVERDUE status for org ${orgId}`);
+    }
+
+    return result.count;
+  }
+
   // ─── Payables ─────────────────────────────────────────────────
 
   async findAllPayables(orgId: string, query: { page?: number; limit?: number; status?: string; search?: string }) {
@@ -1421,6 +1441,15 @@ export class AccountingService {
         data: {
           paidAmount: newPaidAmount,
           status: isPaid ? 'PAID' : 'PARTIALLY_PAID',
+        },
+      });
+
+      const newPaymentStatus = isPaid ? 'PAID' : 'PARTIALLY_PAID';
+      await tx.invoice.updateMany({
+        where: { salesOrderId: receivable.salesOrderId, organizationId: orgId },
+        data: {
+          paidAmount: newPaidAmount,
+          paymentStatus: newPaymentStatus === 'PAID' ? 'PAID' : newPaymentStatus === 'PARTIALLY_PAID' ? 'PARTIALLY_PAID' : 'PENDING',
         },
       });
 

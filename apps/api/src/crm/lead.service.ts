@@ -425,6 +425,70 @@ export class LeadService {
     });
   }
 
+  async convertToCustomer(leadId: string, orgId: string, userId: string) {
+    const lead = await this.prisma.lead.findFirst({
+      where: { id: leadId, organizationId: orgId, deletedAt: null },
+    });
+
+    if (!lead) throw new NotFoundException('Lead not found');
+
+    if (lead.status === LeadStatus.WON) {
+      throw new BadRequestException('Lead has already been converted');
+    }
+
+    const customerName = lead.company || lead.name;
+
+    const customer = await this.prisma.$transaction(async (tx) => {
+      let existingCustomer = null;
+
+      if (lead.email) {
+        existingCustomer = await tx.customer.findFirst({
+          where: {
+            organizationId: orgId,
+            email: lead.email.toLowerCase().trim(),
+            deletedAt: null,
+          },
+        });
+      }
+
+      const resolvedCustomer = existingCustomer ?? await tx.customer.create({
+        data: {
+          name: customerName,
+          email: lead.email?.toLowerCase().trim() ?? null,
+          phone: lead.phone?.trim() ?? null,
+          company: lead.company?.trim() ?? null,
+          organizationId: orgId,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          phone: true,
+          company: true,
+          createdAt: true,
+        },
+      });
+
+      await tx.lead.update({
+        where: { id: leadId, organizationId: orgId, deletedAt: null },
+        data: {
+          status: LeadStatus.WON,
+          convertedToCustomerId: resolvedCustomer.id,
+        },
+      });
+
+      return resolvedCustomer;
+    });
+
+    await this.createTimelineEvent(
+      orgId, leadId, userId, 'CONVERTED',
+      `Lead converted to customer: ${customer.name}`,
+    );
+
+    this.logger.log(`Lead converted to customer: ${lead.leadNumber} -> ${customer.id} by ${userId}`);
+    return customer;
+  }
+
   private async generateLeadNumber(orgId: string): Promise<string> {
     const year = new Date().getFullYear();
     const prefix = `LD-${year}-`;

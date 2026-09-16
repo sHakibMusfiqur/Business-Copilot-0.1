@@ -1,7 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { AccountingService } from '../accounting/accounting.service';
 
 import type { CreatePayrollDto, UpdatePayrollDto } from './dto/create-payroll.dto';
 import type { MarkAsPaidDto } from './dto/mark-as-paid.dto';
@@ -49,9 +50,12 @@ const EMPLOYEE_SELECT = {
 
 @Injectable()
 export class PayrollService {
+  private readonly logger = new Logger(PayrollService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditService: AuditService,
+    private readonly accountingService: AccountingService,
   ) {}
 
   async findAll(orgId: string, query: QueryPayrollDto = {}) {
@@ -326,7 +330,7 @@ export class PayrollService {
   async approve(orgId: string, actorId: string, payrollId: string) {
     const payroll = await this.prisma.payroll.findFirst({
       where: { id: payrollId, employee: { organizationId: orgId } },
-      select: { id: true, status: true },
+      select: { id: true, status: true, netSalary: true, employee: { select: { organizationId: true } } },
     });
 
     if (!payroll) {
@@ -363,6 +367,8 @@ export class PayrollService {
       status: 'SUCCESS',
       metadata: { previousStatus: 'PENDING', newStatus: 'APPROVED' },
     });
+
+    await this.createPayrollApprovalJournalEntry(orgId, actorId, payrollId, Number(payroll.netSalary));
 
     return this.findOne(orgId, payrollId);
   }
@@ -414,7 +420,7 @@ export class PayrollService {
   async markAsPaid(orgId: string, actorId: string, payrollId: string, dto: MarkAsPaidDto) {
     const payroll = await this.prisma.payroll.findFirst({
       where: { id: payrollId, employee: { organizationId: orgId } },
-      select: { id: true, status: true },
+      select: { id: true, status: true, netSalary: true, employee: { select: { organizationId: true } } },
     });
 
     if (!payroll) {
@@ -453,6 +459,8 @@ export class PayrollService {
       status: 'SUCCESS',
       metadata: { previousStatus: 'APPROVED', newStatus: 'PAID', paymentDate: paymentDate.toISOString() },
     });
+
+    await this.createPayrollPaymentJournalEntry(orgId, actorId, payrollId, Number(payroll.netSalary));
 
     return this.findOne(orgId, payrollId);
   }
@@ -535,5 +543,157 @@ export class PayrollService {
         count: m._count.id,
       })),
     };
+  }
+
+  private async createPayrollApprovalJournalEntry(
+    orgId: string,
+    userId: string,
+    payrollId: string,
+    amount: number,
+  ) {
+    const existing = await this.prisma.journalEntry.findFirst({
+      where: {
+        referenceId: payrollId,
+        referenceType: 'PAYROLL_APPROVAL',
+        organizationId: orgId,
+        deletedAt: null,
+      },
+    });
+    if (existing) return existing;
+
+    const salaryExpense = await this.findAccountByCode(orgId, '6000');
+    const salaryPayable = await this.findAccountByCode(orgId, '2100');
+
+    const entryNumber = await this.generateJournalEntryNumber(orgId);
+
+    return this.prisma.journalEntry.create({
+      data: {
+        entryNumber,
+        organizationId: orgId,
+        description: `Payroll Approval: ${payrollId}`,
+        date: new Date(),
+        status: 'POSTED',
+        referenceId: payrollId,
+        referenceType: 'PAYROLL_APPROVAL',
+        createdById: userId,
+        lines: {
+          create: [
+            {
+              accountId: salaryExpense.id,
+              debit: amount,
+              credit: 0,
+              description: `Salaries Expense - ${payrollId}`,
+            },
+            {
+              accountId: salaryPayable.id,
+              debit: 0,
+              credit: amount,
+              description: `Salaries Payable - ${payrollId}`,
+            },
+          ],
+        },
+      },
+      select: {
+        id: true,
+        entryNumber: true,
+        date: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+  }
+
+  private async createPayrollPaymentJournalEntry(
+    orgId: string,
+    userId: string,
+    payrollId: string,
+    amount: number,
+  ) {
+    const existing = await this.prisma.journalEntry.findFirst({
+      where: {
+        referenceId: payrollId,
+        referenceType: 'PAYROLL_PAYMENT',
+        organizationId: orgId,
+        deletedAt: null,
+      },
+    });
+    if (existing) return existing;
+
+    const salaryPayable = await this.findAccountByCode(orgId, '2100');
+    const cashAccount = await this.findAccountByCode(orgId, '1000');
+
+    const entryNumber = await this.generateJournalEntryNumber(orgId);
+
+    return this.prisma.journalEntry.create({
+      data: {
+        entryNumber,
+        organizationId: orgId,
+        description: `Payroll Payment: ${payrollId}`,
+        date: new Date(),
+        status: 'POSTED',
+        referenceId: payrollId,
+        referenceType: 'PAYROLL_PAYMENT',
+        createdById: userId,
+        lines: {
+          create: [
+            {
+              accountId: salaryPayable.id,
+              debit: amount,
+              credit: 0,
+              description: `Salaries Payable - ${payrollId}`,
+            },
+            {
+              accountId: cashAccount.id,
+              debit: 0,
+              credit: amount,
+              description: `Cash - ${payrollId}`,
+            },
+          ],
+        },
+      },
+      select: {
+        id: true,
+        entryNumber: true,
+        date: true,
+        status: true,
+        createdAt: true,
+      },
+    });
+  }
+
+  private async findAccountByCode(orgId: string, code: string) {
+    const account = await this.prisma.account.findFirst({
+      where: { organizationId: orgId, code },
+    });
+
+    if (!account) {
+      throw new BadRequestException(
+        `Account with code "${code}" not found. Please ensure the chart of accounts is seeded.`,
+      );
+    }
+
+    return account;
+  }
+
+  private async generateJournalEntryNumber(orgId: string): Promise<string> {
+    const year = new Date().getFullYear();
+    const prefix = `JE-${year}-`;
+
+    const lastEntry = await this.prisma.journalEntry.findFirst({
+      where: {
+        organizationId: orgId,
+        entryNumber: { startsWith: prefix },
+      },
+      orderBy: { entryNumber: 'desc' },
+      select: { entryNumber: true },
+    });
+
+    let nextSeq = 1;
+    if (lastEntry) {
+      const parts = lastEntry.entryNumber.split('-');
+      nextSeq = parseInt(parts[parts.length - 1], 10) + 1;
+    }
+
+    return `${prefix}${String(nextSeq).padStart(6, '0')}`;
   }
 }

@@ -128,6 +128,19 @@ export class LeadController {
     return this.leadService.updateStatus(orgId, user.id, id, status);
   }
 
+  @Post('leads/:id/convert')
+  @UseGuards(PermissionGuard)
+  @Permissions(['crm.update'])
+  @ApiOperation({ summary: 'Convert lead to customer' })
+  async convertToCustomer(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id', ParseCuidPipe) id: string,
+  ) {
+    const orgId = this.requireOrg(user);
+    await this.requireCrmAccess(user);
+    return this.leadService.convertToCustomer(id, orgId, user.id);
+  }
+
   @Patch('leads/:id/assign')
   @UseGuards(PermissionGuard)
   @Permissions(['crm.update'])

@@ -203,6 +203,7 @@ interface TxMock {
   paymentAllocation: { create: jest.Mock };
   journalEntry: { findFirst: jest.Mock; create: jest.Mock };
   account: { findFirst: jest.Mock };
+  invoice: { updateMany: jest.Mock };
 }
 
 describe('AccountingService processPaymentAllocation (P3-H1 / P3-H2)', () => {
@@ -255,6 +256,7 @@ describe('AccountingService processPaymentAllocation (P3-H1 / P3-H2)', () => {
         create: jest.fn().mockResolvedValue({ id: 'je-1' }),
       },
       account: { findFirst: jest.fn().mockResolvedValue({ id: 'acct-1' }) },
+      invoice: { updateMany: jest.fn().mockResolvedValue(undefined) },
     };
 
     const prisma = {

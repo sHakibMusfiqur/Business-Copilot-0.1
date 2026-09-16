@@ -105,4 +105,14 @@ export class InvoicesController {
     const userId = user.id;
     return this.invoicesService.remove(orgId, userId, id);
   }
+
+  @Post('update-overdue')
+  @Permissions(['invoices.update'])
+  @ApiOperation({ summary: 'Update overdue invoice statuses' })
+  @HttpCode(HttpStatus.OK)
+  async updateOverdue(@CurrentUser() user: CurrentUserPayload) {
+    const orgId = this.requireOrg(user);
+    const count = await this.invoicesService.updateOverdueStatuses(orgId);
+    return { updated: count };
+  }
 }

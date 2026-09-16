@@ -446,6 +446,27 @@ export class InvoicesService {
     return { id: invoiceId, message: 'Invoice deleted successfully' };
   }
 
+  async updateOverdueStatuses(orgId: string): Promise<number> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const result = await this.prisma.invoice.updateMany({
+      where: {
+        organizationId: orgId,
+        dueDate: { lt: today },
+        paymentStatus: { in: ['PENDING', 'PARTIALLY_PAID'] },
+        status: { not: 'CANCELLED' },
+      },
+      data: { paymentStatus: 'OVERDUE' },
+    });
+
+    if (result.count > 0) {
+      this.logger.log(`Updated ${result.count} invoices to OVERDUE status for org ${orgId}`);
+    }
+
+    return result.count;
+  }
+
   private computeAdvisoryLockKey(orgId: string): number {
     let hash = 0;
     for (let i = 0; i < orgId.length; i++) {
