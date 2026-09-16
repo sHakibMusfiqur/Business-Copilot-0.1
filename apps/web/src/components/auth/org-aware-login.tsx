@@ -175,7 +175,7 @@ export function OrgAwareLogin({ slug: slugProp }: OrgAwareLoginProps) {
     setLookupError(null);
     try {
       const result = await getOrgByEmail(normalized);
-      if (result.found && result.organization) {
+      if (result.organization && result.organization.slug !== 'unknown') {
         detectedEmailRef.current = normalized;
         setOrg(result.organization);
         setDetectedBrand(normalizeBranding(result.organization.brand));

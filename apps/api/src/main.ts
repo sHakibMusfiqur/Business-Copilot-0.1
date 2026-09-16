@@ -41,7 +41,8 @@ async function bootstrap() {
   app.enableCors({
     origin(origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
       const allowed = configService.corsOrigins;
-      if (!origin || allowed.includes(origin)) {
+   
+      if (origin === undefined || allowed.includes(origin)) {
         callback(null, true);
       } else {
         callback(new Error(`Origin ${origin} not allowed by CORS`));
@@ -54,13 +55,10 @@ async function bootstrap() {
 
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
-  // Correlation ID middleware runs first so every request (and its logs and
-  // any error responses) carries a request ID echoed in the x-request-id header.
+
   app.use(requestIdMiddleware);
 
-  // Production-safe HTTP request/response logging. Logs only safe request ID,
-  // method, sanitized path, origin, status, and duration. Never logs headers,
-  // cookies, bodies, query strings, or full URLs (which may carry secrets).
+ 
   app.use((req: Request, res: Response, next: NextFunction) => {
     const requestId = req.requestId ?? '(missing)';
     const startedAt = Date.now();
@@ -94,8 +92,7 @@ async function bootstrap() {
     }),
   );
 
-  // Swagger is an opt-in developer aid and must never be exposed in
-  // production. It is disabled automatically when NODE_ENV=production.
+  
   if (configService.swaggerEnabled) {
     const config = new DocumentBuilder()
       .setTitle(configService.swaggerTitle)

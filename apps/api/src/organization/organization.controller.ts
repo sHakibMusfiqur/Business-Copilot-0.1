@@ -115,12 +115,17 @@ export class OrganizationController {
   @ApiOkResponse({ description: 'Organization branding resolved by email address' })
   async getByEmail(@Body() dto: LookupByEmailDto) {
     const org = await this.organizationService.findPublicByEmail(dto.email);
-    // Always return the same shape to prevent account enumeration.
-    // The `found` field indicates whether an org exists, but the
-    // organization data is only included when found.
+   
     if (!org) {
-      return { found: false, organization: null };
+      return {
+        organization: {
+          id: 'unknown',
+          slug: 'unknown',
+          name: '',
+          brand: {},
+        },
+      };
     }
-    return { found: true, organization: org };
+    return { organization: org };
   }
 }

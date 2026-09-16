@@ -15,8 +15,7 @@ export interface CurrentOrganization {
 }
 
 export interface EmailLookupResult {
-  found: boolean;
-  organization?: PublicOrganization;
+  organization: PublicOrganization;
 }
 
 /** Returns basic info for the current user's authenticated organization. */

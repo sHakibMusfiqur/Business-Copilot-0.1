@@ -430,6 +430,11 @@ describe('PurchaseController permission metadata (P3-L1)', () => {
     const metadata = Reflect.getMetadata(PERMISSIONS_KEY, PurchaseController.prototype.approve);
     expect(metadata.permissions).not.toContain('purchase.update');
   });
+
+  it('cancel() requires purchase.update', () => {
+    const metadata = Reflect.getMetadata(PERMISSIONS_KEY, PurchaseController.prototype.cancel);
+    expect(metadata).toEqual({ permissions: ['purchase.update'], mode: 'AND' });
+  });
 });
 
 describe('PurchaseService pricing validation (V-1)', () => {
@@ -819,5 +824,143 @@ describe('PurchaseService CRUD audit logging', () => {
 
     expect(result.id).toBe('po-1');
     expect(result.orderNumber).toBe('PO-2026-000001');
+  });
+});
+
+describe('PurchaseService cancel (atomic status gate)', () => {
+  let service: PurchaseService;
+  let purchaseFindFirst: jest.Mock;
+  let purchaseUpdateMany: jest.Mock;
+  let auditRecord: jest.Mock;
+
+  beforeEach(() => {
+    purchaseFindFirst = jest.fn().mockResolvedValue({
+      id: PURCHASE_ID,
+      orderNumber: 'PO-2026-000001',
+      status: 'DRAFT',
+    });
+    purchaseUpdateMany = jest.fn().mockResolvedValue({ count: 1 });
+    auditRecord = jest.fn().mockResolvedValue(undefined);
+
+    service = new PurchaseService(
+      {
+        purchaseOrder: {
+          findFirst: purchaseFindFirst,
+          updateMany: purchaseUpdateMany,
+        },
+      } as unknown as PrismaService,
+      {} as never,
+      { record: auditRecord } as never,
+    );
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  it('DRAFT -> CANCELLED', async () => {
+    purchaseUpdateMany.mockResolvedValueOnce({ count: 1 });
+    purchaseFindFirst.mockResolvedValueOnce({ id: PURCHASE_ID, orderNumber: 'PO-001', status: 'CANCELLED' });
+
+    const result = await service.cancel(ORG_ID, USER_ID, PURCHASE_ID);
+
+    expect(purchaseUpdateMany).toHaveBeenCalledWith({
+      where: {
+        id: PURCHASE_ID,
+        organizationId: ORG_ID,
+        status: { in: ['DRAFT', 'PENDING', 'APPROVED'] },
+        deletedAt: null,
+      },
+      data: { status: 'CANCELLED' },
+    });
+    expect(result.status).toBe('CANCELLED');
+  });
+
+  it('PENDING -> CANCELLED', async () => {
+    purchaseUpdateMany.mockResolvedValueOnce({ count: 1 });
+    purchaseFindFirst.mockResolvedValueOnce({ id: PURCHASE_ID, orderNumber: 'PO-001', status: 'CANCELLED' });
+
+    const result = await service.cancel(ORG_ID, USER_ID, PURCHASE_ID);
+
+    expect(result.status).toBe('CANCELLED');
+  });
+
+  it('APPROVED -> CANCELLED', async () => {
+    purchaseUpdateMany.mockResolvedValueOnce({ count: 1 });
+    purchaseFindFirst.mockResolvedValueOnce({ id: PURCHASE_ID, orderNumber: 'PO-001', status: 'CANCELLED' });
+
+    const result = await service.cancel(ORG_ID, USER_ID, PURCHASE_ID);
+
+    expect(result.status).toBe('CANCELLED');
+  });
+
+  it('RECEIVED -> rejected (ConflictException)', async () => {
+    purchaseFindFirst.mockResolvedValue({ id: PURCHASE_ID, orderNumber: 'PO-001', status: 'RECEIVED' });
+    purchaseUpdateMany.mockResolvedValue({ count: 0 });
+
+    await expect(service.cancel(ORG_ID, USER_ID, PURCHASE_ID)).rejects.toThrow(ConflictException);
+  });
+
+  it('CANCELLED -> rejected (ConflictException)', async () => {
+    purchaseFindFirst.mockResolvedValue({ id: PURCHASE_ID, orderNumber: 'PO-001', status: 'CANCELLED' });
+    purchaseUpdateMany.mockResolvedValue({ count: 0 });
+
+    await expect(service.cancel(ORG_ID, USER_ID, PURCHASE_ID)).rejects.toThrow(ConflictException);
+  });
+
+  it('nonexistent purchase -> NotFoundException', async () => {
+    purchaseFindFirst.mockResolvedValue(null);
+    purchaseUpdateMany.mockResolvedValue({ count: 0 });
+
+    await expect(service.cancel(ORG_ID, USER_ID, 'nonexistent')).rejects.toThrow(NotFoundException);
+  });
+
+  it('cross-tenant purchase -> NotFoundException (org-scoped findFirst)', async () => {
+    purchaseFindFirst.mockResolvedValue(null);
+    purchaseUpdateMany.mockResolvedValue({ count: 0 });
+
+    await expect(service.cancel('other-org', USER_ID, PURCHASE_ID)).rejects.toThrow(NotFoundException);
+
+    expect(purchaseFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ organizationId: 'other-org' }),
+      }),
+    );
+  });
+
+  it('records PURCHASE_ORDER_CANCELLED audit event', async () => {
+    purchaseFindFirst.mockResolvedValueOnce({ id: PURCHASE_ID, orderNumber: 'PO-001', status: 'DRAFT' });
+    purchaseUpdateMany.mockResolvedValueOnce({ count: 1 });
+    purchaseFindFirst.mockResolvedValueOnce({ id: PURCHASE_ID, orderNumber: 'PO-001', status: 'CANCELLED' });
+
+    await service.cancel(ORG_ID, USER_ID, PURCHASE_ID);
+
+    expect(auditRecord).toHaveBeenCalledWith({
+      userId: USER_ID,
+      organizationId: ORG_ID,
+      action: 'PURCHASE_ORDER_CANCELLED',
+      entity: 'PurchaseOrder',
+      entityId: PURCHASE_ID,
+      status: 'SUCCESS',
+      metadata: { orderNumber: 'PO-001' },
+    });
+  });
+
+  it('enforces organization scoping in the atomic status gate', async () => {
+    purchaseFindFirst.mockResolvedValueOnce({ id: PURCHASE_ID, orderNumber: 'PO-001', status: 'DRAFT' });
+    purchaseUpdateMany.mockResolvedValueOnce({ count: 1 });
+    purchaseFindFirst.mockResolvedValueOnce({ id: PURCHASE_ID, orderNumber: 'PO-001', status: 'CANCELLED' });
+
+    await service.cancel(ORG_ID, USER_ID, PURCHASE_ID);
+
+    expect(purchaseUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ organizationId: ORG_ID }) }),
+    );
+  });
+
+  it('atomic status gate prevents concurrent cancel from double-executing', async () => {
+    purchaseFindFirst.mockResolvedValue({ id: PURCHASE_ID, orderNumber: 'PO-001', status: 'DRAFT' });
+    purchaseUpdateMany.mockResolvedValue({ count: 0 });
+
+    await expect(service.cancel(ORG_ID, USER_ID, PURCHASE_ID)).rejects.toThrow(ConflictException);
+    expect(auditRecord).not.toHaveBeenCalled();
   });
 });
