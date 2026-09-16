@@ -573,6 +573,57 @@ export class ImportService {
 
     const supplierMap = await this.buildSupplierNameMap(orgId);
 
+    const uniqueCatNames: string[] = [];
+    const uniqueCatIds: string[] = [];
+    for (const row of rows) {
+      if (mapped['categoryName'] !== undefined) {
+        const catName = this.getCell(row, mapped['categoryName']);
+        if (catName) uniqueCatNames.push(catName.trim());
+      }
+      if (mapped['categoryId'] !== undefined) {
+        const catId = this.getCell(row, mapped['categoryId']);
+        if (catId) uniqueCatIds.push(catId.trim());
+      }
+    }
+
+    const categoryNameMap = new Map<string, string>();
+    const categoryIdMap = new Map<string, string>();
+    if (uniqueCatNames.length > 0 || uniqueCatIds.length > 0) {
+      const categories = await this.prisma.category.findMany({
+        where: {
+          OR: [{ organizationId: orgId }, { organizationId: null }],
+        },
+        select: { id: true, name: true },
+      });
+      for (const c of categories) {
+        categoryNameMap.set(c.name.toLowerCase().trim(), c.id);
+        categoryIdMap.set(c.id, c.id);
+      }
+    }
+
+    const supplierIdSet = new Set<string>();
+    for (const [, id] of supplierMap) {
+      supplierIdSet.add(id);
+    }
+
+    const existingProductMap = new Map<string, string>();
+    if (updateExisting) {
+      const uniqueSkus: string[] = [];
+      for (const row of rows) {
+        const sku = this.getCell(row, mapped['sku']);
+        if (sku) uniqueSkus.push(sku.trim());
+      }
+      if (uniqueSkus.length > 0) {
+        const products = await this.prisma.product.findMany({
+          where: { organizationId: orgId, sku: { in: uniqueSkus }, deletedAt: null },
+          select: { id: true, sku: true },
+        });
+        for (const p of products) {
+          existingProductMap.set(p.sku, p.id);
+        }
+      }
+    }
+
     for (let i = 0; i < rows.length; i++) {
       const rowNum = i + 2;
       const row = rows[i];
@@ -622,11 +673,7 @@ export class ImportService {
         if (mapped['supplierId'] !== undefined) {
           const supplierId = this.getCell(row, mapped['supplierId']);
           if (supplierId) {
-            const exists = await this.prisma.supplier.findFirst({
-              where: { id: supplierId.trim(), organizationId: orgId, deletedAt: null },
-              select: { id: true },
-            });
-            if (exists) {
+            if (supplierIdSet.has(supplierId.trim())) {
               data.supplier = { connect: { id: supplierId.trim() } };
             } else {
               errors.push({ row: rowNum, field: 'supplierId', message: `Supplier ID "${supplierId}" not found`, value: supplierId });
@@ -638,15 +685,9 @@ export class ImportService {
         if (mapped['categoryName'] !== undefined) {
           const catName = this.getCell(row, mapped['categoryName']);
           if (catName) {
-            const cat = await this.prisma.category.findFirst({
-              where: {
-                name: { equals: catName.trim(), mode: 'insensitive' },
-                OR: [{ organizationId: orgId }, { organizationId: null }],
-              },
-              select: { id: true },
-            });
-            if (cat) {
-              data.category = { connect: { id: cat.id } };
+            const catId = categoryNameMap.get(catName.trim().toLowerCase());
+            if (catId) {
+              data.category = { connect: { id: catId } };
             } else {
               errors.push({ row: rowNum, field: 'category', message: `Category "${catName}" not found`, value: catName });
               continue;
@@ -656,14 +697,7 @@ export class ImportService {
         if (mapped['categoryId'] !== undefined) {
           const catId = this.getCell(row, mapped['categoryId']);
           if (catId) {
-            const cat = await this.prisma.category.findFirst({
-              where: {
-                id: catId.trim(),
-                OR: [{ organizationId: orgId }, { organizationId: null }],
-              },
-              select: { id: true },
-            });
-            if (cat) {
+            if (categoryIdMap.has(catId.trim())) {
               data.category = { connect: { id: catId.trim() } };
             } else {
               errors.push({ row: rowNum, field: 'categoryId', message: `Category ID "${catId}" not found`, value: catId });
@@ -673,12 +707,10 @@ export class ImportService {
         }
 
         if (updateExisting) {
-          const existing = await this.prisma.product.findFirst({
-            where: { organizationId: orgId, sku: sku.trim(), deletedAt: null },
-          });
-          if (existing) {
+          const existingId = existingProductMap.get(sku.trim());
+          if (existingId) {
             await this.prisma.product.update({
-              where: { id: existing.id },
+              where: { id: existingId },
               data: {
                 name: data.name,
                 ...(data.barcode && { barcode: data.barcode }),
@@ -731,6 +763,35 @@ export class ImportService {
       }
     }
 
+    const uniqueSkus: string[] = [];
+    for (const row of rows) {
+      const sku = this.getCell(row, mapped['sku']);
+      if (sku) uniqueSkus.push(sku.trim());
+    }
+
+    const productMap = new Map<string, { id: string; name: string; sku: string }>();
+    if (uniqueSkus.length > 0) {
+      const products = await this.prisma.product.findMany({
+        where: { organizationId: orgId, sku: { in: uniqueSkus }, deletedAt: null },
+        select: { id: true, name: true, sku: true },
+      });
+      for (const p of products) {
+        productMap.set(p.sku, p);
+      }
+    }
+
+    const productIds = [...new Set([...productMap.values()].map(p => p.id))];
+    const inventoryMap = new Map<string, { id: string; quantity: number }>();
+    if (productIds.length > 0) {
+      const inventories = await this.prisma.inventory.findMany({
+        where: { productId: { in: productIds }, warehouseId: null },
+        select: { id: true, productId: true, quantity: true },
+      });
+      for (const inv of inventories) {
+        inventoryMap.set(inv.productId, { id: inv.id, quantity: Number(inv.quantity) });
+      }
+    }
+
     for (let i = 0; i < rows.length; i++) {
       const rowNum = i + 2;
       const row = rows[i];
@@ -749,24 +810,15 @@ export class ImportService {
       const quantity = parseInt(qtyStr, 10);
 
       try {
-        const product = await this.prisma.product.findFirst({
-          where: { organizationId: orgId, sku: sku.trim(), deletedAt: null },
-          select: { id: true, name: true, sku: true },
-        });
+        const product = productMap.get(sku.trim());
 
         if (!product) {
           errors.push({ row: rowNum, field: 'sku', message: `Product with SKU "${sku}" not found`, value: sku });
           continue;
         }
 
-        const existingInventory = await this.prisma.inventory.findFirst({
-          where: { productId: product.id, warehouseId: null },
-          select: { id: true },
-        });
-
-        const previousQuantity = existingInventory
-          ? Number((await this.prisma.inventory.findUnique({ where: { id: existingInventory.id } }))?.quantity ?? 0)
-          : 0;
+        const existingInventory = inventoryMap.get(product.id);
+        const previousQuantity = existingInventory ? existingInventory.quantity : 0;
 
         if (existingInventory) {
           await this.prisma.inventory.update({
@@ -818,6 +870,29 @@ export class ImportService {
       }
     }
 
+    const uniqueParentCodes: string[] = [];
+    const uniqueCodes: string[] = [];
+    for (const row of rows) {
+      if (mapped['parentCode'] !== undefined) {
+        const parentCode = this.getCell(row, mapped['parentCode']);
+        if (parentCode) uniqueParentCodes.push(parentCode.trim());
+      }
+      const code = this.getCell(row, mapped['code']);
+      if (code) uniqueCodes.push(code.trim());
+    }
+
+    const accountCodeMap = new Map<string, string>();
+    const allCodes = [...new Set([...uniqueParentCodes, ...uniqueCodes])];
+    if (allCodes.length > 0) {
+      const accounts = await this.prisma.account.findMany({
+        where: { organizationId: orgId, code: { in: allCodes } },
+        select: { id: true, code: true },
+      });
+      for (const a of accounts) {
+        accountCodeMap.set(a.code, a.id);
+      }
+    }
+
     for (let i = 0; i < rows.length; i++) {
       const rowNum = i + 2;
       const row = rows[i];
@@ -844,12 +919,9 @@ export class ImportService {
         if (mapped['parentCode'] !== undefined) {
           const parentCode = this.getCell(row, mapped['parentCode']);
           if (parentCode) {
-            const parent = await this.prisma.account.findFirst({
-              where: { organizationId: orgId, code: parentCode.trim() },
-              select: { id: true },
-            });
-            if (parent) {
-              parentId = parent.id;
+            const parentIdFromMap = accountCodeMap.get(parentCode.trim());
+            if (parentIdFromMap) {
+              parentId = parentIdFromMap;
             } else {
               errors.push({ row: rowNum, field: 'parentCode', message: `Parent account code "${parentCode}" not found`, value: parentCode });
               continue;
@@ -862,12 +934,10 @@ export class ImportService {
           : null;
 
         if (updateExisting) {
-          const existing = await this.prisma.account.findFirst({
-            where: { organizationId: orgId, code: code.trim() },
-          });
-          if (existing) {
+          const existingId = accountCodeMap.get(code.trim());
+          if (existingId) {
             await this.prisma.account.update({
-              where: { id: existing.id },
+              where: { id: existingId },
               data: {
                 name: name.trim(),
                 type: typeStr as 'ASSET' | 'LIABILITY' | 'EQUITY' | 'REVENUE' | 'EXPENSE',

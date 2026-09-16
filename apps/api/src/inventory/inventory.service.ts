@@ -92,53 +92,78 @@ export class InventoryService {
       };
     }
 
-    const allProducts = await this.prisma.product.findMany({
-      where,
-      select: {
-        id: true,
-        name: true,
-        sku: true,
-        categoryId: true,
-        category: { select: { id: true, name: true } },
-        supplierId: true,
-        supplier: { select: { id: true, name: true } },
-        unitPrice: true,
-        costPrice: true,
-        minimumStock: true,
-        maximumStock: true,
-        isActive: true,
-        updatedAt: true,
-        inventory: { select: { quantity: true } },
-      },
-    });
+    const stockConditions: string[] = [];
+    if (lowStock) {
+      stockConditions.push(`(COALESCE(p."minimumStock", 0) > 0 AND stock > 0 AND stock <= COALESCE(p."minimumStock", 0))`);
+    }
+    if (outOfStock) {
+      stockConditions.push(`(stock <= 0)`);
+    }
 
-    let filtered = allProducts.map(({ inventory, ...product }) => ({
-      ...product,
-      currentStock: inventory.reduce((sum, inv) => sum + Number(inv.quantity), 0),
+    const rawResults = await this.prisma.$queryRaw<Array<{
+      id: string;
+      name: string;
+      sku: string;
+      categoryId: string | null;
+      categoryName: string | null;
+      supplierId: string | null;
+      supplierName: string | null;
+      unitPrice: unknown;
+      costPrice: unknown;
+      minimumStock: unknown;
+      maximumStock: unknown;
+      isActive: boolean;
+      updatedAt: Date;
+      currentStock: bigint;
+    }>>`
+      SELECT
+        p."id",
+        p."name",
+        p."sku",
+        p."categoryId",
+        c."name" AS "categoryName",
+        p."supplierId",
+        s."name" AS "supplierName",
+        p."unitPrice",
+        p."costPrice",
+        p."minimumStock",
+        p."maximumStock",
+        p."isActive",
+        p."updatedAt",
+        COALESCE(SUM(i."quantity"), 0) AS "currentStock"
+      FROM "Product" p
+      LEFT JOIN "Category" c ON c."id" = p."categoryId"
+      LEFT JOIN "Supplier" s ON s."id" = p."supplierId"
+      LEFT JOIN "Inventory" i ON i."productId" = p."id"
+      WHERE p."organizationId" = ${orgId}
+        AND p."deletedAt" IS NULL
+        AND (${lowStock || outOfStock}) IS TRUE
+        AND (${stockConditions.join(' OR ') || 'FALSE'}) IS TRUE
+      GROUP BY p."id", c."name", s."name"
+      ORDER BY ${field === 'updatedAt' ? 'p."updatedAt"' : `"currentStock"`} ${order}
+      LIMIT ${limit} OFFSET ${(page - 1) * limit}
+    `;
+
+    const total = rawResults.length;
+    const data = rawResults.map((r) => ({
+      id: r.id,
+      name: r.name,
+      sku: r.sku,
+      categoryId: r.categoryId,
+      category: r.categoryId ? { id: r.categoryId, name: r.categoryName } : null,
+      supplierId: r.supplierId,
+      supplier: r.supplierId ? { id: r.supplierId, name: r.supplierName } : null,
+      unitPrice: Number(r.unitPrice),
+      costPrice: Number(r.costPrice),
+      minimumStock: Number(r.minimumStock),
+      maximumStock: Number(r.maximumStock),
+      isActive: r.isActive,
+      updatedAt: r.updatedAt,
+      currentStock: Number(r.currentStock),
     }));
 
-    if (lowStock) {
-      filtered = filtered.filter((p) => p.minimumStock > 0 && p.currentStock > 0 && p.currentStock <= p.minimumStock);
-    }
-
-    if (outOfStock) {
-      filtered = filtered.filter((p) => p.currentStock <= 0);
-    }
-
-    const sorted = [...filtered].sort((a, b) => {
-      const aVal = a[field as keyof typeof a];
-      const bVal = b[field as keyof typeof b];
-      if (typeof aVal === 'string' && typeof bVal === 'string') {
-        return order === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-      }
-      return 0;
-    });
-
-    const total = sorted.length;
-    const paged = sorted.slice((page - 1) * limit, page * limit);
-
     return {
-      data: paged,
+      data,
       meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
     };
   }
@@ -319,44 +344,49 @@ export class InventoryService {
   }
 
   async getSummary(orgId: string) {
-    const products = await this.prisma.product.findMany({
-      where: { organizationId: orgId, deletedAt: null },
-      select: {
-        id: true,
-        costPrice: true,
-        minimumStock: true,
-        inventory: { select: { quantity: true } },
-      },
-    });
+    const summary = await this.prisma.$queryRaw<Array<{
+      totalProducts: bigint;
+      totalStockUnits: bigint;
+      inventoryValue: bigint;
+      lowStockCount: bigint;
+      outOfStockCount: bigint;
+    }>>`
+      SELECT
+        COUNT(*) AS "totalProducts",
+        COALESCE(SUM(COALESCE(s.stock, 0)), 0) AS "totalStockUnits",
+        COALESCE(SUM(COALESCE(s.stock, 0) * COALESCE(p."costPrice", 0)), 0) AS "inventoryValue",
+        COUNT(*) FILTER (
+          WHERE COALESCE(s.stock, 0) > 0
+            AND COALESCE(p."minimumStock", 0) > 0
+            AND COALESCE(s.stock, 0) <= COALESCE(p."minimumStock", 0)
+        ) AS "lowStockCount",
+        COUNT(*) FILTER (
+          WHERE COALESCE(s.stock, 0) <= 0
+        ) AS "outOfStockCount"
+      FROM "Product" p
+      LEFT JOIN (
+        SELECT "productId", SUM("quantity") AS stock
+        FROM "Inventory"
+        GROUP BY "productId"
+      ) s ON s."productId" = p."id"
+      WHERE p."organizationId" = ${orgId}
+        AND p."deletedAt" IS NULL
+    `;
 
-    let totalStockUnits = 0;
-    let totalInventoryValue = 0;
-    let lowStockCount = 0;
-    let outOfStockCount = 0;
-
-    for (const product of products) {
-      const currentStock = product.inventory.reduce((sum, inv) => sum + Number(inv.quantity), 0);
-      totalStockUnits += currentStock;
-      totalInventoryValue += currentStock * Number(product.costPrice);
-
-      if (currentStock <= 0) {
-        outOfStockCount++;
-      } else if (product.minimumStock > 0 && currentStock <= product.minimumStock) {
-        lowStockCount++;
-      }
-    }
-
-    const averageProductValue = products.length > 0
-      ? totalInventoryValue / products.length
-      : 0;
+    const row = summary[0];
+    const totalProducts = Number(row?.totalProducts ?? 0);
+    const totalStockUnits = Number(row?.totalStockUnits ?? 0);
+    const inventoryValue = Number(row?.inventoryValue ?? 0);
+    const lowStockCount = Number(row?.lowStockCount ?? 0);
+    const outOfStockCount = Number(row?.outOfStockCount ?? 0);
 
     return {
-      totalProducts: products.length,
+      totalProducts,
       totalStockUnits,
-      inventoryValue: totalInventoryValue,
+      inventoryValue,
       lowStockCount,
       outOfStockCount,
-      averageProductValue,
+      averageProductValue: totalProducts > 0 ? inventoryValue / totalProducts : 0,
     };
   }
 }

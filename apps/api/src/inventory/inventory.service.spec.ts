@@ -461,19 +461,16 @@ describe('InventoryService', () => {
 
   describe('getSummary', () => {
     it('computes summary for organization products', async () => {
-      const productFindMany = jest.fn().mockResolvedValue([
-        {
-          id: 'p1', costPrice: 10, minimumStock: 5,
-          inventory: [{ quantity: 3 }],
-        },
-        {
-          id: 'p2', costPrice: 20, minimumStock: 0,
-          inventory: [{ quantity: 0 }],
-        },
-      ]);
+      const queryRaw = jest.fn().mockResolvedValue([{
+        totalProducts: BigInt(2),
+        totalStockUnits: BigInt(3),
+        inventoryValue: BigInt(30),
+        lowStockCount: BigInt(1),
+        outOfStockCount: BigInt(1),
+      }]);
 
       const service = new InventoryService({
-        product: { findMany: productFindMany },
+        $queryRaw: queryRaw,
       } as unknown as PrismaService, {
         record: jest.fn(),
       } as never);
@@ -482,27 +479,34 @@ describe('InventoryService', () => {
 
       expect(result.totalProducts).toBe(2);
       expect(result.totalStockUnits).toBe(3);
-      expect(result.inventoryValue).toBe(30); // 3 * 10
-      expect(result.lowStockCount).toBe(1); // p1: 3 <= 5
-      expect(result.outOfStockCount).toBe(1); // p2: 0
+      expect(result.inventoryValue).toBe(30);
+      expect(result.lowStockCount).toBe(1);
+      expect(result.outOfStockCount).toBe(1);
     });
 
     it('scopes to organization', async () => {
-      const productFindMany = jest.fn().mockResolvedValue([]);
+      const queryRaw = jest.fn().mockResolvedValue([{
+        totalProducts: BigInt(0),
+        totalStockUnits: BigInt(0),
+        inventoryValue: BigInt(0),
+        lowStockCount: BigInt(0),
+        outOfStockCount: BigInt(0),
+      }]);
 
       const service = new InventoryService({
-        product: { findMany: productFindMany },
+        $queryRaw: queryRaw,
       } as unknown as PrismaService, {
         record: jest.fn(),
       } as never);
 
       await service.getSummary(ORG_ID);
 
-      expect(productFindMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { organizationId: ORG_ID, deletedAt: null },
-        }),
-      );
+      expect(queryRaw).toHaveBeenCalled();
+      const callArgs = queryRaw.mock.calls[0];
+      const templateStrings = callArgs[0];
+      const fullQuery = templateStrings.join('?');
+      expect(fullQuery).toContain('p."organizationId"');
+      expect(callArgs[1]).toBe(ORG_ID);
     });
   });
 });

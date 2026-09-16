@@ -10,11 +10,11 @@ describe('ImportService', () => {
     importJob: { create: jest.Mock; update: jest.Mock; findUnique: jest.Mock; findMany: jest.Mock; findFirst: jest.Mock };
     customer: { create: jest.Mock; update: jest.Mock; findFirst: jest.Mock };
     supplier: { create: jest.Mock; update: jest.Mock; findFirst: jest.Mock; findMany: jest.Mock };
-    product: { create: jest.Mock; update: jest.Mock; findFirst: jest.Mock };
-    category: { findFirst: jest.Mock };
-    inventory: { create: jest.Mock; update: jest.Mock; findFirst: jest.Mock; findUnique: jest.Mock };
+    product: { create: jest.Mock; update: jest.Mock; findFirst: jest.Mock; findMany: jest.Mock };
+    category: { findFirst: jest.Mock; findMany: jest.Mock };
+    inventory: { create: jest.Mock; update: jest.Mock; findFirst: jest.Mock; findUnique: jest.Mock; findMany: jest.Mock };
     inventoryTransaction: { create: jest.Mock };
-    account: { create: jest.Mock; update: jest.Mock; findFirst: jest.Mock };
+    account: { create: jest.Mock; update: jest.Mock; findFirst: jest.Mock; findMany: jest.Mock };
   };
   let auditRecord: jest.Mock;
 
@@ -44,15 +44,18 @@ describe('ImportService', () => {
         create: jest.fn(),
         update: jest.fn(),
         findFirst: jest.fn(),
+        findMany: jest.fn(),
       },
       category: {
         findFirst: jest.fn(),
+        findMany: jest.fn(),
       },
       inventory: {
         create: jest.fn(),
         update: jest.fn(),
         findFirst: jest.fn(),
         findUnique: jest.fn(),
+        findMany: jest.fn(),
       },
       inventoryTransaction: {
         create: jest.fn(),
@@ -61,6 +64,7 @@ describe('ImportService', () => {
         create: jest.fn(),
         update: jest.fn(),
         findFirst: jest.fn(),
+        findMany: jest.fn(),
       },
     };
 
@@ -491,7 +495,7 @@ describe('ImportService', () => {
         delimiter: 'Comma', skipFirstRow: true, updateExisting: true,
         importType: 'products', status: 'PROCESSING',
       });
-      (prisma.product.findFirst as jest.Mock).mockResolvedValue({ id: 'existing-p', sku: 'WDG-001' });
+      (prisma.product.findMany as jest.Mock).mockResolvedValue([{ id: 'existing-p', sku: 'WDG-001' }]);
       (prisma.product.update as jest.Mock).mockResolvedValue({ id: 'existing-p', name: 'Updated' });
       (prisma.supplier.findMany as jest.Mock).mockResolvedValue([]);
 
@@ -559,6 +563,7 @@ describe('ImportService', () => {
         delimiter: 'Comma', skipFirstRow: true, updateExisting: false,
         importType: 'chart-of-accounts', status: 'PROCESSING',
       });
+      (prisma.account.findMany as jest.Mock).mockResolvedValue([]);
 
       jest.spyOn(service, 'parseFile').mockReturnValue([
         ['Code', 'Name', 'Type'],
@@ -594,6 +599,7 @@ describe('ImportService', () => {
         importType: 'chart-of-accounts', status: 'PROCESSING',
       });
       (prisma.account.create as jest.Mock).mockResolvedValue({ id: 'a-1', code: '1000' });
+      (prisma.account.findMany as jest.Mock).mockResolvedValue([]);
 
       jest.spyOn(service, 'parseFile').mockReturnValue([
         ['Code', 'Name', 'Type'],
@@ -625,6 +631,7 @@ describe('ImportService', () => {
       (prisma.account.create as jest.Mock)
         .mockResolvedValueOnce({ id: 'a-1', code: '1000' })
         .mockRejectedValueOnce(new Error('Unique constraint failed'));
+      (prisma.account.findMany as jest.Mock).mockResolvedValue([]);
 
       jest.spyOn(service, 'parseFile').mockReturnValue([
         ['Code', 'Name', 'Type'],
@@ -660,7 +667,7 @@ describe('ImportService', () => {
         delimiter: 'Comma', skipFirstRow: true, updateExisting: true,
         importType: 'chart-of-accounts', status: 'PROCESSING',
       });
-      (prisma.account.findFirst as jest.Mock).mockResolvedValue({ id: 'existing-a', code: '1000' });
+      (prisma.account.findMany as jest.Mock).mockResolvedValue([{ id: 'existing-a', code: '1000' }]);
       (prisma.account.update as jest.Mock).mockResolvedValue({ id: 'existing-a', code: '1000' });
 
       jest.spyOn(service, 'parseFile').mockReturnValue([
@@ -692,6 +699,8 @@ describe('ImportService', () => {
         delimiter: 'Comma', skipFirstRow: true, updateExisting: false,
         importType: 'inventory', status: 'PROCESSING',
       });
+      (prisma.product.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.inventory.findMany as jest.Mock).mockResolvedValue([]);
 
       jest.spyOn(service, 'parseFile').mockReturnValue([
         ['SKU', 'Quantity'],
@@ -726,7 +735,8 @@ describe('ImportService', () => {
         delimiter: 'Comma', skipFirstRow: true, updateExisting: false,
         importType: 'inventory', status: 'PROCESSING',
       });
-      (prisma.product.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.product.findMany as jest.Mock).mockResolvedValue([]);
+      (prisma.inventory.findMany as jest.Mock).mockResolvedValue([]);
 
       jest.spyOn(service, 'parseFile').mockReturnValue([
         ['SKU', 'Quantity'],
@@ -761,8 +771,8 @@ describe('ImportService', () => {
         delimiter: 'Comma', skipFirstRow: true, updateExisting: false,
         importType: 'inventory', status: 'PROCESSING',
       });
-      (prisma.product.findFirst as jest.Mock).mockResolvedValue({ id: 'p-1', name: 'Widget', sku: 'WDG-001' });
-      (prisma.inventory.findFirst as jest.Mock).mockResolvedValue(null);
+      (prisma.product.findMany as jest.Mock).mockResolvedValue([{ id: 'p-1', name: 'Widget', sku: 'WDG-001' }]);
+      (prisma.inventory.findMany as jest.Mock).mockResolvedValue([]);
       (prisma.inventory.create as jest.Mock).mockResolvedValue({ id: 'inv-1', quantity: 100 });
       (prisma.inventoryTransaction.create as jest.Mock).mockResolvedValue({ id: 'txn-1' });
 
