@@ -1014,9 +1014,32 @@ export class AccountingService {
     let financingInflow = new Prisma.Decimal(0);
     let financingOutflow = new Prisma.Decimal(0);
 
+    const OPERATING_LIABILITY_CODES = new Set(['2000', '2001', '2100']);
+    const FINANCING_REF_TYPES = new Set(['LOAN_PROCEEDS', 'LOAN_REPAYMENT']);
+    const OPERATING_REF_TYPES = new Set([
+      'PAYROLL_APPROVAL',
+      'PAYROLL_PAYMENT',
+      'PAYMENT',
+      'PURCHASE_RECEIVE',
+      'SALES_REVENUE',
+      'SALES_COGS',
+    ]);
+
     for (const entry of journalEntries) {
       const cashLines = entry.lines.filter((l) => l.account.code.startsWith('1000'));
       const nonCashLines = entry.lines.filter((l) => !l.account.code.startsWith('1000'));
+      const entryRefType = entry.referenceType ?? '';
+
+      const counterAccounts = nonCashLines.map((l) => l.account);
+      const counterCode = counterAccounts.length === 1 ? counterAccounts[0].code : '';
+      const counterType = counterAccounts.length === 1 ? counterAccounts[0].type : '';
+
+      const classifyLiability = (): 'operating' | 'financing' => {
+        if (OPERATING_REF_TYPES.has(entryRefType)) return 'operating';
+        if (FINANCING_REF_TYPES.has(entryRefType)) return 'financing';
+        if (OPERATING_LIABILITY_CODES.has(counterCode)) return 'operating';
+        return 'operating';
+      };
 
       for (const cashLine of cashLines) {
         const cashAmount = new Prisma.Decimal(cashLine.debit).gt(0)
@@ -1024,16 +1047,16 @@ export class AccountingService {
           : new Prisma.Decimal(cashLine.credit).negated();
 
         if (cashAmount.gt(0)) {
-          const counterAccounts = nonCashLines.map((l) => l.account);
-          const counterCode = counterAccounts.length === 1 ? counterAccounts[0].code : '';
-          const counterType = counterAccounts.length === 1 ? counterAccounts[0].type : '';
-
           if (counterType === 'REVENUE' || counterCode === '1100' || counterCode === '1101') {
             operatingInflow = operatingInflow.plus(cashAmount);
-          } else if (counterType === 'EXPENSE' || counterCode === '2000' || counterCode === '2001') {
+          } else if (counterType === 'EXPENSE' || counterCode === '2000' || counterCode === '2001' || counterCode === '2100') {
             operatingOutflow = operatingOutflow.plus(cashAmount.abs());
           } else if (counterType === 'LIABILITY') {
-            financingInflow = financingInflow.plus(cashAmount);
+            if (classifyLiability() === 'operating') {
+              operatingInflow = operatingInflow.plus(cashAmount);
+            } else {
+              financingInflow = financingInflow.plus(cashAmount);
+            }
           } else if (counterType === 'EQUITY') {
             financingInflow = financingInflow.plus(cashAmount);
           } else if (counterType === 'ASSET' && counterCode !== '1000' && !counterCode.startsWith('1000')) {
@@ -1042,15 +1065,15 @@ export class AccountingService {
             operatingOutflow = operatingOutflow.plus(cashAmount.abs());
           }
         } else {
-          const counterAccounts = nonCashLines.map((l) => l.account);
-          const counterCode = counterAccounts.length === 1 ? counterAccounts[0].code : '';
-          const counterType = counterAccounts.length === 1 ? counterAccounts[0].type : '';
-
           const absAmount = cashAmount.abs();
-          if (counterType === 'EXPENSE' || counterCode === '2000' || counterCode === '2001') {
+          if (counterType === 'EXPENSE' || counterCode === '2000' || counterCode === '2001' || counterCode === '2100') {
             operatingOutflow = operatingOutflow.plus(absAmount);
           } else if (counterType === 'LIABILITY') {
-            financingOutflow = financingOutflow.plus(absAmount);
+            if (classifyLiability() === 'operating') {
+              operatingOutflow = operatingOutflow.plus(absAmount);
+            } else {
+              financingOutflow = financingOutflow.plus(absAmount);
+            }
           } else if (counterType === 'EQUITY') {
             financingOutflow = financingOutflow.plus(absAmount);
           } else if (counterType === 'ASSET' && counterCode !== '1000' && !counterCode.startsWith('1000')) {

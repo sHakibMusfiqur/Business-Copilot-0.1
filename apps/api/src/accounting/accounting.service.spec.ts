@@ -1172,9 +1172,11 @@ describe('AccountingService getCashFlow', () => {
 
   const makeEntry = (
     lines: Array<{ debit: number; credit: number; account: { type: string; code: string; name: string } }>,
+    opts?: { referenceType?: string },
   ) => ({
     id: 'je-1',
     status: 'POSTED',
+    referenceType: opts?.referenceType ?? null,
     lines,
   });
 
@@ -1251,7 +1253,50 @@ describe('AccountingService getCashFlow', () => {
     expect(result.investing.outflow.toNumber()).toBe(0);
   });
 
-  it('F: cross-org isolation -> only org A entries are counted', async () => {
+  it('F: payroll payment (Dr Salaries Payable 2100 / Cr Cash with PAYROLL_PAYMENT refType) -> operating outflow $800', async () => {
+    journalEntryFindMany.mockResolvedValue([
+      makeEntry([
+        { debit: 800, credit: 0, account: { type: 'LIABILITY', code: '2100', name: 'Salaries Payable' } },
+        { debit: 0, credit: 800, account: { type: 'ASSET', code: '1000', name: 'Cash' } },
+      ], { referenceType: 'PAYROLL_PAYMENT' }),
+    ]);
+
+    const result = await service.getCashFlow(ORG_ID);
+
+    expect(result.operating.outflow.toNumber()).toBe(800);
+    expect(result.operating.inflow.toNumber()).toBe(0);
+    expect(result.financing.outflow.toNumber()).toBe(0);
+  });
+
+  it('F2: 2100 liability without referenceType defaults to operating outflow', async () => {
+    journalEntryFindMany.mockResolvedValue([
+      makeEntry([
+        { debit: 300, credit: 0, account: { type: 'LIABILITY', code: '2100', name: 'Accrued Liabilities' } },
+        { debit: 0, credit: 300, account: { type: 'ASSET', code: '1000', name: 'Cash' } },
+      ]),
+    ]);
+
+    const result = await service.getCashFlow(ORG_ID);
+
+    expect(result.operating.outflow.toNumber()).toBe(300);
+    expect(result.financing.outflow.toNumber()).toBe(0);
+  });
+
+  it('F3: payroll approval accrual (Dr Expense / Cr Salaries Payable) -> no cash flow (non-cash entry)', async () => {
+    journalEntryFindMany.mockResolvedValue([
+      makeEntry([
+        { debit: 1000, credit: 0, account: { type: 'EXPENSE', code: '6000', name: 'Salary Expense' } },
+        { debit: 0, credit: 1000, account: { type: 'LIABILITY', code: '2100', name: 'Salaries Payable' } },
+      ], { referenceType: 'PAYROLL_APPROVAL' }),
+    ]);
+
+    const result = await service.getCashFlow(ORG_ID);
+
+    expect(result.operating.inflow.toNumber()).toBe(0);
+    expect(result.operating.outflow.toNumber()).toBe(0);
+  });
+
+  it('G0: cross-org isolation -> only org A entries are counted', async () => {
     journalEntryFindMany.mockResolvedValue([
       makeEntry([
         { debit: 100, credit: 0, account: { type: 'ASSET', code: '1000', name: 'Cash' } },
@@ -1268,12 +1313,12 @@ describe('AccountingService getCashFlow', () => {
     );
   });
 
-  it('G: loan proceeds (Dr Cash / Cr Loan Payable) -> financing inflow $1000', async () => {
+  it('G: loan proceeds (Dr Cash / Cr Loan Payable with LOAN_PROCEEDS refType) -> financing inflow $1000', async () => {
     journalEntryFindMany.mockResolvedValue([
       makeEntry([
         { debit: 1000, credit: 0, account: { type: 'ASSET', code: '1000', name: 'Cash' } },
-        { debit: 0, credit: 1000, account: { type: 'LIABILITY', code: '2100', name: 'Loan Payable' } },
-      ]),
+        { debit: 0, credit: 1000, account: { type: 'LIABILITY', code: '2200', name: 'Loan Payable' } },
+      ], { referenceType: 'LOAN_PROCEEDS' }),
     ]);
 
     const result = await service.getCashFlow(ORG_ID);
@@ -1284,12 +1329,12 @@ describe('AccountingService getCashFlow', () => {
     expect(result.operating.outflow.toNumber()).toBe(0);
   });
 
-  it('H: loan repayment (Dr Loan Payable / Cr Cash) -> financing outflow $500', async () => {
+  it('H: loan repayment (Dr Loan Payable / Cr Cash with LOAN_REPAYMENT refType) -> financing outflow $500', async () => {
     journalEntryFindMany.mockResolvedValue([
       makeEntry([
-        { debit: 500, credit: 0, account: { type: 'LIABILITY', code: '2100', name: 'Loan Payable' } },
+        { debit: 500, credit: 0, account: { type: 'LIABILITY', code: '2200', name: 'Loan Payable' } },
         { debit: 0, credit: 500, account: { type: 'ASSET', code: '1000', name: 'Cash' } },
-      ]),
+      ], { referenceType: 'LOAN_REPAYMENT' }),
     ]);
 
     const result = await service.getCashFlow(ORG_ID);
@@ -1336,9 +1381,9 @@ describe('AccountingService getCashFlow', () => {
         { debit: 0, credit: 500, account: { type: 'REVENUE', code: '4000', name: 'Sales Revenue' } },
       ]),
       makeEntry([
-        { debit: 200, credit: 0, account: { type: 'LIABILITY', code: '2100', name: 'Loan Payable' } },
+        { debit: 200, credit: 0, account: { type: 'LIABILITY', code: '2200', name: 'Loan Payable' } },
         { debit: 0, credit: 200, account: { type: 'ASSET', code: '1000', name: 'Cash' } },
-      ]),
+      ], { referenceType: 'LOAN_REPAYMENT' }),
       makeEntry([
         { debit: 100, credit: 0, account: { type: 'EXPENSE', code: '6000', name: 'Rent Expense' } },
         { debit: 0, credit: 100, account: { type: 'ASSET', code: '1000', name: 'Cash' } },
