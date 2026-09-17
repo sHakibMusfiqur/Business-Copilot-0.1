@@ -998,9 +998,11 @@ export class AccountingService {
       ...(dateFrom || dateTo ? { date: dateFilter } : {}),
     };
 
-    const lines = await this.prisma.journalEntryLine.findMany({
-      where: { journalEntry: where },
-      include: { account: { select: { type: true, code: true, name: true } } },
+    const journalEntries = await this.prisma.journalEntry.findMany({
+      where,
+      include: {
+        lines: { include: { account: { select: { type: true, code: true, name: true } } } },
+      },
     });
 
     let operatingInflow = new Prisma.Decimal(0);
@@ -1008,34 +1010,43 @@ export class AccountingService {
     const investingInflow = new Prisma.Decimal(0);
     let investingOutflow = new Prisma.Decimal(0);
 
-    for (const line of lines) {
-      const accountCode = line.account.code;
-      const debit = new Prisma.Decimal(line.debit);
-      const credit = new Prisma.Decimal(line.credit);
+    for (const entry of journalEntries) {
+      const cashLines = entry.lines.filter((l) => l.account.code.startsWith('1000'));
+      const nonCashLines = entry.lines.filter((l) => !l.account.code.startsWith('1000'));
 
-      if (accountCode === '1000' || accountCode.startsWith('1000')) {
-        if (debit.gt(0)) {
-          if (accountCode === '1100' || accountCode === '1101') {
-            operatingInflow = operatingInflow.plus(debit);
-          } else if (accountCode === '4000' || accountCode.startsWith('4')) {
-            operatingInflow = operatingInflow.plus(debit);
+      for (const cashLine of cashLines) {
+        const cashAmount = new Prisma.Decimal(cashLine.debit).gt(0)
+          ? new Prisma.Decimal(cashLine.debit)
+          : new Prisma.Decimal(cashLine.credit).negated();
+
+        if (cashAmount.gt(0)) {
+          const counterAccounts = nonCashLines.map((l) => l.account);
+          const counterCode = counterAccounts.length === 1 ? counterAccounts[0].code : '';
+          const counterType = counterAccounts.length === 1 ? counterAccounts[0].type : '';
+
+          if (counterType === 'REVENUE' || counterCode === '1100' || counterCode === '1101') {
+            operatingInflow = operatingInflow.plus(cashAmount);
+          } else if (counterType === 'EXPENSE' || counterCode === '2000' || counterCode === '2001') {
+            operatingOutflow = operatingOutflow.plus(cashAmount.abs());
+          } else if (counterType === 'ASSET' && counterCode !== '1000' && !counterCode.startsWith('1000')) {
+            investingOutflow = investingOutflow.plus(cashAmount.abs());
           } else {
-            operatingInflow = operatingInflow.plus(debit);
+            operatingOutflow = operatingOutflow.plus(cashAmount.abs());
+          }
+        } else {
+          const counterAccounts = nonCashLines.map((l) => l.account);
+          const counterCode = counterAccounts.length === 1 ? counterAccounts[0].code : '';
+          const counterType = counterAccounts.length === 1 ? counterAccounts[0].type : '';
+
+          const absAmount = cashAmount.abs();
+          if (counterType === 'EXPENSE' || counterCode === '2000' || counterCode === '2001') {
+            operatingOutflow = operatingOutflow.plus(absAmount);
+          } else if (counterType === 'ASSET' && counterCode !== '1000' && !counterCode.startsWith('1000')) {
+            investingOutflow = investingOutflow.plus(absAmount);
+          } else {
+            operatingOutflow = operatingOutflow.plus(absAmount);
           }
         }
-        if (credit.gt(0)) {
-          if (accountCode === '2000' || accountCode === '2001') {
-            operatingOutflow = operatingOutflow.plus(credit);
-          } else if (accountCode === '5000' || accountCode.startsWith('5')) {
-            operatingOutflow = operatingOutflow.plus(credit);
-          } else {
-            operatingOutflow = operatingOutflow.plus(credit);
-          }
-        }
-      }
-
-      if (accountCode === '1200' && debit.gt(0)) {
-        investingOutflow = investingOutflow.plus(debit);
       }
     }
 
@@ -1785,6 +1796,77 @@ export class AccountingService {
     }
 
     return null;
+  }
+
+  async reverseJournalEntry(orgId: string, userId: string, entryId: string) {
+    const entry = await this.prisma.journalEntry.findFirst({
+      where: { id: entryId, organizationId: orgId, deletedAt: null },
+      include: { lines: true },
+    });
+
+    if (!entry) throw new NotFoundException('Journal entry not found');
+
+    if (entry.status !== JournalEntryStatus.POSTED) {
+      throw new ConflictException('Only POSTED journal entries can be reversed');
+    }
+
+    const existingReversal = await this.prisma.journalEntry.findFirst({
+      where: {
+        referenceId: entryId,
+        referenceType: 'REVERSAL',
+        organizationId: orgId,
+        deletedAt: null,
+      },
+    });
+
+    if (existingReversal) {
+      throw new ConflictException('This journal entry has already been reversed');
+    }
+
+    const entryNumber = await this.generateJournalEntryNumber(orgId);
+
+    const reversal = await this.prisma.journalEntry.create({
+      data: {
+        entryNumber,
+        organizationId: orgId,
+        description: `Reversal of ${entry.entryNumber}: ${entry.description}`,
+        status: JournalEntryStatus.POSTED,
+        referenceId: entryId,
+        referenceType: 'REVERSAL',
+        createdById: userId,
+        lines: {
+          create: entry.lines.map((line) => ({
+            accountId: line.accountId,
+            debit: Number(line.credit),
+            credit: Number(line.debit),
+            description: `Reversal: ${line.description ?? ''}`.trim() || null,
+          })),
+        },
+      },
+      select: {
+        id: true,
+        entryNumber: true,
+        date: true,
+        description: true,
+        status: true,
+        referenceId: true,
+        referenceType: true,
+        createdAt: true,
+        lines: {
+          select: {
+            id: true,
+            debit: true,
+            credit: true,
+            accountId: true,
+            description: true,
+            account: { select: { id: true, code: true, name: true } },
+          },
+        },
+      },
+    });
+
+    this.logger.log(`Journal entry reversed: ${entry.entryNumber} → ${reversal.entryNumber} by ${userId}`);
+    return reversal;
   }
 
   // ─── Private Helpers ──────────────────────────────────────────
