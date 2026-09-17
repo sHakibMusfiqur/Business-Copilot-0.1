@@ -906,6 +906,164 @@ export class AccountingService {
     };
   }
 
+  // ─── Profit & Loss ──────────────────────────────────────────
+
+  async getProfitAndLoss(orgId: string, dateFrom?: string, dateTo?: string) {
+    const dateFilter: Record<string, unknown> = {};
+    if (dateFrom) dateFilter.gte = new Date(dateFrom);
+    if (dateTo) dateFilter.lte = new Date(dateTo);
+
+    const where: Record<string, unknown> = {
+      organizationId: orgId,
+      status: 'POSTED',
+      ...(dateFrom || dateTo ? { date: dateFilter } : {}),
+    };
+
+    const lines = await this.prisma.journalEntryLine.findMany({
+      where: { journalEntry: where },
+      include: { account: { select: { type: true, code: true, name: true } } },
+    });
+
+    let totalRevenue = new Prisma.Decimal(0);
+    let totalCOGS = new Prisma.Decimal(0);
+    let totalExpenses = new Prisma.Decimal(0);
+
+    const revenueByAccount: Record<string, { code: string; name: string; amount: Prisma.Decimal }> = {};
+    const cogsByAccount: Record<string, { code: string; name: string; amount: Prisma.Decimal }> = {};
+    const expensesByAccount: Record<string, { code: string; name: string; amount: Prisma.Decimal }> = {};
+
+    for (const line of lines) {
+      const accountType = line.account.type;
+      const accountKey = line.accountId;
+
+      if (accountType === 'REVENUE') {
+        const revAmount = new Prisma.Decimal(line.credit).minus(line.debit);
+        totalRevenue = totalRevenue.plus(revAmount);
+        if (!revenueByAccount[accountKey]) {
+          revenueByAccount[accountKey] = { code: line.account.code, name: line.account.name, amount: new Prisma.Decimal(0) };
+        }
+        revenueByAccount[accountKey].amount = revenueByAccount[accountKey].amount.plus(revAmount);
+      } else if (accountType === 'EXPENSE') {
+        const expAmount = new Prisma.Decimal(line.debit).minus(line.credit);
+        totalExpenses = totalExpenses.plus(expAmount);
+
+        if (line.account.code.startsWith('5')) {
+          totalCOGS = totalCOGS.plus(expAmount);
+          if (!cogsByAccount[accountKey]) {
+            cogsByAccount[accountKey] = { code: line.account.code, name: line.account.name, amount: new Prisma.Decimal(0) };
+          }
+          cogsByAccount[accountKey].amount = cogsByAccount[accountKey].amount.plus(expAmount);
+        } else {
+          if (!expensesByAccount[accountKey]) {
+            expensesByAccount[accountKey] = { code: line.account.code, name: line.account.name, amount: new Prisma.Decimal(0) };
+          }
+          expensesByAccount[accountKey].amount = expensesByAccount[accountKey].amount.plus(expAmount);
+        }
+      }
+    }
+
+    const grossProfit = totalRevenue.minus(totalCOGS);
+    const netProfit = totalRevenue.minus(totalExpenses);
+
+    return {
+      period: { from: dateFrom || null, to: dateTo || null },
+      revenue: {
+        accounts: Object.values(revenueByAccount),
+        total: totalRevenue,
+      },
+      costOfGoodsSold: {
+        accounts: Object.values(cogsByAccount),
+        total: totalCOGS,
+      },
+      grossProfit,
+      operatingExpenses: {
+        accounts: Object.values(expensesByAccount),
+        total: totalExpenses.minus(totalCOGS),
+      },
+      totalExpenses,
+      netProfit,
+    };
+  }
+
+  // ─── Cash Flow ──────────────────────────────────────────────
+
+  async getCashFlow(orgId: string, dateFrom?: string, dateTo?: string) {
+    const dateFilter: Record<string, unknown> = {};
+    if (dateFrom) dateFilter.gte = new Date(dateFrom);
+    if (dateTo) dateFilter.lte = new Date(dateTo);
+
+    const where: Record<string, unknown> = {
+      organizationId: orgId,
+      status: 'POSTED',
+      ...(dateFrom || dateTo ? { date: dateFilter } : {}),
+    };
+
+    const lines = await this.prisma.journalEntryLine.findMany({
+      where: { journalEntry: where },
+      include: { account: { select: { type: true, code: true, name: true } } },
+    });
+
+    let operatingInflow = new Prisma.Decimal(0);
+    let operatingOutflow = new Prisma.Decimal(0);
+    const investingInflow = new Prisma.Decimal(0);
+    let investingOutflow = new Prisma.Decimal(0);
+
+    for (const line of lines) {
+      const accountCode = line.account.code;
+      const debit = new Prisma.Decimal(line.debit);
+      const credit = new Prisma.Decimal(line.credit);
+
+      if (accountCode === '1000' || accountCode.startsWith('1000')) {
+        if (debit.gt(0)) {
+          if (accountCode === '1100' || accountCode === '1101') {
+            operatingInflow = operatingInflow.plus(debit);
+          } else if (accountCode === '4000' || accountCode.startsWith('4')) {
+            operatingInflow = operatingInflow.plus(debit);
+          } else {
+            operatingInflow = operatingInflow.plus(debit);
+          }
+        }
+        if (credit.gt(0)) {
+          if (accountCode === '2000' || accountCode === '2001') {
+            operatingOutflow = operatingOutflow.plus(credit);
+          } else if (accountCode === '5000' || accountCode.startsWith('5')) {
+            operatingOutflow = operatingOutflow.plus(credit);
+          } else {
+            operatingOutflow = operatingOutflow.plus(credit);
+          }
+        }
+      }
+
+      if (accountCode === '1200' && debit.gt(0)) {
+        investingOutflow = investingOutflow.plus(debit);
+      }
+    }
+
+    const netOperating = operatingInflow.minus(operatingOutflow);
+    const netInvesting = investingInflow.minus(investingOutflow);
+    const netCashFlow = netOperating.plus(netInvesting);
+
+    return {
+      period: { from: dateFrom || null, to: dateTo || null },
+      operating: {
+        inflow: operatingInflow,
+        outflow: operatingOutflow,
+        net: netOperating,
+      },
+      investing: {
+        inflow: investingInflow,
+        outflow: investingOutflow,
+        net: netInvesting,
+      },
+      financing: {
+        inflow: new Prisma.Decimal(0),
+        outflow: new Prisma.Decimal(0),
+        net: new Prisma.Decimal(0),
+      },
+      netCashFlow,
+    };
+  }
+
   // ─── Summary ──────────────────────────────────────────────────
 
   async getSummary(orgId: string) {

@@ -12,7 +12,7 @@ import {
   HttpStatus,
   ForbiddenException,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 
 import { CurrentUser, type CurrentUserPayload } from '../common/decorators/current-user.decorator';
 import { ParseCuidPipe } from '../common/pipes/parse-cuid.pipe';
@@ -279,5 +279,37 @@ export class AccountingController {
   async getTrialBalance(@CurrentUser() user: CurrentUserPayload) {
     const orgId = this.requireOrg(user);
     return this.accountingService.getTrialBalance(orgId);
+  }
+
+  // ─── Profit & Loss ──────────────────────────────────────────
+
+  @Get('profit-and-loss')
+  @UseGuards(PermissionGuard)
+  @Permissions(['reports.read', 'reports.finance'])
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Get Profit & Loss statement' })
+  async getProfitAndLoss(
+    @CurrentUser() user: CurrentUserPayload,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    const orgId = this.requireOrg(user);
+    return this.accountingService.getProfitAndLoss(orgId, dateFrom, dateTo);
+  }
+
+  // ─── Cash Flow ──────────────────────────────────────────────
+
+  @Get('cash-flow')
+  @UseGuards(PermissionGuard)
+  @Permissions(['reports.read', 'reports.finance'])
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Get Cash Flow statement' })
+  async getCashFlow(
+    @CurrentUser() user: CurrentUserPayload,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+  ) {
+    const orgId = this.requireOrg(user);
+    return this.accountingService.getCashFlow(orgId, dateFrom, dateTo);
   }
 }
