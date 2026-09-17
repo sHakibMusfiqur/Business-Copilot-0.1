@@ -1267,6 +1267,118 @@ describe('AccountingService getCashFlow', () => {
       }),
     );
   });
+
+  it('G: loan proceeds (Dr Cash / Cr Loan Payable) -> financing inflow $1000', async () => {
+    journalEntryFindMany.mockResolvedValue([
+      makeEntry([
+        { debit: 1000, credit: 0, account: { type: 'ASSET', code: '1000', name: 'Cash' } },
+        { debit: 0, credit: 1000, account: { type: 'LIABILITY', code: '2100', name: 'Loan Payable' } },
+      ]),
+    ]);
+
+    const result = await service.getCashFlow(ORG_ID);
+
+    expect(result.financing.inflow.toNumber()).toBe(1000);
+    expect(result.financing.outflow.toNumber()).toBe(0);
+    expect(result.operating.inflow.toNumber()).toBe(0);
+    expect(result.operating.outflow.toNumber()).toBe(0);
+  });
+
+  it('H: loan repayment (Dr Loan Payable / Cr Cash) -> financing outflow $500', async () => {
+    journalEntryFindMany.mockResolvedValue([
+      makeEntry([
+        { debit: 500, credit: 0, account: { type: 'LIABILITY', code: '2100', name: 'Loan Payable' } },
+        { debit: 0, credit: 500, account: { type: 'ASSET', code: '1000', name: 'Cash' } },
+      ]),
+    ]);
+
+    const result = await service.getCashFlow(ORG_ID);
+
+    expect(result.financing.outflow.toNumber()).toBe(500);
+    expect(result.financing.inflow.toNumber()).toBe(0);
+    expect(result.operating.outflow.toNumber()).toBe(0);
+  });
+
+  it('I: equity contribution (Dr Cash / Cr Equity) -> financing inflow $2000', async () => {
+    journalEntryFindMany.mockResolvedValue([
+      makeEntry([
+        { debit: 2000, credit: 0, account: { type: 'ASSET', code: '1000', name: 'Cash' } },
+        { debit: 0, credit: 2000, account: { type: 'EQUITY', code: '3000', name: 'Owner Equity' } },
+      ]),
+    ]);
+
+    const result = await service.getCashFlow(ORG_ID);
+
+    expect(result.financing.inflow.toNumber()).toBe(2000);
+    expect(result.financing.outflow.toNumber()).toBe(0);
+    expect(result.operating.inflow.toNumber()).toBe(0);
+  });
+
+  it('J: owner withdrawal (Dr Equity / Cr Cash) -> financing outflow $300', async () => {
+    journalEntryFindMany.mockResolvedValue([
+      makeEntry([
+        { debit: 300, credit: 0, account: { type: 'EQUITY', code: '3000', name: 'Owner Equity' } },
+        { debit: 0, credit: 300, account: { type: 'ASSET', code: '1000', name: 'Cash' } },
+      ]),
+    ]);
+
+    const result = await service.getCashFlow(ORG_ID);
+
+    expect(result.financing.outflow.toNumber()).toBe(300);
+    expect(result.financing.inflow.toNumber()).toBe(0);
+    expect(result.operating.outflow.toNumber()).toBe(0);
+  });
+
+  it('K: mixed activities -> each classified correctly, no double counting', async () => {
+    journalEntryFindMany.mockResolvedValue([
+      makeEntry([
+        { debit: 500, credit: 0, account: { type: 'ASSET', code: '1000', name: 'Cash' } },
+        { debit: 0, credit: 500, account: { type: 'REVENUE', code: '4000', name: 'Sales Revenue' } },
+      ]),
+      makeEntry([
+        { debit: 200, credit: 0, account: { type: 'LIABILITY', code: '2100', name: 'Loan Payable' } },
+        { debit: 0, credit: 200, account: { type: 'ASSET', code: '1000', name: 'Cash' } },
+      ]),
+      makeEntry([
+        { debit: 100, credit: 0, account: { type: 'EXPENSE', code: '6000', name: 'Rent Expense' } },
+        { debit: 0, credit: 100, account: { type: 'ASSET', code: '1000', name: 'Cash' } },
+      ]),
+    ]);
+
+    const result = await service.getCashFlow(ORG_ID);
+
+    expect(result.operating.inflow.toNumber()).toBe(500);
+    expect(result.operating.outflow.toNumber()).toBe(100);
+    expect(result.financing.outflow.toNumber()).toBe(200);
+    expect(result.financing.inflow.toNumber()).toBe(0);
+    expect(result.netCashFlow.toNumber()).toBe(200);
+  });
+
+  it('L: AP payment uses code-based check (2000 -> operating) not type-based (LIABILITY -> financing)', async () => {
+    journalEntryFindMany.mockResolvedValue([
+      makeEntry([
+        { debit: 50, credit: 0, account: { type: 'LIABILITY', code: '2000', name: 'Accounts Payable' } },
+        { debit: 0, credit: 50, account: { type: 'ASSET', code: '1000', name: 'Cash' } },
+      ]),
+    ]);
+
+    const result = await service.getCashFlow(ORG_ID);
+
+    expect(result.operating.outflow.toNumber()).toBe(50);
+    expect(result.financing.outflow.toNumber()).toBe(0);
+  });
+
+  it('M: deletedAt filter excludes soft-deleted journal entries', async () => {
+    journalEntryFindMany.mockResolvedValue([]);
+
+    await service.getCashFlow(ORG_ID);
+
+    expect(journalEntryFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ deletedAt: null }),
+      }),
+    );
+  });
 });
 
 describe('AccountingService getProfitAndLoss P&L classification', () => {
@@ -1373,5 +1485,102 @@ describe('AccountingService getProfitAndLoss P&L classification', () => {
     expect(result.totalExpenses.toNumber()).toBe(5000);
     expect(result.netProfit.toNumber()).toBe(5000);
     expect(result.operatingExpenses.total.toNumber()).toBe(1000);
+  });
+
+  it('excludes soft-deleted journal entries via deletedAt filter', async () => {
+    journalEntryLineFindMany.mockResolvedValue([]);
+
+    await service.getProfitAndLoss(ORG_ID);
+
+    expect(journalEntryLineFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          journalEntry: expect.objectContaining({ deletedAt: null }),
+        }),
+      }),
+    );
+  });
+});
+
+describe('AccountingService updateReceivableOverdueStatuses', () => {
+  let service: AccountingService;
+  let receivableUpdateMany: jest.Mock;
+
+  beforeEach(() => {
+    receivableUpdateMany = jest.fn();
+
+    const prisma = {
+      receivable: {
+        updateMany: receivableUpdateMany,
+      },
+    } as unknown as PrismaService;
+
+    service = new AccountingService(prisma);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('transitions overdue receivables from PENDING to OVERDUE', async () => {
+    receivableUpdateMany.mockResolvedValue({ count: 3 });
+
+    const count = await service.updateReceivableOverdueStatuses(ORG_ID);
+
+    expect(count).toBe(3);
+    expect(receivableUpdateMany).toHaveBeenCalledWith({
+      where: {
+        organizationId: ORG_ID,
+        dueDate: { lt: expect.any(Date) },
+        status: { in: ['PENDING', 'PARTIALLY_PAID'] },
+      },
+      data: { status: 'OVERDUE' },
+    });
+  });
+
+  it('returns 0 when no receivables are overdue', async () => {
+    receivableUpdateMany.mockResolvedValue({ count: 0 });
+
+    const count = await service.updateReceivableOverdueStatuses(ORG_ID);
+
+    expect(count).toBe(0);
+  });
+
+  it('does not transition PAID or CANCELLED receivables', async () => {
+    receivableUpdateMany.mockResolvedValue({ count: 0 });
+
+    await service.updateReceivableOverdueStatuses(ORG_ID);
+
+    expect(receivableUpdateMany).toHaveBeenCalledWith({
+      where: {
+        organizationId: ORG_ID,
+        dueDate: { lt: expect.any(Date) },
+        status: { in: ['PENDING', 'PARTIALLY_PAID'] },
+      },
+      data: { status: 'OVERDUE' },
+    });
+  });
+
+  it('is idempotent - repeated calls produce same result', async () => {
+    receivableUpdateMany.mockResolvedValue({ count: 2 });
+
+    const count1 = await service.updateReceivableOverdueStatuses(ORG_ID);
+    const count2 = await service.updateReceivableOverdueStatuses(ORG_ID);
+
+    expect(count1).toBe(2);
+    expect(count2).toBe(2);
+    expect(receivableUpdateMany).toHaveBeenCalledTimes(2);
+  });
+
+  it('isolates by organization - only updates org-scoped receivables', async () => {
+    receivableUpdateMany.mockResolvedValue({ count: 1 });
+
+    await service.updateReceivableOverdueStatuses('org-A');
+
+    expect(receivableUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ organizationId: 'org-A' }),
+      }),
+    );
   });
 });

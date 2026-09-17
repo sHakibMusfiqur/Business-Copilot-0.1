@@ -308,7 +308,7 @@ describe('Idempotency Tests', () => {
     it('should reject creating a second invoice for the same sales order', async () => {
       const mockPrisma = createMockPrisma();
       setupTransactionMock(mockPrisma as unknown as Record<string, unknown>);
-      const service = new InvoicesService(mockPrisma as unknown as PrismaService, createAuditService(), createMailService());
+      const service = new InvoicesService(mockPrisma as unknown as PrismaService, createAuditService(), createMailService(), { updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0) } as never);
 
       const salesOrderId = 'so-duplicate-invoice';
       const existingInvoice = { id: 'existing-invoice', invoiceNumber: 'INV-2026-000001', salesOrderId, organizationId: 'org-1' };
@@ -322,7 +322,7 @@ describe('Idempotency Tests', () => {
     it('should succeed first create then reject second for same order', async () => {
       const mockPrisma = createMockPrisma();
       setupTransactionMock(mockPrisma as unknown as Record<string, unknown>);
-      const service = new InvoicesService(mockPrisma as unknown as PrismaService, createAuditService(), createMailService());
+      const service = new InvoicesService(mockPrisma as unknown as PrismaService, createAuditService(), createMailService(), { updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0) } as never);
 
       const salesOrderId = 'so-dup-seq';
 
@@ -339,7 +339,7 @@ describe('Idempotency Tests', () => {
   describe('C. Update overdue statuses — idempotent operation', () => {
     it('should be idempotent when called twice (no harm from double execution)', async () => {
       const mockPrisma = createMockPrisma();
-      const service = new InvoicesService(mockPrisma as unknown as PrismaService, createAuditService(), createMailService());
+      const service = new InvoicesService(mockPrisma as unknown as PrismaService, createAuditService(), createMailService(), { updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0) } as never);
 
       mockPrisma.invoice.updateMany.mockResolvedValue({ count: 3 });
 
@@ -359,7 +359,7 @@ describe('Idempotency Tests', () => {
 
     it('should return 0 when called with no overdue invoices', async () => {
       const mockPrisma = createMockPrisma();
-      const service = new InvoicesService(mockPrisma as unknown as PrismaService, createAuditService(), createMailService());
+      const service = new InvoicesService(mockPrisma as unknown as PrismaService, createAuditService(), createMailService(), { updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0) } as never);
 
       mockPrisma.invoice.updateMany.mockResolvedValue({ count: 0 });
 

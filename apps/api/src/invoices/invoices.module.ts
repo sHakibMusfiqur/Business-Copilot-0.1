@@ -5,12 +5,13 @@ import { PrismaModule } from '../prisma/prisma.module';
 import { AuditModule } from '../audit/audit.module';
 import { RbacModule } from '../rbac/rbac.module';
 import { MailModule } from '../mail/mail.module';
+import { AccountingModule } from '../accounting/accounting.module';
 
 import { InvoicesController } from './invoices.controller';
 import { InvoicesService } from './invoices.service';
 
 @Module({
-  imports: [PrismaModule, AuditModule, RbacModule, MailModule, ScheduleModule.forRoot()],
+  imports: [PrismaModule, AuditModule, RbacModule, MailModule, AccountingModule, ScheduleModule.forRoot()],
   controllers: [InvoicesController],
   providers: [InvoicesService],
   exports: [InvoicesService],

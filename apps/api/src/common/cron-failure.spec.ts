@@ -11,6 +11,10 @@ function createMail() {
   return { sendOrgEmail: jest.fn().mockResolvedValue(undefined) } as unknown as MailService;
 }
 
+function createAccounting() {
+  return { updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0) } as never;
+}
+
 function createPrisma(overrides: Record<string, unknown> = {}) {
   return {
     organization: {
@@ -35,6 +39,7 @@ describe('Cron Failure Tests', () => {
         prisma as unknown as PrismaService,
         createAudit(),
         createMail(),
+        createAccounting(),
       );
 
       await expect(
@@ -54,6 +59,7 @@ describe('Cron Failure Tests', () => {
         prisma as unknown as PrismaService,
         createAudit(),
         createMail(),
+        createAccounting(),
       );
 
       await expect(
@@ -73,6 +79,7 @@ describe('Cron Failure Tests', () => {
         prisma as unknown as PrismaService,
         createAudit(),
         createMail(),
+        createAccounting(),
       );
 
       await expect(
@@ -94,6 +101,7 @@ describe('Cron Failure Tests', () => {
         prisma as unknown as PrismaService,
         createAudit(),
         createMail(),
+        createAccounting(),
       );
 
       await expect(
@@ -114,6 +122,7 @@ describe('Cron Failure Tests', () => {
         prisma as unknown as PrismaService,
         createAudit(),
         createMail(),
+        createAccounting(),
       );
 
       await expect(
@@ -135,6 +144,7 @@ describe('Cron Failure Tests', () => {
         prisma as unknown as PrismaService,
         createAudit(),
         createMail(),
+        createAccounting(),
       );
 
       await service.handleOverdueInvoices();
@@ -158,6 +168,7 @@ describe('Cron Failure Tests', () => {
         prisma as unknown as PrismaService,
         createAudit(),
         createMail(),
+        createAccounting(),
       );
 
       await service.handleOverdueInvoices();
@@ -181,6 +192,7 @@ describe('Cron Failure Tests', () => {
         prisma as unknown as PrismaService,
         createAudit(),
         createMail(),
+        createAccounting(),
       );
 
       const calls = 5;
@@ -202,6 +214,7 @@ describe('Cron Failure Tests', () => {
         prisma as unknown as PrismaService,
         createAudit(),
         createMail(),
+        createAccounting(),
       );
 
       await expect(
@@ -218,6 +231,7 @@ describe('Cron Failure Tests', () => {
         prisma as unknown as PrismaService,
         createAudit(),
         createMail(),
+        createAccounting(),
       );
 
       await expect(
@@ -236,6 +250,7 @@ describe('Cron Failure Tests', () => {
         prisma as unknown as PrismaService,
         createAudit(),
         createMail(),
+        createAccounting(),
       );
 
       await service.handleOverdueInvoices();

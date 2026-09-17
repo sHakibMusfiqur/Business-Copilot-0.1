@@ -916,6 +916,7 @@ export class AccountingService {
     const where: Record<string, unknown> = {
       organizationId: orgId,
       status: 'POSTED',
+      deletedAt: null,
       ...(dateFrom || dateTo ? { date: dateFilter } : {}),
     };
 
@@ -995,6 +996,7 @@ export class AccountingService {
     const where: Record<string, unknown> = {
       organizationId: orgId,
       status: 'POSTED',
+      deletedAt: null,
       ...(dateFrom || dateTo ? { date: dateFilter } : {}),
     };
 
@@ -1009,6 +1011,8 @@ export class AccountingService {
     let operatingOutflow = new Prisma.Decimal(0);
     const investingInflow = new Prisma.Decimal(0);
     let investingOutflow = new Prisma.Decimal(0);
+    let financingInflow = new Prisma.Decimal(0);
+    let financingOutflow = new Prisma.Decimal(0);
 
     for (const entry of journalEntries) {
       const cashLines = entry.lines.filter((l) => l.account.code.startsWith('1000'));
@@ -1028,6 +1032,10 @@ export class AccountingService {
             operatingInflow = operatingInflow.plus(cashAmount);
           } else if (counterType === 'EXPENSE' || counterCode === '2000' || counterCode === '2001') {
             operatingOutflow = operatingOutflow.plus(cashAmount.abs());
+          } else if (counterType === 'LIABILITY') {
+            financingInflow = financingInflow.plus(cashAmount);
+          } else if (counterType === 'EQUITY') {
+            financingInflow = financingInflow.plus(cashAmount);
           } else if (counterType === 'ASSET' && counterCode !== '1000' && !counterCode.startsWith('1000')) {
             investingOutflow = investingOutflow.plus(cashAmount.abs());
           } else {
@@ -1041,6 +1049,10 @@ export class AccountingService {
           const absAmount = cashAmount.abs();
           if (counterType === 'EXPENSE' || counterCode === '2000' || counterCode === '2001') {
             operatingOutflow = operatingOutflow.plus(absAmount);
+          } else if (counterType === 'LIABILITY') {
+            financingOutflow = financingOutflow.plus(absAmount);
+          } else if (counterType === 'EQUITY') {
+            financingOutflow = financingOutflow.plus(absAmount);
           } else if (counterType === 'ASSET' && counterCode !== '1000' && !counterCode.startsWith('1000')) {
             investingOutflow = investingOutflow.plus(absAmount);
           } else {
@@ -1052,7 +1064,8 @@ export class AccountingService {
 
     const netOperating = operatingInflow.minus(operatingOutflow);
     const netInvesting = investingInflow.minus(investingOutflow);
-    const netCashFlow = netOperating.plus(netInvesting);
+    const netFinancing = financingInflow.minus(financingOutflow);
+    const netCashFlow = netOperating.plus(netInvesting).plus(netFinancing);
 
     return {
       period: { from: dateFrom || null, to: dateTo || null },
@@ -1067,9 +1080,9 @@ export class AccountingService {
         net: netInvesting,
       },
       financing: {
-        inflow: new Prisma.Decimal(0),
-        outflow: new Prisma.Decimal(0),
-        net: new Prisma.Decimal(0),
+        inflow: financingInflow,
+        outflow: financingOutflow,
+        net: netFinancing,
       },
       netCashFlow,
     };
