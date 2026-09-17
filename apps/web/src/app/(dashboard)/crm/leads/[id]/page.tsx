@@ -18,9 +18,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DashboardError } from '@/components/dashboard/dashboard-error';
+import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { useToast } from '@/components/ui/use-toast';
 import { usePermissions } from '@/hooks/use-permissions';
-import { CRM_CREATE, CRM_UPDATE, CRM_DELETE } from '@/lib/permissions';
+import { CRM_READ, CRM_CREATE, CRM_UPDATE, CRM_DELETE } from '@/lib/permissions';
 import { getLeadById, getLeadTimeline, getLeadActivities, toggleActivity, deleteActivity } from '@/lib/api';
 import { formatDate, formatCurrency, formatDateTime, generateInitials } from '@/lib/utils';
 import type {
@@ -70,6 +71,7 @@ export default function LeadDetailPage() {
   const { hasPermission, isLoaded } = usePermissions();
   const leadId = params.id as string;
 
+  const canRead = isLoaded && hasPermission(CRM_READ);
   const canCreate = isLoaded && hasPermission(CRM_CREATE);
   const canUpdate = isLoaded && hasPermission(CRM_UPDATE);
   const canDelete = isLoaded && hasPermission(CRM_DELETE);
@@ -124,6 +126,10 @@ export default function LeadDetailPage() {
   };
 
   if (leadQuery.isLoading) return <DetailSkeleton />;
+
+  if (!canRead) {
+    return <ForbiddenState />;
+  }
 
   if (leadQuery.isError) {
     return (

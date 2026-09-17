@@ -2,6 +2,7 @@
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import type { Leave } from '@/lib/api/leaves';
+import { formatDate } from '@/lib/utils';
 import { getLeaveTypeLabel, getLeaveStatusStyle, getLeaveStatusLabel, getDaysCount } from './leave-types';
 
 interface LeaveDetailsDialogProps {
@@ -43,11 +44,11 @@ export function LeaveDetailsDialog({ leave, open, onClose }: LeaveDetailsDialogP
             </div>
             <div>
               <p className="text-muted-foreground">Start Date</p>
-              <p className="font-medium">{new Date(leave.startDate).toLocaleDateString()}</p>
+              <p className="font-medium">{formatDate(leave.startDate)}</p>
             </div>
             <div>
               <p className="text-muted-foreground">End Date</p>
-              <p className="font-medium">{new Date(leave.endDate).toLocaleDateString()}</p>
+              <p className="font-medium">{formatDate(leave.endDate)}</p>
             </div>
             <div>
               <p className="text-muted-foreground">Duration</p>
@@ -67,7 +68,7 @@ export function LeaveDetailsDialog({ leave, open, onClose }: LeaveDetailsDialogP
           )}
 
           <div className="text-xs text-muted-foreground">
-            Submitted on {new Date(leave.createdAt).toLocaleString()}
+            Submitted on {formatDate(leave.createdAt)}
           </div>
         </div>
       </DialogContent>

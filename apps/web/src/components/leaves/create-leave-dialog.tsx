@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,6 +13,14 @@ import { createLeave, type CreateLeaveData } from '@/lib/api/leaves';
 import { getEmployees, type EmployeeListResponse } from '@/lib/api/employees';
 import { LEAVE_TYPES } from './leave-types';
 import { useQuery } from '@tanstack/react-query';
+
+const leaveSchema = z.object({
+  employeeId: z.string().min(1, 'Employee is required'),
+  type: z.string().min(1, 'Leave type is required'),
+  startDate: z.string().min(1, 'Start date is required'),
+  endDate: z.string().min(1, 'End date is required'),
+  reason: z.string().optional(),
+});
 
 interface CreateLeaveDialogProps {
   open: boolean;
@@ -28,6 +37,7 @@ export function CreateLeaveDialog({ open, onClose, onCreated }: CreateLeaveDialo
   const [endDate, setEndDate] = useState('');
   const [type, setType] = useState('ANNUAL');
   const [reason, setReason] = useState('');
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const employeesQuery = useQuery<EmployeeListResponse>({
     queryKey: ['employees'],
@@ -55,15 +65,25 @@ export function CreateLeaveDialog({ open, onClose, onCreated }: CreateLeaveDialo
     setEndDate('');
     setType('ANNUAL');
     setReason('');
+    setErrors({});
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!employeeId || !startDate || !endDate) return;
-    if (new Date(endDate) < new Date(startDate)) {
-      toast({ title: 'Invalid dates', description: 'End date must be after start date.', variant: 'destructive' });
+    const result = leaveSchema.safeParse({ employeeId, startDate, endDate, type, reason: reason || undefined });
+    if (!result.success) {
+      const fieldErrors: Record<string, string> = {};
+      for (const issue of result.error.issues) {
+        fieldErrors[issue.path.join('.')] = issue.message;
+      }
+      setErrors(fieldErrors);
       return;
     }
+    if (new Date(endDate) < new Date(startDate)) {
+      setErrors({ endDate: 'End date must be after start date.' });
+      return;
+    }
+    setErrors({});
     createMutation.mutate({ employeeId, startDate, endDate, type, reason: reason || undefined });
   }
 
@@ -87,15 +107,18 @@ export function CreateLeaveDialog({ open, onClose, onCreated }: CreateLeaveDialo
                 <option key={emp.id} value={emp.id}>{emp.firstName} {emp.lastName}</option>
               ))}
             </select>
+            {errors.employeeId && <p className="text-xs text-destructive mt-1">{errors.employeeId}</p>}
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label>Start Date</Label>
               <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} required />
+              {errors.startDate && <p className="text-xs text-destructive mt-1">{errors.startDate}</p>}
             </div>
             <div className="space-y-2">
               <Label>End Date</Label>
               <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} required />
+              {errors.endDate && <p className="text-xs text-destructive mt-1">{errors.endDate}</p>}
             </div>
           </div>
           <div className="space-y-2">
@@ -109,6 +132,7 @@ export function CreateLeaveDialog({ open, onClose, onCreated }: CreateLeaveDialo
                 <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </select>
+            {errors.type && <p className="text-xs text-destructive mt-1">{errors.type}</p>}
           </div>
           <div className="space-y-2">
             <Label>Reason (optional)</Label>

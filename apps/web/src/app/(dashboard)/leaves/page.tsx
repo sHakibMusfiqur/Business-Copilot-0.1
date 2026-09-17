@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
+import { DashboardError } from '@/components/dashboard/dashboard-error';
 import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
@@ -85,6 +86,15 @@ export default function LeavesPage() {
       <ForbiddenState
         title="Access restricted"
         description="You don't have permission to view leave requests. Contact your organization administrator."
+      />
+    );
+  }
+
+  if (leavesQuery.isError) {
+    return (
+      <DashboardError
+        message={leavesQuery.error instanceof Error ? leavesQuery.error.message : undefined}
+        onRetry={() => leavesQuery.refetch()}
       />
     );
   }
