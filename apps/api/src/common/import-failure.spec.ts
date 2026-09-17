@@ -61,6 +61,11 @@ function lastJobUpdateData(prisma: ReturnType<typeof createPrisma>): Record<stri
   return calls[calls.length - 1][0].data as Record<string, unknown>;
 }
 
+async function flushImportProcessing(): Promise<void> {
+  await new Promise((r) => setImmediate(r));
+  await new Promise((r) => setTimeout(r, 10));
+}
+
 describe('Import Failure Tests', () => {
   describe('A. Malformed CSV — invalid file format should fail gracefully', () => {
     it('should mark import job as FAILED when parseFile throws on malformed data', async () => {
@@ -90,7 +95,7 @@ describe('Import Failure Tests', () => {
         fileName: 'bad.csv', fileSize: 100,
       }, { path: '/tmp/bad.csv', originalname: 'bad.csv', size: 100 } as Express.Multer.File);
 
-      await new Promise((r) => setTimeout(r, 50));
+      await flushImportProcessing();
 
       const data = lastJobUpdateData(prisma);
       expect(data).not.toBeNull();
@@ -126,7 +131,7 @@ describe('Import Failure Tests', () => {
         fileName: 'bad.xlsx', fileSize: 500,
       }, { path: '/tmp/bad.xlsx', originalname: 'bad.xlsx', size: 500 } as Express.Multer.File);
 
-      await new Promise((r) => setTimeout(r, 50));
+      await flushImportProcessing();
 
       const data = lastJobUpdateData(prisma);
       expect(data).not.toBeNull();
@@ -172,7 +177,7 @@ describe('Import Failure Tests', () => {
         fileName: 'dup.csv', fileSize: 100,
       }, { path: '/tmp/dup.csv', originalname: 'dup.csv', size: 100 } as Express.Multer.File);
 
-      await new Promise((r) => setTimeout(r, 50));
+      await flushImportProcessing();
 
       const data = lastJobUpdateData(prisma);
       expect(data).not.toBeNull();
@@ -215,7 +220,7 @@ describe('Import Failure Tests', () => {
         fileName: 'dup.csv', fileSize: 100,
       }, { path: '/tmp/dup.csv', originalname: 'dup.csv', size: 100 } as Express.Multer.File);
 
-      await new Promise((r) => setTimeout(r, 50));
+      await flushImportProcessing();
 
       const data = lastJobUpdateData(prisma);
       expect(data).not.toBeNull();
@@ -259,7 +264,7 @@ describe('Import Failure Tests', () => {
         fileName: 'partial.csv', fileSize: 100,
       }, { path: '/tmp/partial.csv', originalname: 'partial.csv', size: 100 } as Express.Multer.File);
 
-      await new Promise((r) => setTimeout(r, 50));
+      await flushImportProcessing();
 
       const data = lastJobUpdateData(prisma);
       expect(data).not.toBeNull();
@@ -303,7 +308,7 @@ describe('Import Failure Tests', () => {
         fileName: 'partial.csv', fileSize: 100,
       }, { path: '/tmp/partial.csv', originalname: 'partial.csv', size: 100 } as Express.Multer.File);
 
-      await new Promise((r) => setTimeout(r, 50));
+      await flushImportProcessing();
 
       const data = lastJobUpdateData(prisma);
       expect(data).not.toBeNull();
@@ -341,7 +346,7 @@ describe('Import Failure Tests', () => {
         fileName: 'stuck.csv', fileSize: 100,
       }, { path: '/tmp/stuck.csv', originalname: 'stuck.csv', size: 100 } as Express.Multer.File);
 
-      await new Promise((r) => setTimeout(r, 50));
+      await flushImportProcessing();
 
       const data = lastJobUpdateData(prisma);
       expect(data).not.toBeNull();
@@ -380,7 +385,7 @@ describe('Import Failure Tests', () => {
         fileName: 'stuck.csv', fileSize: 100,
       }, { path: '/tmp/stuck.csv', originalname: 'stuck.csv', size: 100 } as Express.Multer.File);
 
-      await new Promise((r) => setTimeout(r, 50));
+      await flushImportProcessing();
 
       const allStatuses = (prisma.importJob.update as jest.Mock).mock.calls.map(
         (c: [{ data: Record<string, unknown> }]) => c[0].data.status,
@@ -415,7 +420,7 @@ describe('Import Failure Tests', () => {
         fileName: 'fail.csv', fileSize: 100,
       }, { path: '/tmp/fail.csv', originalname: 'fail.csv', size: 100 } as Express.Multer.File);
 
-      await new Promise((r) => setTimeout(r, 50));
+      await flushImportProcessing();
 
       expect(auditRecord).toHaveBeenCalledWith(
         expect.objectContaining({
