@@ -22,6 +22,12 @@ async function bootstrap() {
   const configService = new ConfigService();
   configService.validate();
 
+  const rawThreshold = process.env.SLOW_REQUEST_THRESHOLD_MS;
+  const parsedThreshold = rawThreshold !== undefined ? parseInt(rawThreshold, 10) : NaN;
+  const slowRequestThresholdMs = Number.isFinite(parsedThreshold) && parsedThreshold > 0
+    ? parsedThreshold
+    : 3000;
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
 
   app.enableShutdownHooks();
@@ -77,10 +83,9 @@ async function bootstrap() {
         `RESPONSE id=${requestId} method=${method} path=${path} status=${statusCode} duration=${durationMs}ms`,
       );
 
-      const SLOW_REQUEST_THRESHOLD_MS = parseInt(process.env.SLOW_REQUEST_THRESHOLD_MS ?? '3000', 10);
-      if (durationMs > SLOW_REQUEST_THRESHOLD_MS) {
+      if (durationMs > slowRequestThresholdMs) {
         requestLogger.warn(
-          `SLOW id=${requestId} method=${method} path=${path} status=${statusCode} duration=${durationMs}ms threshold=${SLOW_REQUEST_THRESHOLD_MS}ms`,
+          `SLOW id=${requestId} method=${method} path=${path} status=${statusCode} duration=${durationMs}ms threshold=${slowRequestThresholdMs}ms`,
         );
       }
     });
