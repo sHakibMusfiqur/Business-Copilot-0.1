@@ -6,10 +6,9 @@ import { X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { RequirePermission } from '@/components/rbac/require-permission';
 import { useToast } from '@/components/ui/use-toast';
-import { getAccessToken } from '@/lib/api/client';
 import { INVOICES_READ } from '@/lib/permissions';
 import { formatDate, formatCurrency } from '@/lib/utils';
-import { getInvoice } from '@/lib/api';
+import { getInvoice, downloadInvoicePdf, emailInvoice } from '@/lib/api';
 import type { Invoice, InvoiceStatus, PaymentStatus } from './invoices-types';
 
 const statusStyle: Record<InvoiceStatus, string> = {
@@ -186,11 +185,7 @@ export function InvoiceDetailsDialog({ invoice, open, onClose }: InvoiceDetailsD
                 size="sm"
                 onClick={async () => {
                   try {
-                    const response = await fetch(`/api/invoices/${display.id}/pdf`, {
-                      headers: { Authorization: `Bearer ${getAccessToken()}` },
-                    });
-                    if (!response.ok) throw new Error('Failed to download');
-                    const blob = await response.blob();
+                    const blob = await downloadInvoicePdf(display.id);
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
@@ -212,11 +207,7 @@ export function InvoiceDetailsDialog({ invoice, open, onClose }: InvoiceDetailsD
                 size="sm"
                 onClick={async () => {
                   try {
-                    const response = await fetch(`/api/invoices/${display.id}/email`, {
-                      method: 'POST',
-                      headers: { Authorization: `Bearer ${getAccessToken()}` },
-                    });
-                    if (!response.ok) throw new Error('Failed to email');
+                    await emailInvoice(display.id);
                     toast({ title: 'Invoice emailed successfully' });
                   } catch {
                     toast({ variant: 'destructive', title: 'Failed to email invoice' });

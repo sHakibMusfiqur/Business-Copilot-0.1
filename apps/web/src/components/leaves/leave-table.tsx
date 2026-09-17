@@ -21,6 +21,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { formatDate } from '@/lib/utils';
 import type { Leave, LeaveListMeta } from '@/lib/api/leaves';
 import { getLeaveTypeLabel, getLeaveStatusStyle, getLeaveStatusLabel, getDaysCount } from './leave-types';
 
@@ -211,7 +212,7 @@ export function LeaveTable({
                         <div className="flex items-center gap-1.5">
                           <CalendarDays className="h-3.5 w-3.5" />
                           <span className="text-xs">
-                            {new Date(leave.startDate).toLocaleDateString()} — {new Date(leave.endDate).toLocaleDateString()}
+                            {formatDate(leave.startDate)} — {formatDate(leave.endDate)}
                           </span>
                         </div>
                       </td>

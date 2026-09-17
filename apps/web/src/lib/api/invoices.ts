@@ -48,3 +48,15 @@ export async function deleteInvoice(id: string): Promise<{ id: string; message: 
   const response = await api.delete(`${API_ROUTES.INVOICES.ROOT}/${id}`);
   return response.data;
 }
+
+export async function downloadInvoicePdf(id: string): Promise<Blob> {
+  const response = await api.get(`${API_ROUTES.INVOICES.ROOT}/${id}/pdf`, {
+    responseType: 'blob',
+  });
+  return response.data;
+}
+
+export async function emailInvoice(id: string): Promise<{ message: string }> {
+  const response = await api.post(`${API_ROUTES.INVOICES.ROOT}/${id}/email`);
+  return response.data;
+}

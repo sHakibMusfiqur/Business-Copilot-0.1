@@ -81,19 +81,19 @@ export default function LeadDetailPage() {
   const leadQuery = useQuery<Lead>({
     queryKey: ['crm', 'lead', leadId],
     queryFn: () => getLeadById(leadId),
-    enabled: !!leadId,
+    enabled: !!leadId && canRead,
   });
 
   const timelineQuery = useQuery<TimelineResponse>({
     queryKey: ['crm', 'lead', leadId, 'timeline'],
     queryFn: () => getLeadTimeline(leadId),
-    enabled: !!leadId,
+    enabled: !!leadId && canRead,
   });
 
   const activitiesQuery = useQuery<ActivityListResponse>({
     queryKey: ['crm', 'lead', leadId, 'activities'],
     queryFn: () => getLeadActivities(leadId),
-    enabled: !!leadId,
+    enabled: !!leadId && canRead,
   });
 
   const toggleMutation = useMutation({

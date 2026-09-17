@@ -11,6 +11,7 @@ import { ForbiddenState } from '@/components/rbac/forbidden-state';
 import { ConfirmDeleteDialog } from '@/components/ui/confirm-delete-dialog';
 import { usePermissions } from '@/hooks/use-permissions';
 import { LEAVES_READ, LEAVES_CREATE, LEAVES_UPDATE, LEAVES_DELETE, LEAVES_APPROVE, LEAVES_REJECT } from '@/lib/permissions';
+import { formatDate } from '@/lib/utils';
 import { getLeaves, deleteLeave, approveLeave, rejectLeave, cancelLeave, type Leave, type LeavesResponse } from '@/lib/api/leaves';
 import { LeaveTable } from '@/components/leaves/leave-table';
 import { CreateLeaveDialog } from '@/components/leaves/create-leave-dialog';
@@ -199,7 +200,7 @@ export default function LeavesPage() {
       <ConfirmDeleteDialog
         entityName={approveTarget ? `${approveTarget.employee.firstName} ${approveTarget.employee.lastName}'s leave request` : null}
         title="Approve Leave Request"
-        description={`This will approve the ${approveTarget?.type?.toLowerCase() ?? ''} leave from ${approveTarget ? new Date(approveTarget.startDate).toLocaleDateString() : ''} to ${approveTarget ? new Date(approveTarget.endDate).toLocaleDateString() : ''}.`}
+        description={`This will approve the ${approveTarget?.type?.toLowerCase() ?? ''} leave from ${approveTarget ? formatDate(approveTarget.startDate) : ''} to ${approveTarget ? formatDate(approveTarget.endDate) : ''}.`}
         buttonLabel="Approve"
         successTitle="Leave approved"
         errorFallback="Failed to approve leave request."
@@ -215,7 +216,7 @@ export default function LeavesPage() {
       <ConfirmDeleteDialog
         entityName={rejectTarget ? `${rejectTarget.employee.firstName} ${rejectTarget.employee.lastName}'s leave request` : null}
         title="Reject Leave Request"
-        description={`This will reject the ${rejectTarget?.type?.toLowerCase() ?? ''} leave from ${rejectTarget ? new Date(rejectTarget.startDate).toLocaleDateString() : ''} to ${rejectTarget ? new Date(rejectTarget.endDate).toLocaleDateString() : ''}.`}
+        description={`This will reject the ${rejectTarget?.type?.toLowerCase() ?? ''} leave from ${rejectTarget ? formatDate(rejectTarget.startDate) : ''} to ${rejectTarget ? formatDate(rejectTarget.endDate) : ''}.`}
         buttonLabel="Reject"
         successTitle="Leave rejected"
         errorFallback="Failed to reject leave request."
