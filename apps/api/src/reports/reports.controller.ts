@@ -121,8 +121,8 @@ export class ReportsController {
   @UseGuards(PermissionGuard)
   @Permissions(['reports.export'])
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Export sales report as CSV' })
-  @ApiOkResponse({ description: 'CSV file' })
+  @ApiOperation({ summary: 'Export sales summary as CSV (status counts and totals)' })
+  @ApiOkResponse({ description: 'CSV file with status-level summary rows' })
   @ApiQuery({ name: 'startDate', required: false, description: 'Start date (ISO 8601)' })
   @ApiQuery({ name: 'endDate', required: false, description: 'End date (ISO 8601)' })
   async exportSalesCsv(
@@ -147,8 +147,8 @@ export class ReportsController {
   @UseGuards(PermissionGuard)
   @Permissions(['reports.export'])
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Export purchases report as CSV' })
-  @ApiOkResponse({ description: 'CSV file' })
+  @ApiOperation({ summary: 'Export purchases summary as CSV (status counts and totals)' })
+  @ApiOkResponse({ description: 'CSV file with status-level summary rows' })
   @ApiQuery({ name: 'startDate', required: false, description: 'Start date (ISO 8601)' })
   @ApiQuery({ name: 'endDate', required: false, description: 'End date (ISO 8601)' })
   async exportPurchasesCsv(
@@ -173,8 +173,8 @@ export class ReportsController {
   @UseGuards(PermissionGuard)
   @Permissions(['reports.export'])
   @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Export inventory report as CSV' })
-  @ApiOkResponse({ description: 'CSV file' })
+  @ApiOperation({ summary: 'Export inventory summary as CSV (product count, items, quantity)' })
+  @ApiOkResponse({ description: 'CSV file with inventory summary totals' })
   async exportInventoryCsv(
     @CurrentUser() user: CurrentUserPayload,
     @Res() response?: Response,

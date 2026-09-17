@@ -212,10 +212,11 @@ export function InvoiceDetailsDialog({ invoice, open, onClose }: InvoiceDetailsD
                 size="sm"
                 onClick={async () => {
                   try {
-                    await fetch(`/api/invoices/${display.id}/email`, {
+                    const response = await fetch(`/api/invoices/${display.id}/email`, {
                       method: 'POST',
                       headers: { Authorization: `Bearer ${getAccessToken()}` },
                     });
+                    if (!response.ok) throw new Error('Failed to email');
                     toast({ title: 'Invoice emailed successfully' });
                   } catch {
                     toast({ variant: 'destructive', title: 'Failed to email invoice' });
