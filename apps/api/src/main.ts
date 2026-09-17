@@ -76,6 +76,13 @@ async function bootstrap() {
       requestLogger.log(
         `RESPONSE id=${requestId} method=${method} path=${path} status=${statusCode} duration=${durationMs}ms`,
       );
+
+      const SLOW_REQUEST_THRESHOLD_MS = parseInt(process.env.SLOW_REQUEST_THRESHOLD_MS ?? '3000', 10);
+      if (durationMs > SLOW_REQUEST_THRESHOLD_MS) {
+        requestLogger.warn(
+          `SLOW id=${requestId} method=${method} path=${path} status=${statusCode} duration=${durationMs}ms threshold=${SLOW_REQUEST_THRESHOLD_MS}ms`,
+        );
+      }
     });
 
     next();

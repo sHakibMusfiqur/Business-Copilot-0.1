@@ -609,10 +609,18 @@ export class InvoicesService {
 
   @Cron(CronExpression.EVERY_DAY_AT_6AM)
   async handleOverdueInvoices() {
+    const startTime = Date.now();
+    this.logger.log('Cron:handleOverdueInvoices started');
     const organizations = await this.prisma.organization.findMany({ select: { id: true } });
+    let totalUpdated = 0;
     for (const org of organizations) {
-      await this.updateOverdueStatuses(org.id);
+      const updated = await this.updateOverdueStatuses(org.id);
+      totalUpdated += updated;
     }
+    const durationMs = Date.now() - startTime;
+    this.logger.log(
+      `Cron:handleOverdueInvoices completed organizations=${organizations.length} updated=${totalUpdated} duration=${durationMs}ms`,
+    );
   }
 
   private computeAdvisoryLockKey(orgId: string): number {

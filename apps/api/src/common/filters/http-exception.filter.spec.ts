@@ -1,5 +1,8 @@
 import { ArgumentsHost, HttpStatus, Logger, NotFoundException } from '@nestjs/common';
-import { PrismaClientValidationError } from '@prisma/client/runtime/library';
+import {
+  PrismaClientKnownRequestError,
+  PrismaClientValidationError,
+} from '@prisma/client/runtime/library';
 
 import { AllExceptionsFilter } from './http-exception.filter';
 
@@ -166,5 +169,89 @@ describe('AllExceptionsFilter', () => {
     expect(body.stack).toBeUndefined();
     // The raw detail is captured server-side.
     expect(logged).toContain('ECONNREFUSED');
+  });
+
+  it('returns HTTP 400 for Prisma P2003 (foreign key constraint)', () => {
+    const res = makeResponse();
+    const req = { method: 'POST', url: '/api/orders', headers: {}, requestId: 'req-p2003' };
+
+    const prismaError = new PrismaClientKnownRequestError(
+      'Foreign key constraint failed on the field: userId',
+      { code: 'P2003', clientVersion: '6.19.3' },
+    );
+    filter.catch(prismaError, {
+      switchToHttp: () => ({ getRequest: () => req, getResponse: () => res }),
+    } as unknown as ArgumentsHost);
+
+    expect(res.status).toHaveBeenCalledWith(HttpStatus.BAD_REQUEST);
+    const body = res.body as Record<string, unknown>;
+    expect(body).toMatchObject({
+      statusCode: 400,
+      error: 'Bad Request',
+      message: 'Related record not found',
+    });
+  });
+
+  it('returns HTTP 409 for Prisma P2014 (required relation violation)', () => {
+    const res = makeResponse();
+    const req = { method: 'DELETE', url: '/api/users/1', headers: {}, requestId: 'req-p2014' };
+
+    const prismaError = new PrismaClientKnownRequestError(
+      'The change you are trying to make would violate the required relation',
+      { code: 'P2014', clientVersion: '6.19.3' },
+    );
+    filter.catch(prismaError, {
+      switchToHttp: () => ({ getRequest: () => req, getResponse: () => res }),
+    } as unknown as ArgumentsHost);
+
+    expect(res.status).toHaveBeenCalledWith(HttpStatus.CONFLICT);
+    const body = res.body as Record<string, unknown>;
+    expect(body).toMatchObject({
+      statusCode: 409,
+      error: 'Conflict',
+      message: 'Required relation constraint violation',
+    });
+  });
+
+  it('returns HTTP 408 for Prisma P2028 (transaction timeout)', () => {
+    const res = makeResponse();
+    const req = { method: 'POST', url: '/api/batch', headers: {}, requestId: 'req-p2028' };
+
+    const prismaError = new PrismaClientKnownRequestError(
+      'Transaction already closed: timeout',
+      { code: 'P2028', clientVersion: '6.19.3' },
+    );
+    filter.catch(prismaError, {
+      switchToHttp: () => ({ getRequest: () => req, getResponse: () => res }),
+    } as unknown as ArgumentsHost);
+
+    expect(res.status).toHaveBeenCalledWith(HttpStatus.REQUEST_TIMEOUT);
+    const body = res.body as Record<string, unknown>;
+    expect(body).toMatchObject({
+      statusCode: 408,
+      error: 'Request Timeout',
+      message: 'Database operation timed out',
+    });
+  });
+
+  it('returns HTTP 500 for unhandled Prisma known error codes', () => {
+    const res = makeResponse();
+    const req = { method: 'GET', url: '/api/data', headers: {}, requestId: 'req-p3000' };
+
+    const prismaError = new PrismaClientKnownRequestError(
+      'Error in external connector',
+      { code: 'P3000', clientVersion: '6.19.3' },
+    );
+    filter.catch(prismaError, {
+      switchToHttp: () => ({ getRequest: () => req, getResponse: () => res }),
+    } as unknown as ArgumentsHost);
+
+    expect(res.status).toHaveBeenCalledWith(HttpStatus.INTERNAL_SERVER_ERROR);
+    const body = res.body as Record<string, unknown>;
+    expect(body).toMatchObject({
+      statusCode: 500,
+      error: 'Internal Server Error',
+      message: 'Internal server error',
+    });
   });
 });

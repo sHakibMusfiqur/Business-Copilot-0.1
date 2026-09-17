@@ -52,7 +52,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
         error = (resp.error as string) ?? exception.name;
       }
     } else if (exception instanceof PrismaClientKnownRequestError) {
-      // Prisma errors are implementation details; map the two common classes to
+      // Prisma errors are implementation details; map common classes to
       // user-meaningful status codes without ever leaking driver internals.
       if (exception.code === 'P2002') {
         statusCode = HttpStatus.CONFLICT;
@@ -62,6 +62,18 @@ export class AllExceptionsFilter implements ExceptionFilter {
         statusCode = HttpStatus.NOT_FOUND;
         message = 'Record not found';
         error = 'Not Found';
+      } else if (exception.code === 'P2003') {
+        statusCode = HttpStatus.BAD_REQUEST;
+        message = 'Related record not found';
+        error = 'Bad Request';
+      } else if (exception.code === 'P2014') {
+        statusCode = HttpStatus.CONFLICT;
+        message = 'Required relation constraint violation';
+        error = 'Conflict';
+      } else if (exception.code === 'P2028') {
+        statusCode = HttpStatus.REQUEST_TIMEOUT;
+        message = 'Database operation timed out';
+        error = 'Request Timeout';
       }
     } else if (exception instanceof Error) {
  

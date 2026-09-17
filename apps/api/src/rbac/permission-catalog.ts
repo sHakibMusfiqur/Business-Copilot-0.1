@@ -1,12 +1,6 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
+import { Logger } from '@nestjs/common';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Enterprise RBAC permission catalog.
-//
-// Single source of truth for every permission in the platform. The seed script,
-// the `db:sync-rbac` maintenance script, and the organization-creation flow all
-// consume this file so the permission list is never duplicated.
-// ─────────────────────────────────────────────────────────────────────────────
 
 export interface PermissionSeed {
   name: string;
@@ -211,8 +205,9 @@ export async function syncSystemRoles(db: DbClient): Promise<void> {
     where: { deletedAt: null },
     select: { id: true },
   });
+  const logger = new Logger('PermissionCatalog');
   for (const org of orgs) {
     const { ownerRole, adminRole } = await syncSystemRolesForOrg(db, org.id);
-    console.log(`  Synced Owner (${ownerRole.id}) and Admin (${adminRole.id}) for org ${org.id}`);
+    logger.log(`Synced Owner (${ownerRole.id}) and Admin (${adminRole.id}) for org ${org.id}`);
   }
 }
