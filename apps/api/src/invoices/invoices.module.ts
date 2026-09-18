@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { ScheduleModule } from '@nestjs/schedule';
 
 import { PrismaModule } from '../prisma/prisma.module';
 import { AuditModule } from '../audit/audit.module';
@@ -11,7 +10,7 @@ import { InvoicesController } from './invoices.controller';
 import { InvoicesService } from './invoices.service';
 
 @Module({
-  imports: [PrismaModule, AuditModule, RbacModule, MailModule, AccountingModule, ScheduleModule.forRoot()],
+  imports: [PrismaModule, AuditModule, RbacModule, MailModule, AccountingModule],
   controllers: [InvoicesController],
   providers: [InvoicesService],
   exports: [InvoicesService],

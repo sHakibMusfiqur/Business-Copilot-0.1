@@ -28,7 +28,7 @@ function createPrisma(overrides: Record<string, unknown> = {}) {
 }
 
 describe('Cron Failure Tests', () => {
-  describe('A. DB failure during cron — should propagate error for process-level handling', () => {
+  describe('A. DB failure during cron — organization listing failure propagates, per-org failures are isolated', () => {
     it('should propagate database error when organization.findMany fails', async () => {
       const prisma = createPrisma();
       (prisma.organization.findMany as jest.Mock).mockRejectedValue(
@@ -47,7 +47,7 @@ describe('Cron Failure Tests', () => {
       ).rejects.toThrow('Database timeout');
     });
 
-    it('should propagate error when updateMany fails for an org', async () => {
+    it('should log and continue when updateMany fails for a single org', async () => {
       const prisma = createPrisma({
         orgs: [{ id: 'org-1' }],
       });
@@ -62,12 +62,19 @@ describe('Cron Failure Tests', () => {
         createAccounting(),
       );
 
+      const loggerSpy = jest.spyOn(service['logger'], 'error').mockImplementation();
+
       await expect(
         service.handleOverdueInvoices(),
-      ).rejects.toThrow('Connection refused');
+      ).resolves.toBeUndefined();
+
+      expect(loggerSpy).toHaveBeenCalledWith(
+        expect.stringContaining('org-1'),
+      );
+      loggerSpy.mockRestore();
     });
 
-    it('should propagate error even when subsequent orgs would succeed', async () => {
+    it('should continue processing remaining orgs when one org fails', async () => {
       const prisma = createPrisma({
         orgs: [{ id: 'org-bad' }, { id: 'org-ok' }],
       });
@@ -84,12 +91,14 @@ describe('Cron Failure Tests', () => {
 
       await expect(
         service.handleOverdueInvoices(),
-      ).rejects.toThrow('Deadlock detected');
+      ).resolves.toBeUndefined();
+
+      expect(prisma.invoice.updateMany).toHaveBeenCalledTimes(2);
     });
   });
 
-  describe('B. One org failure — current behavior: propagates and stops remaining orgs', () => {
-    it('should stop processing when the first org fails', async () => {
+  describe('B. One org failure — should isolate failure and continue processing remaining orgs', () => {
+    it('should continue processing remaining orgs after one org fails', async () => {
       const prisma = createPrisma({
         orgs: [{ id: 'org-bad' }, { id: 'org-ok' }],
       });
@@ -106,17 +115,19 @@ describe('Cron Failure Tests', () => {
 
       await expect(
         service.handleOverdueInvoices(),
-      ).rejects.toThrow('org-bad failed');
+      ).resolves.toBeUndefined();
 
-      expect(prisma.invoice.updateMany).toHaveBeenCalledTimes(1);
+      expect(prisma.invoice.updateMany).toHaveBeenCalledTimes(2);
     });
 
-    it('should not process remaining orgs after a failure', async () => {
+    it('should process all remaining orgs after a failure', async () => {
       const prisma = createPrisma({
         orgs: [{ id: 'org-1' }, { id: 'org-2' }, { id: 'org-3' }],
       });
       (prisma.invoice.updateMany as jest.Mock)
-        .mockRejectedValueOnce(new Error('First org DB error'));
+        .mockRejectedValueOnce(new Error('First org DB error'))
+        .mockResolvedValueOnce({ count: 2 })
+        .mockResolvedValueOnce({ count: 3 });
 
       const service = new InvoicesService(
         prisma as unknown as PrismaService,
@@ -127,9 +138,35 @@ describe('Cron Failure Tests', () => {
 
       await expect(
         service.handleOverdueInvoices(),
-      ).rejects.toThrow('First org DB error');
+      ).resolves.toBeUndefined();
 
-      expect(prisma.invoice.updateMany).toHaveBeenCalledTimes(1);
+      expect(prisma.invoice.updateMany).toHaveBeenCalledTimes(3);
+    });
+
+    it('should log the failure for the failing org', async () => {
+      const prisma = createPrisma({
+        orgs: [{ id: 'org-bad' }, { id: 'org-ok' }],
+      });
+      (prisma.invoice.updateMany as jest.Mock)
+        .mockRejectedValueOnce(new Error('Deadlock detected'))
+        .mockResolvedValueOnce({ count: 1 });
+
+      const service = new InvoicesService(
+        prisma as unknown as PrismaService,
+        createAudit(),
+        createMail(),
+        createAccounting(),
+      );
+
+      const loggerSpy = jest.spyOn(service['logger'], 'error').mockImplementation();
+
+      await service.handleOverdueInvoices();
+
+      expect(loggerSpy).toHaveBeenCalledWith(
+        expect.stringContaining('org-bad'),
+      );
+
+      loggerSpy.mockRestore();
     });
   });
 

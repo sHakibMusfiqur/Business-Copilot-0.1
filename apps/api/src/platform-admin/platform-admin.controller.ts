@@ -27,7 +27,7 @@ import { PlatformAdminService } from './platform-admin.service';
 import { AdminAuditQueryDto } from './dto/admin-audit-query.dto';
 import { AdminListOrganizationsQueryDto } from './dto/admin-list-organizations-query.dto';
 import { AdminListUsersQueryDto } from './dto/admin-list-users-query.dto';
-import { CreateOrganizationDto } from './dto/create-organization.dto';
+import { PlatformAdminCreateOrganizationDto } from './dto/create-organization.dto';
 import { DeleteOrganizationDto } from './dto/delete-organization.dto';
 import { RestoreOrganizationDto } from './dto/restore-organization.dto';
 import { RollbackSettingDto } from './dto/rollback-setting.dto';
@@ -82,7 +82,7 @@ export class PlatformAdminController {
   @Post('organizations')
   @ApiOkResponse({ description: 'Create organization' })
   async createOrganization(
-    @Body() dto: CreateOrganizationDto,
+    @Body() dto: PlatformAdminCreateOrganizationDto,
     @CurrentUser() user: CurrentUserPayload,
   ) {
     const result = await this.adminService.createOrganization(dto);

@@ -171,6 +171,8 @@ export class MailService {
         port: config.port,
         secure: config.useSSL,
         auth: config.user ? { user: config.user, pass: config.pass } : undefined,
+        connectionTimeout: 30000,
+        socketTimeout: 30000,
       });
     } catch (error) {
       this.logger.error(`Failed to build SMTP transport for org ${orgId}: ${(error as Error).message}`);
@@ -228,6 +230,8 @@ export class MailService {
       port: config.port,
       secure: config.useSSL,
       auth: config.user ? { user: config.user, pass: config.pass } : undefined,
+      connectionTimeout: 30000,
+      socketTimeout: 30000,
     });
 
     try {

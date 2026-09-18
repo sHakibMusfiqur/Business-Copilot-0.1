@@ -616,15 +616,23 @@ export class InvoicesService {
     const organizations = await this.prisma.organization.findMany({ select: { id: true } });
     let totalUpdated = 0;
     let totalReceivablesUpdated = 0;
+    let failedOrgs = 0;
     for (const org of organizations) {
-      const updated = await this.updateOverdueStatuses(org.id);
-      totalUpdated += updated;
-      const receivablesUpdated = await this.accountingService.updateReceivableOverdueStatuses(org.id);
-      totalReceivablesUpdated += receivablesUpdated;
+      try {
+        const updated = await this.updateOverdueStatuses(org.id);
+        totalUpdated += updated;
+        const receivablesUpdated = await this.accountingService.updateReceivableOverdueStatuses(org.id);
+        totalReceivablesUpdated += receivablesUpdated;
+      } catch (error) {
+        failedOrgs++;
+        this.logger.error(
+          `Cron:handleOverdueInvoices failed for org ${org.id}: ${(error as Error).message}`,
+        );
+      }
     }
     const durationMs = Date.now() - startTime;
     this.logger.log(
-      `Cron:handleOverdueInvoices completed organizations=${organizations.length} invoicesUpdated=${totalUpdated} receivablesUpdated=${totalReceivablesUpdated} duration=${durationMs}ms`,
+      `Cron:handleOverdueInvoices completed organizations=${organizations.length} failed=${failedOrgs} invoicesUpdated=${totalUpdated} receivablesUpdated=${totalReceivablesUpdated} duration=${durationMs}ms`,
     );
   }
 

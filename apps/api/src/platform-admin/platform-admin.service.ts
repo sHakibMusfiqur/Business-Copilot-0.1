@@ -5,7 +5,7 @@ import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma/prisma.service';
 import { syncSystemRolesForOrg } from '../rbac/permission-catalog';
 
-import { CreateOrganizationDto } from './dto/create-organization.dto';
+import { PlatformAdminCreateOrganizationDto } from './dto/create-organization.dto';
 import { UpdateOrganizationDto } from './dto/update-organization.dto';
 import { TransferOwnershipDto } from './dto/transfer-ownership.dto';
 import { DashboardCacheService } from './dashboard-cache.service';
@@ -361,7 +361,7 @@ export class PlatformAdminService {
     return `${base}-${i}`;
   }
 
-  async createOrganization(dto: CreateOrganizationDto) {
+  async createOrganization(dto: PlatformAdminCreateOrganizationDto) {
     const { name, ownerEmail, ownerName, ownerPassword, planSlug } = dto;
 
     const existing = await this.prisma.user.findUnique({ where: { email: ownerEmail } });
