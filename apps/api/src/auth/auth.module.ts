@@ -8,6 +8,7 @@ import { MailModule } from '../mail/mail.module';
 import { REDIS_HEALTH, REDIS_CLIENT } from '../infrastructure/redis/redis.module';
 
 import { AuditModule } from '../audit/audit.module';
+import { RbacModule } from '../rbac/rbac.module';
 import { AuthRateLimiterService } from './auth-rate-limiter.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -34,6 +35,7 @@ import type Redis from 'ioredis';
     }),
     AuditModule,
     MailModule,
+    RbacModule,
   ],
   controllers: [AuthController],
   providers: [
