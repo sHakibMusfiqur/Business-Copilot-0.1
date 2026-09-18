@@ -1399,7 +1399,7 @@ describe('AccountingService getCashFlow', () => {
     expect(result.netCashFlow.toNumber()).toBe(200);
   });
 
-  it('L: AP payment uses code-based check (2000 -> operating) not type-based (LIABILITY -> financing)', async () => {
+  it('L: AP payment (Dr 2000 / Cr Cash, no referenceType) classified via classifyLiability() as operating', async () => {
     journalEntryFindMany.mockResolvedValue([
       makeEntry([
         { debit: 50, credit: 0, account: { type: 'LIABILITY', code: '2000', name: 'Accounts Payable' } },
@@ -1411,6 +1411,34 @@ describe('AccountingService getCashFlow', () => {
 
     expect(result.operating.outflow.toNumber()).toBe(50);
     expect(result.financing.outflow.toNumber()).toBe(0);
+  });
+
+  it('L2: loan repayment using code 2100 with LOAN_REPAYMENT refType -> financing outflow', async () => {
+    journalEntryFindMany.mockResolvedValue([
+      makeEntry([
+        { debit: 500, credit: 0, account: { type: 'LIABILITY', code: '2100', name: 'Loan Payable' } },
+        { debit: 0, credit: 500, account: { type: 'ASSET', code: '1000', name: 'Cash' } },
+      ], { referenceType: 'LOAN_REPAYMENT' }),
+    ]);
+
+    const result = await service.getCashFlow(ORG_ID);
+
+    expect(result.financing.outflow.toNumber()).toBe(500);
+    expect(result.operating.outflow.toNumber()).toBe(0);
+  });
+
+  it('L3: loan proceeds using code 2100 with LOAN_PROCEEDS refType -> financing inflow', async () => {
+    journalEntryFindMany.mockResolvedValue([
+      makeEntry([
+        { debit: 1000, credit: 0, account: { type: 'ASSET', code: '1000', name: 'Cash' } },
+        { debit: 0, credit: 1000, account: { type: 'LIABILITY', code: '2100', name: 'Loan Payable' } },
+      ], { referenceType: 'LOAN_PROCEEDS' }),
+    ]);
+
+    const result = await service.getCashFlow(ORG_ID);
+
+    expect(result.financing.inflow.toNumber()).toBe(1000);
+    expect(result.operating.inflow.toNumber()).toBe(0);
   });
 
   it('M: deletedAt filter excludes soft-deleted journal entries', async () => {

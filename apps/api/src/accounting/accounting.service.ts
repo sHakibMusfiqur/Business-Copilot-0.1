@@ -1049,7 +1049,7 @@ export class AccountingService {
         if (cashAmount.gt(0)) {
           if (counterType === 'REVENUE' || counterCode === '1100' || counterCode === '1101') {
             operatingInflow = operatingInflow.plus(cashAmount);
-          } else if (counterType === 'EXPENSE' || counterCode === '2000' || counterCode === '2001' || counterCode === '2100') {
+          } else if (counterType === 'EXPENSE') {
             operatingOutflow = operatingOutflow.plus(cashAmount.abs());
           } else if (counterType === 'LIABILITY') {
             if (classifyLiability() === 'operating') {
@@ -1066,7 +1066,7 @@ export class AccountingService {
           }
         } else {
           const absAmount = cashAmount.abs();
-          if (counterType === 'EXPENSE' || counterCode === '2000' || counterCode === '2001' || counterCode === '2100') {
+          if (counterType === 'EXPENSE') {
             operatingOutflow = operatingOutflow.plus(absAmount);
           } else if (counterType === 'LIABILITY') {
             if (classifyLiability() === 'operating') {
