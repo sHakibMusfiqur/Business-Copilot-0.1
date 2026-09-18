@@ -848,3 +848,413 @@ describe('LeadService.findAll (tenant isolation + soft-delete exclusion / FS7)',
     expect(result.data[0].activityCount).toBe(2);
   });
 });
+
+const extendedMockService = () => {
+  const leadFindFirst = jest.fn();
+  const leadFindMany = jest.fn();
+  const leadUpdate = jest.fn();
+  const leadCreate = jest.fn();
+  const userFindFirst = jest.fn();
+  const userFindUnique = jest.fn();
+  const timelineEventCreate = jest.fn();
+  const timelineEventFindMany = jest.fn();
+  const leadCount = jest.fn();
+  const leadGroupBy = jest.fn();
+  const leadAggregate = jest.fn();
+  const activityFindMany = jest.fn();
+  const $transaction = jest.fn();
+  const customerFindFirst = jest.fn();
+  const customerCreate = jest.fn();
+
+  const prisma = {
+    lead: {
+      findFirst: leadFindFirst,
+      findMany: leadFindMany,
+      update: leadUpdate,
+      create: leadCreate,
+      count: leadCount,
+      groupBy: leadGroupBy,
+      aggregate: leadAggregate,
+    },
+    user: { findFirst: userFindFirst, findUnique: userFindUnique },
+    timelineEvent: { create: timelineEventCreate, findMany: timelineEventFindMany },
+    activity: { findMany: activityFindMany },
+    customer: { findFirst: customerFindFirst, create: customerCreate },
+    $transaction,
+  } as unknown as PrismaService;
+
+  const service = new LeadService(prisma);
+
+  leadFindFirst.mockResolvedValue({ id: 'lead-1', leadNumber: 'LD-2026-000001', organizationId: ORG_ID });
+  leadUpdate.mockResolvedValue({ id: 'lead-1', leadNumber: 'LD-2026-000001' });
+  leadCreate.mockResolvedValue({ id: 'lead-1', leadNumber: 'LD-2026-000001' });
+  leadCount.mockResolvedValue(0);
+  leadGroupBy.mockResolvedValue([]);
+  leadAggregate.mockResolvedValue({ _sum: { estimatedValue: null } });
+  activityFindMany.mockResolvedValue([]);
+  leadFindMany.mockResolvedValue([]);
+  timelineEventFindMany.mockResolvedValue([]);
+  $transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
+    const tx = {
+      customer: { findFirst: customerFindFirst, create: customerCreate },
+      lead: { update: leadUpdate },
+    };
+    return fn(tx);
+  });
+
+  return {
+    service,
+    prisma,
+    leadFindFirst,
+    leadFindMany,
+    leadUpdate,
+    leadCreate,
+    userFindFirst,
+    userFindUnique,
+    timelineEventCreate,
+    timelineEventFindMany,
+    leadCount,
+    leadGroupBy,
+    leadAggregate,
+    activityFindMany,
+    $transaction,
+    customerFindFirst,
+    customerCreate,
+  };
+};
+
+describe('LeadService.getTimeline', () => {
+  afterEach(() => jest.clearAllMocks());
+
+  it('returns timeline events for a lead in the same organization', async () => {
+    const m = extendedMockService();
+    m.leadFindFirst.mockResolvedValue({ id: 'lead-1', organizationId: ORG_ID });
+    m.timelineEventFindMany.mockResolvedValue([
+      { id: 'evt-1', type: 'CREATED', description: 'Lead created', metadata: null, createdAt: new Date(), createdBy: { id: 'u1', name: 'Admin' } },
+      { id: 'evt-2', type: 'STATUS_CHANGE', description: 'Status changed', metadata: null, createdAt: new Date(), createdBy: { id: 'u1', name: 'Admin' } },
+    ]);
+
+    const result = await m.service.getTimeline(ORG_ID, 'lead-1');
+
+    expect(m.leadFindFirst).toHaveBeenCalledWith({
+      where: { id: 'lead-1', organizationId: ORG_ID, deletedAt: null },
+    });
+    expect(m.timelineEventFindMany).toHaveBeenCalledWith({
+      where: { leadId: 'lead-1' },
+      orderBy: { createdAt: 'desc' },
+      select: expect.objectContaining({ id: true, type: true, description: true }),
+    });
+    expect(result.data).toHaveLength(2);
+    expect(result.data[0].id).toBe('evt-1');
+  });
+
+  it('throws NotFoundException for a lead from another organization', async () => {
+    const m = extendedMockService();
+    m.leadFindFirst.mockResolvedValue(null);
+
+    await expect(m.service.getTimeline('org-other', 'lead-1')).rejects.toThrow(NotFoundException);
+    expect(m.timelineEventFindMany).not.toHaveBeenCalled();
+  });
+
+  it('throws NotFoundException for a non-existent lead', async () => {
+    const m = extendedMockService();
+    m.leadFindFirst.mockResolvedValue(null);
+
+    await expect(m.service.getTimeline(ORG_ID, 'lead-missing')).rejects.toThrow(NotFoundException);
+  });
+
+  it('returns empty data when lead has no timeline events', async () => {
+    const m = extendedMockService();
+    m.leadFindFirst.mockResolvedValue({ id: 'lead-1', organizationId: ORG_ID });
+    m.timelineEventFindMany.mockResolvedValue([]);
+
+    const result = await m.service.getTimeline(ORG_ID, 'lead-1');
+
+    expect(result.data).toEqual([]);
+  });
+
+  it('scopes lead lookup to organization', async () => {
+    const m = extendedMockService();
+    m.leadFindFirst.mockResolvedValue(null);
+
+    await expect(m.service.getTimeline('org-other', 'lead-1')).rejects.toThrow(NotFoundException);
+
+    expect(m.leadFindFirst).toHaveBeenCalledWith({
+      where: { id: 'lead-1', organizationId: 'org-other', deletedAt: null },
+    });
+  });
+
+  it('rejects a soft-deleted lead', async () => {
+    const m = extendedMockService();
+    m.leadFindFirst.mockResolvedValue(null);
+
+    await expect(m.service.getTimeline(ORG_ID, 'lead-deleted')).rejects.toThrow(NotFoundException);
+    expect(m.timelineEventFindMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('LeadService.convertToCustomer', () => {
+  afterEach(() => jest.clearAllMocks());
+
+  const baseLead = {
+    id: 'lead-1',
+    leadNumber: 'LD-2026-000001',
+    organizationId: ORG_ID,
+    status: 'QUALIFIED',
+    name: 'John Doe',
+    company: 'Acme Corp',
+    email: 'john@acme.com',
+    phone: '555-0100',
+  };
+
+  it('converts a qualified lead to a new customer', async () => {
+    const m = extendedMockService();
+    m.leadFindFirst.mockResolvedValue(baseLead);
+    m.customerFindFirst.mockResolvedValue(null);
+    m.customerCreate.mockResolvedValue({
+      id: 'cust-1', name: 'Acme Corp', email: 'john@acme.com', phone: '555-0100', company: 'Acme Corp', createdAt: new Date(),
+    });
+    m.leadUpdate.mockResolvedValue({ id: 'lead-1', status: 'WON' });
+    m.timelineEventCreate.mockResolvedValue({ id: 'evt-1' });
+
+    const result = await m.service.convertToCustomer('lead-1', ORG_ID, 'actor');
+
+    expect(result.id).toBe('cust-1');
+    expect(result.name).toBe('Acme Corp');
+    expect(m.$transaction).toHaveBeenCalled();
+  });
+
+  it('links the converted customer back to the lead', async () => {
+    const m = extendedMockService();
+    m.leadFindFirst.mockResolvedValue(baseLead);
+    m.customerFindFirst.mockResolvedValue(null);
+    m.customerCreate.mockResolvedValue({
+      id: 'cust-new', name: 'Acme Corp', email: 'john@acme.com', phone: '555-0100', company: 'Acme Corp', createdAt: new Date(),
+    });
+    m.leadUpdate.mockResolvedValue({ id: 'lead-1', status: 'WON', convertedToCustomerId: 'cust-new' });
+    m.timelineEventCreate.mockResolvedValue({ id: 'evt-1' });
+
+    await m.service.convertToCustomer('lead-1', ORG_ID, 'actor');
+
+    expect(m.leadUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: 'WON',
+          convertedToCustomerId: 'cust-new',
+        }),
+      }),
+    );
+  });
+
+  it('throws NotFoundException for missing lead', async () => {
+    const m = extendedMockService();
+    m.leadFindFirst.mockResolvedValue(null);
+
+    await expect(m.service.convertToCustomer('lead-missing', ORG_ID, 'actor')).rejects.toThrow(NotFoundException);
+    expect(m.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('throws NotFoundException for cross-org lead', async () => {
+    const m = extendedMockService();
+    m.leadFindFirst.mockResolvedValue(null);
+
+    await expect(m.service.convertToCustomer('lead-1', 'org-other', 'actor')).rejects.toThrow(NotFoundException);
+
+    expect(m.leadFindFirst).toHaveBeenCalledWith({
+      where: { id: 'lead-1', organizationId: 'org-other', deletedAt: null },
+    });
+  });
+
+  it('throws BadRequestException for already-converted (WON) lead', async () => {
+    const m = extendedMockService();
+    m.leadFindFirst.mockResolvedValue({ ...baseLead, status: 'WON' });
+
+    await expect(m.service.convertToCustomer('lead-1', ORG_ID, 'actor')).rejects.toThrow(BadRequestException);
+    expect(m.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('reuses an existing customer with the same email', async () => {
+    const m = extendedMockService();
+    m.leadFindFirst.mockResolvedValue(baseLead);
+    m.customerFindFirst.mockResolvedValue({ id: 'cust-existing', name: 'Existing Corp', email: 'john@acme.com' });
+    m.leadUpdate.mockResolvedValue({ id: 'lead-1', status: 'WON' });
+    m.timelineEventCreate.mockResolvedValue({ id: 'evt-1' });
+
+    const result = await m.service.convertToCustomer('lead-1', ORG_ID, 'actor');
+
+    expect(m.customerCreate).not.toHaveBeenCalled();
+    expect(result.id).toBe('cust-existing');
+    expect(m.leadUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ convertedToCustomerId: 'cust-existing' }),
+      }),
+    );
+  });
+
+  it('scopes existing customer lookup to organization', async () => {
+    const m = extendedMockService();
+    m.leadFindFirst.mockResolvedValue(baseLead);
+    m.customerFindFirst.mockResolvedValue(null);
+    m.customerCreate.mockResolvedValue({
+      id: 'cust-1', name: 'Acme Corp', email: 'john@acme.com', phone: '555-0100', company: 'Acme Corp', createdAt: new Date(),
+    });
+    m.leadUpdate.mockResolvedValue({ id: 'lead-1' });
+    m.timelineEventCreate.mockResolvedValue({ id: 'evt-1' });
+
+    await m.service.convertToCustomer('lead-1', ORG_ID, 'actor');
+
+    expect(m.customerFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ organizationId: ORG_ID, email: 'john@acme.com', deletedAt: null }),
+      }),
+    );
+  });
+
+  it('normalizes email to lowercase and trimmed for customer lookup', async () => {
+    const m = extendedMockService();
+    m.leadFindFirst.mockResolvedValue({ ...baseLead, email: '  JOHN@ACME.COM  ' });
+    m.customerFindFirst.mockResolvedValue(null);
+    m.customerCreate.mockResolvedValue({
+      id: 'cust-1', name: 'Acme Corp', email: 'john@acme.com', phone: null, company: 'Acme Corp', createdAt: new Date(),
+    });
+    m.leadUpdate.mockResolvedValue({ id: 'lead-1' });
+    m.timelineEventCreate.mockResolvedValue({ id: 'evt-1' });
+
+    await m.service.convertToCustomer('lead-1', ORG_ID, 'actor');
+
+    expect(m.customerFindFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ email: 'john@acme.com' }),
+      }),
+    );
+  });
+
+  it('creates a timeline event after successful conversion', async () => {
+    const m = extendedMockService();
+    m.leadFindFirst.mockResolvedValue(baseLead);
+    m.customerFindFirst.mockResolvedValue(null);
+    m.customerCreate.mockResolvedValue({
+      id: 'cust-1', name: 'Acme Corp', email: 'john@acme.com', phone: '555-0100', company: 'Acme Corp', createdAt: new Date(),
+    });
+    m.leadUpdate.mockResolvedValue({ id: 'lead-1' });
+    m.timelineEventCreate.mockResolvedValue({ id: 'evt-1' });
+
+    await m.service.convertToCustomer('lead-1', ORG_ID, 'actor');
+
+    expect(m.timelineEventCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          leadId: 'lead-1',
+          type: 'CONVERTED',
+          description: expect.stringContaining('Acme Corp'),
+          createdById: 'actor',
+        }),
+      }),
+    );
+  });
+
+  it('uses company as customer name when company is present', async () => {
+    const m = extendedMockService();
+    m.leadFindFirst.mockResolvedValue(baseLead);
+    m.customerFindFirst.mockResolvedValue(null);
+    m.customerCreate.mockResolvedValue({
+      id: 'cust-1', name: 'Acme Corp', email: 'john@acme.com', phone: '555-0100', company: 'Acme Corp', createdAt: new Date(),
+    });
+    m.leadUpdate.mockResolvedValue({ id: 'lead-1' });
+    m.timelineEventCreate.mockResolvedValue({ id: 'evt-1' });
+
+    await m.service.convertToCustomer('lead-1', ORG_ID, 'actor');
+
+    expect(m.customerCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ name: 'Acme Corp' }),
+      }),
+    );
+  });
+
+  it('uses lead name as customer name when company is absent', async () => {
+    const m = extendedMockService();
+    m.leadFindFirst.mockResolvedValue({ ...baseLead, company: null });
+    m.customerFindFirst.mockResolvedValue(null);
+    m.customerCreate.mockResolvedValue({
+      id: 'cust-1', name: 'John Doe', email: 'john@acme.com', phone: '555-0100', company: null, createdAt: new Date(),
+    });
+    m.leadUpdate.mockResolvedValue({ id: 'lead-1' });
+    m.timelineEventCreate.mockResolvedValue({ id: 'evt-1' });
+
+    await m.service.convertToCustomer('lead-1', ORG_ID, 'actor');
+
+    expect(m.customerCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ name: 'John Doe' }),
+      }),
+    );
+  });
+
+  it('creates customer in the same organization', async () => {
+    const m = extendedMockService();
+    m.leadFindFirst.mockResolvedValue(baseLead);
+    m.customerFindFirst.mockResolvedValue(null);
+    m.customerCreate.mockResolvedValue({
+      id: 'cust-1', name: 'Acme Corp', email: 'john@acme.com', phone: '555-0100', company: 'Acme Corp', createdAt: new Date(),
+    });
+    m.leadUpdate.mockResolvedValue({ id: 'lead-1' });
+    m.timelineEventCreate.mockResolvedValue({ id: 'evt-1' });
+
+    await m.service.convertToCustomer('lead-1', ORG_ID, 'actor');
+
+    expect(m.customerCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ organizationId: ORG_ID }),
+      }),
+    );
+  });
+
+  it('handles lead with no email (skips existing customer lookup)', async () => {
+    const m = extendedMockService();
+    m.leadFindFirst.mockResolvedValue({ ...baseLead, email: null });
+    m.customerCreate.mockResolvedValue({
+      id: 'cust-1', name: 'Acme Corp', email: null, phone: '555-0100', company: 'Acme Corp', createdAt: new Date(),
+    });
+    m.leadUpdate.mockResolvedValue({ id: 'lead-1' });
+    m.timelineEventCreate.mockResolvedValue({ id: 'evt-1' });
+
+    const result = await m.service.convertToCustomer('lead-1', ORG_ID, 'actor');
+
+    expect(m.customerFindFirst).not.toHaveBeenCalled();
+    expect(result.id).toBe('cust-1');
+  });
+
+  it('returns customer with createdAt timestamp', async () => {
+    const m = extendedMockService();
+    const fixedDate = new Date('2026-06-15T10:00:00Z');
+    m.leadFindFirst.mockResolvedValue(baseLead);
+    m.customerFindFirst.mockResolvedValue(null);
+    m.customerCreate.mockResolvedValue({
+      id: 'cust-1', name: 'Acme Corp', email: 'john@acme.com', phone: '555-0100', company: 'Acme Corp', createdAt: fixedDate,
+    });
+    m.leadUpdate.mockResolvedValue({ id: 'lead-1' });
+    m.timelineEventCreate.mockResolvedValue({ id: 'evt-1' });
+
+    const result = await m.service.convertToCustomer('lead-1', ORG_ID, 'actor');
+
+    expect(result.createdAt).toEqual(fixedDate);
+  });
+
+  it('propagates customer creation errors', async () => {
+    const m = extendedMockService();
+    m.leadFindFirst.mockResolvedValue(baseLead);
+    m.customerFindFirst.mockResolvedValue(null);
+    m.customerCreate.mockRejectedValue(new Error('DB connection lost'));
+
+    await expect(m.service.convertToCustomer('lead-1', ORG_ID, 'actor')).rejects.toThrow('DB connection lost');
+  });
+
+  it('rejects a soft-deleted lead', async () => {
+    const m = extendedMockService();
+    m.leadFindFirst.mockResolvedValue(null);
+
+    await expect(m.service.convertToCustomer('lead-deleted', ORG_ID, 'actor')).rejects.toThrow(NotFoundException);
+    expect(m.$transaction).not.toHaveBeenCalled();
+  });
+});

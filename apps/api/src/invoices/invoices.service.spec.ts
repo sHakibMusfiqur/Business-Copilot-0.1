@@ -248,6 +248,91 @@ describe('InvoicesService', () => {
 
       expect(result.meta).toEqual({ total: 25, page: 2, limit: 10, totalPages: 3 });
     });
+
+    it('applies salesOrderId filter', async () => {
+      const m = createMocks();
+      m.invoiceCount.mockResolvedValue(0);
+      m.invoiceFindMany.mockResolvedValue([]);
+
+      await m.service.findAll(ORG_ID, { salesOrderId: 'so-1' });
+
+      expect(m.invoiceFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ salesOrderId: 'so-1' }),
+        }),
+      );
+    });
+
+    it('applies combined customerId and paymentStatus filters', async () => {
+      const m = createMocks();
+      m.invoiceCount.mockResolvedValue(0);
+      m.invoiceFindMany.mockResolvedValue([]);
+
+      await m.service.findAll(ORG_ID, { customerId: 'cust-1', paymentStatus: 'PAID' as never });
+
+      expect(m.invoiceFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ customerId: 'cust-1', paymentStatus: 'PAID' }),
+        }),
+      );
+    });
+
+    it('applies dateFrom only (no dateTo)', async () => {
+      const m = createMocks();
+      m.invoiceCount.mockResolvedValue(0);
+      m.invoiceFindMany.mockResolvedValue([]);
+
+      await m.service.findAll(ORG_ID, { dateFrom: '2026-06-01' });
+
+      expect(m.invoiceFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            issueDate: expect.objectContaining({ gte: expect.any(Date) }),
+          }),
+        }),
+      );
+      const where = m.invoiceFindMany.mock.calls[0][0].where;
+      expect(where.issueDate.lte).toBeUndefined();
+    });
+
+    it('applies dateTo only (no dateFrom)', async () => {
+      const m = createMocks();
+      m.invoiceCount.mockResolvedValue(0);
+      m.invoiceFindMany.mockResolvedValue([]);
+
+      await m.service.findAll(ORG_ID, { dateTo: '2026-12-31' });
+
+      const where = m.invoiceFindMany.mock.calls[0][0].where;
+      expect(where.issueDate.gte).toBeUndefined();
+      expect(where.issueDate.lte).toBeDefined();
+    });
+
+    it('defaults to createdAt desc sort when no sort params provided', async () => {
+      const m = createMocks();
+      m.invoiceCount.mockResolvedValue(0);
+      m.invoiceFindMany.mockResolvedValue([]);
+
+      await m.service.findAll(ORG_ID, {});
+
+      expect(m.invoiceFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({ orderBy: { createdAt: 'desc' } }),
+      );
+    });
+
+    it('applies all six valid sort fields', async () => {
+      const fields = ['invoiceNumber', 'total', 'paymentStatus', 'createdAt', 'issueDate', 'dueDate'] as const;
+      for (const field of fields) {
+        const m = createMocks();
+        m.invoiceCount.mockResolvedValue(0);
+        m.invoiceFindMany.mockResolvedValue([]);
+
+        await m.service.findAll(ORG_ID, { sortBy: field, sortOrder: 'asc' });
+
+        expect(m.invoiceFindMany).toHaveBeenCalledWith(
+          expect.objectContaining({ orderBy: { [field]: 'asc' } }),
+        );
+      }
+    });
   });
 
   describe('B. findById', () => {
@@ -397,6 +482,60 @@ describe('InvoicesService', () => {
           data: expect.objectContaining({ organizationId: ORG_ID }),
         }),
       );
+    });
+
+    it('scopes customer lookup to organization', async () => {
+      const m = createMocks();
+      m.customerFindFirst.mockResolvedValue({ id: 'cust-1' });
+      m.productFindMany.mockResolvedValue([{ id: 'prod-1' }]);
+      m.invoiceCreate.mockResolvedValue({ ...mockInvoice(), items: [] });
+
+      await m.service.create(ORG_ID, USER_ID, validDto as never);
+
+      expect(m.customerFindFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ organizationId: ORG_ID, deletedAt: null }),
+        }),
+      );
+    });
+
+    it('scopes product lookup to organization', async () => {
+      const m = createMocks();
+      m.customerFindFirst.mockResolvedValue({ id: 'cust-1' });
+      m.productFindMany.mockResolvedValue([{ id: 'prod-1' }]);
+      m.invoiceCreate.mockResolvedValue({ ...mockInvoice(), items: [] });
+
+      await m.service.create(ORG_ID, USER_ID, validDto as never);
+
+      expect(m.productFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ organizationId: ORG_ID }),
+        }),
+      );
+    });
+
+    it('throws InternalServerErrorException after P2002 retry exhaustion', async () => {
+      const m = createMocks();
+      m.customerFindFirst.mockResolvedValue({ id: 'cust-1' });
+      m.productFindMany.mockResolvedValue([{ id: 'prod-1' }]);
+      m.invoiceCreate.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: '5.0.0' }),
+      );
+
+      await expect(m.service.create(ORG_ID, USER_ID, validDto as never)).rejects.toThrow(
+        InternalServerErrorException,
+      );
+      expect(m.invoiceCreate).toHaveBeenCalledTimes(20);
+    });
+
+    it('does not retry non-P2002 errors', async () => {
+      const m = createMocks();
+      m.customerFindFirst.mockResolvedValue({ id: 'cust-1' });
+      m.productFindMany.mockResolvedValue([{ id: 'prod-1' }]);
+      m.invoiceCreate.mockRejectedValue(new Error('Unexpected DB error'));
+
+      await expect(m.service.create(ORG_ID, USER_ID, validDto as never)).rejects.toThrow('Unexpected DB error');
+      expect(m.invoiceCreate).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -552,6 +691,61 @@ describe('InvoicesService', () => {
         expect.objectContaining({ action: 'INVOICE_UPDATED' }),
       );
     });
+
+    it('throws NotFoundException for missing invoice in same org', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue(null);
+
+      await expect(m.service.update(ORG_ID, USER_ID, 'nonexistent', { notes: 'X' } as never)).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(m.invoiceUpdate).not.toHaveBeenCalled();
+    });
+
+    it('updates issueDate and dueDate fields', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue(mockInvoice());
+      m.invoiceUpdate.mockResolvedValue(mockInvoice());
+
+      await m.service.update(ORG_ID, USER_ID, 'inv-1', {
+        issueDate: '2026-06-15',
+        dueDate: '2026-07-15',
+      } as never);
+
+      expect(m.invoiceUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            issueDate: new Date('2026-06-15'),
+            dueDate: new Date('2026-07-15'),
+          }),
+        }),
+      );
+    });
+
+    it('sets dueDate to null when explicitly provided as null', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue(mockInvoice({ dueDate: new Date('2026-02-01') }));
+      m.invoiceUpdate.mockResolvedValue(mockInvoice({ dueDate: null }));
+
+      await m.service.update(ORG_ID, USER_ID, 'inv-1', { dueDate: null } as never);
+
+      expect(m.invoiceUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ dueDate: null }),
+        }),
+      );
+    });
+
+    it('does not call update when customer validation fails', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue(mockInvoice());
+      m.customerFindFirst.mockResolvedValue(null);
+
+      await expect(m.service.update(ORG_ID, USER_ID, 'inv-1', { customerId: 'cust-other' } as never)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(m.invoiceUpdate).not.toHaveBeenCalled();
+    });
   });
 
   describe('F. remove', () => {
@@ -589,6 +783,33 @@ describe('InvoicesService', () => {
       expect(m.auditRecord).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'INVOICE_DELETED' }),
       );
+    });
+
+    it('throws NotFoundException for missing invoice in same org', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue(null);
+
+      await expect(m.service.remove(ORG_ID, USER_ID, 'nonexistent')).rejects.toThrow(NotFoundException);
+      expect(m.invoiceDelete).not.toHaveBeenCalled();
+    });
+
+    it('passes the correct invoice ID to delete', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue(mockInvoice());
+      m.invoiceDelete.mockResolvedValue(undefined);
+
+      await m.service.remove(ORG_ID, USER_ID, 'inv-1');
+
+      expect(m.invoiceDelete).toHaveBeenCalledWith({ where: { id: 'inv-1' } });
+    });
+
+    it('rejects multiple non-DRAFT statuses', async () => {
+      for (const status of ['SENT', 'PAID', 'OVERDUE', 'PARTIALLY_PAID']) {
+        const m = createMocks();
+        m.invoiceFindFirst.mockResolvedValue(mockInvoice({ status }));
+
+        await expect(m.service.remove(ORG_ID, USER_ID, 'inv-1')).rejects.toThrow(BadRequestException);
+      }
     });
   });
 
@@ -633,6 +854,45 @@ describe('InvoicesService', () => {
           where: expect.objectContaining({ organizationId: 'org-other' }),
         }),
       );
+    });
+
+    it('excludes CANCELLED invoices from overdue update', async () => {
+      const m = createMocks();
+      m.invoiceUpdateMany.mockResolvedValue({ count: 0 });
+
+      await m.service.updateOverdueStatuses(ORG_ID);
+
+      expect(m.invoiceUpdateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ status: { not: 'CANCELLED' } }),
+        }),
+      );
+    });
+
+    it('only targets PENDING and PARTIALLY_PAID invoices', async () => {
+      const m = createMocks();
+      m.invoiceUpdateMany.mockResolvedValue({ count: 0 });
+
+      await m.service.updateOverdueStatuses(ORG_ID);
+
+      expect(m.invoiceUpdateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ paymentStatus: { in: ['PENDING', 'PARTIALLY_PAID'] } }),
+        }),
+      );
+    });
+
+    it('only targets invoices with dueDate in the past', async () => {
+      const m = createMocks();
+      m.invoiceUpdateMany.mockResolvedValue({ count: 0 });
+
+      await m.service.updateOverdueStatuses(ORG_ID);
+
+      const where = m.invoiceUpdateMany.mock.calls[0][0].where;
+      expect(where.dueDate.lt).toBeInstanceOf(Date);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      expect(where.dueDate.lt.getTime()).toBeLessThanOrEqual(today.getTime());
     });
   });
 
@@ -750,6 +1010,57 @@ describe('InvoicesService', () => {
         }),
       );
     });
+
+    it('SMTP failure does not mutate invoice business state', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue({
+        ...mockInvoice(),
+        customer: { email: 'test@example.com' },
+        organization: { name: 'Test Org' },
+      });
+      m.sendOrgEmail.mockRejectedValue(new Error('SMTP error'));
+
+      await expect(m.service.emailInvoice(ORG_ID, 'inv-1')).rejects.toThrow(InternalServerErrorException);
+
+      expect(m.invoiceUpdate).not.toHaveBeenCalled();
+      expect(m.invoiceCreate).not.toHaveBeenCalled();
+    });
+
+    it('passes invoice amount and dueDate to mail service', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue({
+        ...mockInvoice({ total: 500, dueDate: new Date('2026-03-15') }),
+        customer: { email: 'test@example.com' },
+        organization: { name: 'Test Org' },
+      });
+
+      await m.service.emailInvoice(ORG_ID, 'inv-1');
+
+      expect(m.sendOrgEmail).toHaveBeenCalledWith(
+        ORG_ID,
+        expect.objectContaining({
+          data: expect.objectContaining({
+            invoice: expect.objectContaining({
+              invoiceNumber: 'INV-2026-000001',
+              amount: '500.00',
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('returns success message on successful send', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue({
+        ...mockInvoice(),
+        customer: { email: 'test@example.com' },
+        organization: { name: 'Test Org' },
+      });
+
+      const result = await m.service.emailInvoice(ORG_ID, 'inv-1');
+
+      expect(result.message).toBe('Invoice emailed successfully');
+    });
   });
 
   describe('J. handleOverdueInvoices', () => {
@@ -805,6 +1116,35 @@ describe('InvoicesService', () => {
 
       expect(m.updateReceivableOverdueStatuses).toHaveBeenCalledWith('org-1');
     });
+
+    it('receivable update failure for org A still allows org B to process', async () => {
+      const m = createMocks();
+      m.orgFindMany.mockResolvedValue([{ id: 'org-1' }, { id: 'org-2' }]);
+      m.invoiceUpdateMany.mockResolvedValue({ count: 0 });
+      m.updateReceivableOverdueStatuses
+        .mockRejectedValueOnce(new Error('Receivable service down'))
+        .mockResolvedValueOnce(1);
+
+      await m.service.handleOverdueInvoices();
+
+      expect(m.updateReceivableOverdueStatuses).toHaveBeenCalledTimes(2);
+      expect(m.updateReceivableOverdueStatuses).toHaveBeenNthCalledWith(1, 'org-1');
+      expect(m.updateReceivableOverdueStatuses).toHaveBeenNthCalledWith(2, 'org-2');
+    });
+
+    it('counts failed organizations in summary', async () => {
+      const m = createMocks();
+      m.orgFindMany.mockResolvedValue([{ id: 'org-1' }, { id: 'org-2' }]);
+      m.invoiceUpdateMany
+        .mockRejectedValueOnce(new Error('DB error'))
+        .mockResolvedValueOnce({ count: 2 });
+      m.updateReceivableOverdueStatuses.mockResolvedValue(0);
+
+      await m.service.handleOverdueInvoices();
+
+      expect(m.invoiceUpdateMany).toHaveBeenCalledTimes(2);
+      expect(m.updateReceivableOverdueStatuses).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('Security: tenant isolation', () => {
@@ -841,6 +1181,63 @@ describe('InvoicesService', () => {
       m.salesOrderFindFirst.mockResolvedValue(null);
 
       await expect(m.service.createFromOrder('org-other', USER_ID, 'so-1')).rejects.toThrow(NotFoundException);
+    });
+
+    it('findAll scopes to organization in both count and query', async () => {
+      const m = createMocks();
+      m.invoiceCount.mockResolvedValue(0);
+      m.invoiceFindMany.mockResolvedValue([]);
+
+      await m.service.findAll(ORG_ID, {});
+
+      const countWhere = m.invoiceCount.mock.calls[0][0].where;
+      const findManyWhere = m.invoiceFindMany.mock.calls[0][0].where;
+      expect(countWhere.organizationId).toBe(ORG_ID);
+      expect(findManyWhere.organizationId).toBe(ORG_ID);
+    });
+
+    it('create never trusts orgId from DTO', async () => {
+      const m = createMocks();
+      m.customerFindFirst.mockResolvedValue({ id: 'cust-1' });
+      m.productFindMany.mockResolvedValue([{ id: 'prod-1' }]);
+      m.invoiceCreate.mockResolvedValue({ ...mockInvoice(), items: [] });
+
+      await m.service.create(ORG_ID, USER_ID, { customerId: 'cust-1', items: [{ productId: 'prod-1', description: 'Item', quantity: 2, unitPrice: 50, taxAmount: 10 }], organizationId: 'hacked-org' } as never);
+
+      const createData = m.invoiceCreate.mock.calls[0][0].data;
+      expect(createData.organizationId).toBe(ORG_ID);
+      expect(createData.organizationId).not.toBe('hacked-org');
+    });
+
+    it('create rejects customer from different org', async () => {
+      const m = createMocks();
+      m.customerFindFirst.mockResolvedValue(null);
+
+      await expect(
+        m.service.create(ORG_ID, USER_ID, { customerId: 'cust-other', items: [{ productId: 'prod-1', description: 'Item', quantity: 1, unitPrice: 50 }] } as never),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(m.customerFindFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ organizationId: ORG_ID }),
+        }),
+      );
+    });
+
+    it('create rejects products from different org', async () => {
+      const m = createMocks();
+      m.customerFindFirst.mockResolvedValue({ id: 'cust-1' });
+      m.productFindMany.mockResolvedValue([]);
+
+      await expect(
+        m.service.create(ORG_ID, USER_ID, { customerId: 'cust-1', items: [{ productId: 'prod-1', description: 'Item', quantity: 1, unitPrice: 50 }] } as never),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(m.productFindMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ organizationId: ORG_ID }),
+        }),
+      );
     });
   });
 });
