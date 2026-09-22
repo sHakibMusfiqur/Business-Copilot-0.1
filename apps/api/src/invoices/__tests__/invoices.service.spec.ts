@@ -492,7 +492,7 @@ describe('InvoicesService', () => {
 
     it('throws BadRequestException when invoice is not DRAFT', async () => {
       prismaMocks.invoice.findFirst.mockResolvedValue(
-        createMockInvoice({ status: 'CONFIRMED' }),
+        createMockInvoice({ status: 'ISSUED' }),
       );
 
       await expect(
@@ -500,8 +500,8 @@ describe('InvoicesService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('throws BadRequestException for non-DRAFT statuses (CONFIRMED, DELIVERED, CANCELLED)', async () => {
-      for (const status of ['CONFIRMED', 'DELIVERED', 'CANCELLED']) {
+    it('throws BadRequestException for non-DRAFT statuses (ISSUED, SENT, CANCELLED)', async () => {
+      for (const status of ['ISSUED', 'SENT', 'CANCELLED']) {
         prismaMocks.invoice.findFirst.mockResolvedValue(
           createMockInvoice({ status }),
         );
@@ -645,7 +645,7 @@ describe('InvoicesService', () => {
 
     it('throws BadRequestException when invoice is not DRAFT', async () => {
       prismaMocks.invoice.findFirst.mockResolvedValue(
-        createMockInvoice({ status: 'CONFIRMED' }),
+        createMockInvoice({ status: 'ISSUED' }),
       );
 
       await expect(service.remove(ORG_ID, USER_ID, 'inv-1')).rejects.toThrow(
@@ -653,8 +653,8 @@ describe('InvoicesService', () => {
       );
     });
 
-    it('throws BadRequestException for non-DRAFT statuses (CONFIRMED, DELIVERED, CANCELLED)', async () => {
-      for (const status of ['CONFIRMED', 'DELIVERED', 'CANCELLED']) {
+    it('throws BadRequestException for non-DRAFT statuses (ISSUED, SENT, CANCELLED)', async () => {
+      for (const status of ['ISSUED', 'SENT', 'CANCELLED']) {
         prismaMocks.invoice.findFirst.mockResolvedValue(
           createMockInvoice({ status }),
         );

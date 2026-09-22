@@ -24,6 +24,21 @@ function buildController() {
       userId,
       salesOrderId,
     })),
+    create: jest.fn(async (orgId: string, userId: string, dto: unknown) => ({
+      orgId,
+      userId,
+      dto,
+    })),
+    issue: jest.fn(async (orgId: string, userId: string, id: string) => ({
+      orgId,
+      userId,
+      id,
+    })),
+    cancel: jest.fn(async (orgId: string, userId: string, id: string) => ({
+      orgId,
+      userId,
+      id,
+    })),
     update: jest.fn(async (orgId: string, userId: string, id: string, dto: unknown) => ({
       orgId,
       userId,
@@ -66,11 +81,32 @@ const ENDPOINTS: EndpointSpec[] = [
     serviceMock: ({ invoicesService }) => invoicesService.findById as jest.Mock,
   },
   {
+    name: 'invoices create',
+    method: 'create',
+    permissions: ['invoices.create'],
+    serviceCall: ({ controller }) => controller.create(makeUser(), {} as never),
+    serviceMock: ({ invoicesService }) => invoicesService.create as jest.Mock,
+  },
+  {
     name: 'invoices createFromOrder',
     method: 'createFromOrder',
     permissions: ['invoices.create'],
     serviceCall: ({ controller }) => controller.createFromOrder(makeUser(), 'so-1' as never),
     serviceMock: ({ invoicesService }) => invoicesService.createFromOrder as jest.Mock,
+  },
+  {
+    name: 'invoices issue',
+    method: 'issue',
+    permissions: ['invoices.approve'],
+    serviceCall: ({ controller }) => controller.issue(makeUser(), 'inv-1' as never),
+    serviceMock: ({ invoicesService }) => invoicesService.issue as jest.Mock,
+  },
+  {
+    name: 'invoices cancel',
+    method: 'cancel',
+    permissions: ['invoices.reject'],
+    serviceCall: ({ controller }) => controller.cancel(makeUser(), 'inv-1' as never),
+    serviceMock: ({ invoicesService }) => invoicesService.cancel as jest.Mock,
   },
   {
     name: 'invoices update',
@@ -113,7 +149,10 @@ describe('InvoicesController', () => {
   it.each([
     ['invoices findAll', (c: InvoicesController) => c.findAll(makeUser({ organizationId: undefined }), {} as never)],
     ['invoices findOne', (c: InvoicesController) => c.findOne(makeUser({ organizationId: undefined }), 'inv-1' as never)],
+    ['invoices create', (c: InvoicesController) => c.create(makeUser({ organizationId: undefined }), {} as never)],
     ['invoices createFromOrder', (c: InvoicesController) => c.createFromOrder(makeUser({ organizationId: undefined }), 'so-1' as never)],
+    ['invoices issue', (c: InvoicesController) => c.issue(makeUser({ organizationId: undefined }), 'inv-1' as never)],
+    ['invoices cancel', (c: InvoicesController) => c.cancel(makeUser({ organizationId: undefined }), 'inv-1' as never)],
     ['invoices update', (c: InvoicesController) => c.update(makeUser({ organizationId: undefined }), 'inv-1' as never, {} as never)],
     ['invoices remove', (c: InvoicesController) => c.remove(makeUser({ organizationId: undefined }), 'inv-1' as never)],
   ])(
@@ -158,6 +197,30 @@ describe('InvoicesController', () => {
     const guards = Reflect.getMetadata('__guards__', InvoicesController);
     expect(guards).toBeDefined();
     expect(guards.map((g: () => unknown) => g.name)).toContain('PermissionGuard');
+  });
+
+  describe('create', () => {
+    it('passes userId from authenticated user to service', async () => {
+      const ctx = buildController();
+      await ctx.controller.create(makeUser({ id: 'user-99' }), { customerId: 'c1', items: [] } as never);
+      expect(ctx.invoicesService.create).toHaveBeenCalledWith('org-1', 'user-99', { customerId: 'c1', items: [] });
+    });
+  });
+
+  describe('issue', () => {
+    it('passes userId from authenticated user to service', async () => {
+      const ctx = buildController();
+      await ctx.controller.issue(makeUser({ id: 'user-99' }), 'inv-1' as never);
+      expect(ctx.invoicesService.issue).toHaveBeenCalledWith('org-1', 'user-99', 'inv-1');
+    });
+  });
+
+  describe('cancel', () => {
+    it('passes userId from authenticated user to service', async () => {
+      const ctx = buildController();
+      await ctx.controller.cancel(makeUser({ id: 'user-99' }), 'inv-1' as never);
+      expect(ctx.invoicesService.cancel).toHaveBeenCalledWith('org-1', 'user-99', 'inv-1');
+    });
   });
 
   describe('createFromOrder', () => {

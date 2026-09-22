@@ -92,6 +92,13 @@ enum InvoiceType {
   DEBIT_NOTE
 }
 
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  SENT
+  CANCELLED
+}
+
 enum LeadStatus {
   NEW
   CONTACTED
@@ -519,7 +526,7 @@ model Invoice {
   salesOrder     SalesOrder?   @relation(fields: [salesOrderId], references: [id])
   issueDate      DateTime      @default(now())
   dueDate        DateTime?
-  status         OrderStatus   @default(DRAFT)
+  status         InvoiceStatus @default(DRAFT)
   paymentStatus  PaymentStatus @default(PENDING)
   subtotal       Decimal       @default(0)
   taxTotal       Decimal       @default(0)
@@ -533,6 +540,7 @@ model Invoice {
   updatedAt      DateTime      @updatedAt
 
   items InvoiceItem[]
+  allocations PaymentAllocation[]
 
   @@unique([organizationId, invoiceNumber])
   @@unique([salesOrderId])
@@ -827,11 +835,14 @@ model PaymentAllocation {
   receivable   Receivable? @relation(fields: [receivableId], references: [id])
   payableId    String?
   payable      Payable?    @relation(fields: [payableId], references: [id])
+  invoiceId    String?
+  invoice      Invoice?    @relation(fields: [invoiceId], references: [id])
   amount       Decimal     @default(0)
 
   @@index([paymentId])
   @@index([receivableId])
   @@index([payableId])
+  @@index([invoiceId])
 }
 
 model Department {

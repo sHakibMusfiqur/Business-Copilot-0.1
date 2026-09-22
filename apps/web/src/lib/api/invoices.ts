@@ -31,6 +31,35 @@ export async function createInvoiceFromOrder(salesOrderId: string): Promise<Invo
   return response.data;
 }
 
+export async function createInvoice(data: {
+  customerId: string;
+  notes?: string;
+  issueDate?: string;
+  dueDate?: string;
+  items: Array<{
+    productId: string;
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    taxRate?: number;
+    taxAmount?: number;
+    discount?: number;
+  }>;
+}): Promise<Invoice> {
+  const response = await api.post(API_ROUTES.INVOICES.ROOT, data);
+  return response.data;
+}
+
+export async function issueInvoice(id: string): Promise<Invoice> {
+  const response = await api.post(`${API_ROUTES.INVOICES.ROOT}/${id}/issue`);
+  return response.data;
+}
+
+export async function cancelInvoice(id: string): Promise<Invoice> {
+  const response = await api.post(`${API_ROUTES.INVOICES.ROOT}/${id}/cancel`);
+  return response.data;
+}
+
 export async function updateInvoice(
   id: string,
   data: {

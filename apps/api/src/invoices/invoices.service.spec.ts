@@ -665,7 +665,7 @@ describe('InvoicesService', () => {
 
     it('rejects non-DRAFT invoice', async () => {
       const m = createMocks();
-      m.invoiceFindFirst.mockResolvedValue(mockInvoice({ status: 'PAID' }));
+      m.invoiceFindFirst.mockResolvedValue(mockInvoice({ status: 'ISSUED' }));
 
       await expect(m.service.update(ORG_ID, USER_ID, 'inv-1', { notes: 'X' } as never)).rejects.toThrow(BadRequestException);
     });
@@ -808,8 +808,8 @@ describe('InvoicesService', () => {
       expect(m.invoiceDelete).toHaveBeenCalledWith({ where: { id: 'inv-1' } });
     });
 
-    it('rejects multiple non-DRAFT statuses', async () => {
-      for (const status of ['SENT', 'PAID', 'OVERDUE', 'PARTIALLY_PAID']) {
+    it('rejects ISSUED, SENT, and CANCELLED statuses', async () => {
+      for (const status of ['ISSUED', 'SENT', 'CANCELLED']) {
         const m = createMocks();
         m.invoiceFindFirst.mockResolvedValue(mockInvoice({ status }));
 
@@ -959,7 +959,7 @@ describe('InvoicesService', () => {
     it('calls sendOrgEmail with correct data', async () => {
       const m = createMocks();
       m.invoiceFindFirst.mockResolvedValue({
-        ...mockInvoice(),
+        ...mockInvoice({ status: 'ISSUED' }),
         customer: { email: 'test@example.com' },
         organization: { name: 'Test Org' },
       });
@@ -975,7 +975,7 @@ describe('InvoicesService', () => {
     it('records success audit', async () => {
       const m = createMocks();
       m.invoiceFindFirst.mockResolvedValue({
-        ...mockInvoice(),
+        ...mockInvoice({ status: 'ISSUED' }),
         customer: { email: 'test@example.com' },
         organization: { name: 'Test Org' },
       });
@@ -983,14 +983,58 @@ describe('InvoicesService', () => {
       await m.service.emailInvoice(ORG_ID, 'inv-1');
 
       expect(m.auditRecord).toHaveBeenCalledWith(
-        expect.objectContaining({ action: 'INVOICE_EMAIL_SENT', status: 'SUCCESS' }),
+        expect.objectContaining({ action: 'INVOICE_SENT', status: 'SUCCESS' }),
       );
+    });
+
+    it('transitions ISSUED to SENT on successful send', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue({
+        ...mockInvoice({ status: 'ISSUED' }),
+        customer: { email: 'test@example.com' },
+        organization: { name: 'Test Org' },
+      });
+      m.invoiceUpdate.mockResolvedValue({ ...mockInvoice({ status: 'SENT' }) });
+
+      await m.service.emailInvoice(ORG_ID, 'inv-1');
+
+      expect(m.invoiceUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'inv-1' },
+          data: { status: 'SENT' },
+        }),
+      );
+    });
+
+    it('does not change status when already SENT (resend)', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue({
+        ...mockInvoice({ status: 'SENT' }),
+        customer: { email: 'test@example.com' },
+        organization: { name: 'Test Org' },
+      });
+
+      await m.service.emailInvoice(ORG_ID, 'inv-1');
+
+      expect(m.invoiceUpdate).not.toHaveBeenCalled();
+    });
+
+    it('rejects DRAFT invoice', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue({
+        ...mockInvoice({ status: 'DRAFT' }),
+        customer: { email: 'test@example.com' },
+        organization: { name: 'Test Org' },
+      });
+
+      await expect(m.service.emailInvoice(ORG_ID, 'inv-1')).rejects.toThrow(BadRequestException);
+      expect(m.sendOrgEmail).not.toHaveBeenCalled();
     });
 
     it('records failure audit and throws on send error', async () => {
       const m = createMocks();
       m.invoiceFindFirst.mockResolvedValue({
-        ...mockInvoice(),
+        ...mockInvoice({ status: 'ISSUED' }),
         customer: { email: 'test@example.com' },
         organization: { name: 'Test Org' },
       });
@@ -1019,7 +1063,7 @@ describe('InvoicesService', () => {
     it('SMTP failure does not mutate invoice business state', async () => {
       const m = createMocks();
       m.invoiceFindFirst.mockResolvedValue({
-        ...mockInvoice(),
+        ...mockInvoice({ status: 'ISSUED' }),
         customer: { email: 'test@example.com' },
         organization: { name: 'Test Org' },
       });
@@ -1034,7 +1078,7 @@ describe('InvoicesService', () => {
     it('passes invoice amount and dueDate to mail service', async () => {
       const m = createMocks();
       m.invoiceFindFirst.mockResolvedValue({
-        ...mockInvoice({ total: 500, dueDate: new Date('2026-03-15') }),
+        ...mockInvoice({ status: 'ISSUED', total: 500, dueDate: new Date('2026-03-15') }),
         customer: { email: 'test@example.com' },
         organization: { name: 'Test Org' },
       });
@@ -1057,7 +1101,7 @@ describe('InvoicesService', () => {
     it('returns success message on successful send', async () => {
       const m = createMocks();
       m.invoiceFindFirst.mockResolvedValue({
-        ...mockInvoice(),
+        ...mockInvoice({ status: 'ISSUED' }),
         customer: { email: 'test@example.com' },
         organization: { name: 'Test Org' },
       });
@@ -1065,6 +1109,151 @@ describe('InvoicesService', () => {
       const result = await m.service.emailInvoice(ORG_ID, 'inv-1');
 
       expect(result.message).toBe('Invoice emailed successfully');
+    });
+  });
+
+  describe('I2. issue', () => {
+    it('throws NotFoundException for missing invoice', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue(null);
+
+      await expect(m.service.issue(ORG_ID, USER_ID, 'missing')).rejects.toThrow(NotFoundException);
+    });
+
+    it('issues a DRAFT invoice', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue(mockInvoice({ status: 'DRAFT' }));
+      m.invoiceUpdate.mockResolvedValue(mockInvoice({ status: 'ISSUED' }));
+
+      const result = await m.service.issue(ORG_ID, USER_ID, 'inv-1');
+
+      expect(result.status).toBe('ISSUED');
+      expect(m.invoiceUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { status: 'ISSUED' } }),
+      );
+    });
+
+    it('rejects non-DRAFT invoice', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue(mockInvoice({ status: 'ISSUED' }));
+
+      await expect(m.service.issue(ORG_ID, USER_ID, 'inv-1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('records INVOICE_ISSUED audit', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue(mockInvoice({ status: 'DRAFT' }));
+      m.invoiceUpdate.mockResolvedValue(mockInvoice({ status: 'ISSUED' }));
+
+      await m.service.issue(ORG_ID, USER_ID, 'inv-1');
+
+      expect(m.auditRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'INVOICE_ISSUED',
+          metadata: expect.objectContaining({ from: 'DRAFT', to: 'ISSUED' }),
+        }),
+      );
+    });
+
+    it('scopes to organization', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue(null);
+
+      await expect(m.service.issue('org-other', USER_ID, 'inv-1')).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('I3. cancel', () => {
+    it('throws NotFoundException for missing invoice', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue(null);
+
+      await expect(m.service.cancel(ORG_ID, USER_ID, 'missing')).rejects.toThrow(NotFoundException);
+    });
+
+    it('cancels an ISSUED invoice with no payments', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue(mockInvoice({ status: 'ISSUED', paidAmount: 0, paymentStatus: 'PENDING' }));
+      m.invoiceUpdate.mockResolvedValue(mockInvoice({ status: 'CANCELLED', paymentStatus: 'CANCELLED' }));
+
+      const result = await m.service.cancel(ORG_ID, USER_ID, 'inv-1');
+
+      expect(result.status).toBe('CANCELLED');
+      expect(m.invoiceUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { status: 'CANCELLED', paymentStatus: 'CANCELLED' },
+        }),
+      );
+    });
+
+    it('cancels a SENT invoice', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue(mockInvoice({ status: 'SENT', paidAmount: 0, paymentStatus: 'PENDING' }));
+      m.invoiceUpdate.mockResolvedValue(mockInvoice({ status: 'CANCELLED' }));
+
+      await m.service.cancel(ORG_ID, USER_ID, 'inv-1');
+
+      expect(m.invoiceUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ status: 'CANCELLED' }) }),
+      );
+    });
+
+    it('rejects cancel of DRAFT invoice', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue(mockInvoice({ status: 'DRAFT' }));
+
+      await expect(m.service.cancel(ORG_ID, USER_ID, 'inv-1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects cancel when paidAmount > 0', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue(mockInvoice({ status: 'ISSUED', paidAmount: 50, paymentStatus: 'PARTIALLY_PAID' }));
+
+      await expect(m.service.cancel(ORG_ID, USER_ID, 'inv-1')).rejects.toThrow(BadRequestException);
+      expect(m.invoiceUpdate).not.toHaveBeenCalled();
+    });
+
+    it('rejects cancel when paymentStatus is PAID', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue(mockInvoice({ status: 'ISSUED', paidAmount: 105, paymentStatus: 'PAID' }));
+
+      await expect(m.service.cancel(ORG_ID, USER_ID, 'inv-1')).rejects.toThrow(BadRequestException);
+    });
+
+    it('sets paymentStatus CANCELLED when unpaid', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue(mockInvoice({ status: 'ISSUED', paidAmount: 0, paymentStatus: 'OVERDUE' }));
+      m.invoiceUpdate.mockResolvedValue(mockInvoice({ status: 'CANCELLED', paymentStatus: 'CANCELLED' }));
+
+      await m.service.cancel(ORG_ID, USER_ID, 'inv-1');
+
+      expect(m.invoiceUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: { status: 'CANCELLED', paymentStatus: 'CANCELLED' },
+        }),
+      );
+    });
+
+    it('records INVOICE_CANCELLED audit', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue(mockInvoice({ status: 'ISSUED', paidAmount: 0, paymentStatus: 'PENDING' }));
+      m.invoiceUpdate.mockResolvedValue(mockInvoice({ status: 'CANCELLED' }));
+
+      await m.service.cancel(ORG_ID, USER_ID, 'inv-1');
+
+      expect(m.auditRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'INVOICE_CANCELLED',
+          metadata: expect.objectContaining({ from: 'ISSUED', to: 'CANCELLED' }),
+        }),
+      );
+    });
+
+    it('scopes to organization', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue(null);
+
+      await expect(m.service.cancel('org-other', USER_ID, 'inv-1')).rejects.toThrow(NotFoundException);
     });
   });
 

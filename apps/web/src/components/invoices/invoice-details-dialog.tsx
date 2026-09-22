@@ -1,25 +1,21 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { X, Loader2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { RequirePermission } from '@/components/rbac/require-permission';
 import { useToast } from '@/components/ui/use-toast';
-import { INVOICES_READ } from '@/lib/permissions';
+import { INVOICES_READ, INVOICES_APPROVE, INVOICES_REJECT } from '@/lib/permissions';
 import { formatDate, formatCurrency } from '@/lib/utils';
-import { getInvoice, downloadInvoicePdf, emailInvoice } from '@/lib/api';
+import { getInvoice, downloadInvoicePdf, emailInvoice, issueInvoice, cancelInvoice } from '@/lib/api';
 import type { Invoice, InvoiceStatus, PaymentStatus } from './invoices-types';
 
 const statusStyle: Record<InvoiceStatus, string> = {
   DRAFT: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
-  PENDING: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-  CONFIRMED: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-  PROCESSING: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400',
-  SHIPPED: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
-  DELIVERED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+  ISSUED: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  SENT: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400',
   CANCELLED: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-  REFUNDED: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
 };
 
 const paymentStatusStyle: Record<PaymentStatus, string> = {
@@ -39,11 +35,17 @@ interface InvoiceDetailsDialogProps {
 
 export function InvoiceDetailsDialog({ invoice, open, onClose }: InvoiceDetailsDialogProps) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const { data: fullInvoice, isLoading, error } = useQuery<Invoice>({
     queryKey: ['invoice', invoice?.id],
     queryFn: ({ signal }) => getInvoice(String(invoice?.id), signal),
     enabled: open && !!invoice?.id,
   });
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['invoice'] });
+    queryClient.invalidateQueries({ queryKey: ['invoices'] });
+  };
 
   if (!open || !invoice) return null;
 
@@ -209,6 +211,7 @@ export function InvoiceDetailsDialog({ invoice, open, onClose }: InvoiceDetailsD
                   try {
                     await emailInvoice(display.id);
                     toast({ title: 'Invoice emailed successfully' });
+                    invalidate();
                   } catch {
                     toast({ variant: 'destructive', title: 'Failed to email invoice' });
                   }
@@ -216,6 +219,44 @@ export function InvoiceDetailsDialog({ invoice, open, onClose }: InvoiceDetailsD
               >
                 Email Invoice
               </Button>
+            </RequirePermission>
+            <RequirePermission permission={INVOICES_APPROVE}>
+              {display.status === 'DRAFT' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      await issueInvoice(display.id);
+                      toast({ title: 'Invoice issued' });
+                      invalidate();
+                    } catch {
+                      toast({ variant: 'destructive', title: 'Failed to issue invoice' });
+                    }
+                  }}
+                >
+                  Issue Invoice
+                </Button>
+              )}
+            </RequirePermission>
+            <RequirePermission permission={INVOICES_REJECT}>
+              {(display.status === 'ISSUED' || display.status === 'SENT') && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      await cancelInvoice(display.id);
+                      toast({ title: 'Invoice cancelled' });
+                      invalidate();
+                    } catch {
+                      toast({ variant: 'destructive', title: 'Failed to cancel invoice' });
+                    }
+                  }}
+                >
+                  Cancel Invoice
+                </Button>
+              )}
             </RequirePermission>
           </div>
         )}

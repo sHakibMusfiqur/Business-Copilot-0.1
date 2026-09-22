@@ -27,6 +27,8 @@ export const INVOICES_READ = 'invoices.read' as const;
 export const INVOICES_CREATE = 'invoices.create' as const;
 export const INVOICES_UPDATE = 'invoices.update' as const;
 export const INVOICES_DELETE = 'invoices.delete' as const;
+export const INVOICES_APPROVE = 'invoices.approve' as const;
+export const INVOICES_REJECT = 'invoices.reject' as const;
 
 // ── Sales ────────────────────────────────────────────────────────────────────
 export const SALES_READ = 'sales.read' as const;

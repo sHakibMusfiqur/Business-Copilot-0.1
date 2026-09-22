@@ -1681,6 +1681,50 @@ export class AccountingService {
       await this.createPaymentJournalEntry(orgId, userId, paymentId, dto, tx);
     }
 
+    if (dto.type === PaymentType.CUSTOMER_PAYMENT && dto.invoiceId && !dto.receivableId) {
+      await tx.$queryRaw`SELECT id FROM "Invoice" WHERE id = ${dto.invoiceId} AND "organizationId" = ${orgId} FOR UPDATE`;
+
+      const invoice = await tx.invoice.findFirst({
+        where: { id: dto.invoiceId, organizationId: orgId },
+      });
+
+      if (!invoice) throw new NotFoundException('Invoice not found');
+      if (invoice.status === 'CANCELLED') {
+        throw new BadRequestException('Invoice is cancelled and cannot receive payments');
+      }
+
+      const totalAmount = Number(invoice.total);
+      const paidAmount = Number(invoice.paidAmount);
+      const remaining = totalAmount - paidAmount;
+
+      if (Number(dto.amount) > remaining) {
+        throw new BadRequestException(
+          `Payment amount exceeds the remaining balance of ${remaining.toFixed(2)} for this invoice`,
+        );
+      }
+
+      const newPaidAmount = paidAmount + Number(dto.amount);
+      const isPaid = newPaidAmount >= totalAmount;
+
+      await tx.paymentAllocation.create({
+        data: {
+          paymentId,
+          invoiceId: dto.invoiceId,
+          amount: dto.amount,
+        },
+      });
+
+      await tx.invoice.update({
+        where: { id: dto.invoiceId },
+        data: {
+          paidAmount: newPaidAmount,
+          paymentStatus: isPaid ? 'PAID' : 'PARTIALLY_PAID',
+        },
+      });
+
+      await this.createPaymentJournalEntry(orgId, userId, paymentId, dto, tx);
+    }
+
     if (dto.type === PaymentType.SUPPLIER_PAYMENT && dto.payableId) {
       // Serialize concurrent allocations against the same payable with a row
       // lock, so only one transaction observes the authoritative paidAmount/status.

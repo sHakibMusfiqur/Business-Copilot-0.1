@@ -26,6 +26,7 @@ import { ParseCuidPipe } from '../common/pipes/parse-cuid.pipe';
 import type { CurrentUserPayload } from '../common/decorators/current-user.decorator';
 
 import { InvoicesService } from './invoices.service';
+import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { QueryInvoiceDto } from './dto/query-invoice.dto';
 
@@ -67,6 +68,19 @@ export class InvoicesController {
     return this.invoicesService.findById(orgId, id);
   }
 
+  @Post()
+  @Permissions(['invoices.create'])
+  @ApiOperation({ summary: 'Create a manual draft invoice' })
+  @HttpCode(HttpStatus.CREATED)
+  create(
+    @CurrentUser() user: CurrentUserPayload,
+    @Body() dto: CreateInvoiceDto,
+  ) {
+    const orgId = this.requireOrg(user);
+    const userId = user.id;
+    return this.invoicesService.create(orgId, userId, dto);
+  }
+
   @Post('from-order/:salesOrderId')
   @Permissions(['invoices.create'])
   @ApiOperation({ summary: 'Create an invoice from a sales order' })
@@ -79,6 +93,34 @@ export class InvoicesController {
     const orgId = this.requireOrg(user);
     const userId = user.id;
     return this.invoicesService.createFromOrder(orgId, userId, salesOrderId);
+  }
+
+  @Post(':id/issue')
+  @Permissions(['invoices.approve'])
+  @ApiOperation({ summary: 'Issue a draft invoice (DRAFT → ISSUED)' })
+  @ApiParam({ name: 'id', type: String })
+  @HttpCode(HttpStatus.OK)
+  issue(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id', ParseCuidPipe) id: string,
+  ) {
+    const orgId = this.requireOrg(user);
+    const userId = user.id;
+    return this.invoicesService.issue(orgId, userId, id);
+  }
+
+  @Post(':id/cancel')
+  @Permissions(['invoices.reject'])
+  @ApiOperation({ summary: 'Cancel an issued or sent invoice' })
+  @ApiParam({ name: 'id', type: String })
+  @HttpCode(HttpStatus.OK)
+  cancel(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id', ParseCuidPipe) id: string,
+  ) {
+    const orgId = this.requireOrg(user);
+    const userId = user.id;
+    return this.invoicesService.cancel(orgId, userId, id);
   }
 
   @Patch(':id')

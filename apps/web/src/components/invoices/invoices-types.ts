@@ -1,6 +1,6 @@
 import type { Meta } from '@/lib/types';
 
-export type InvoiceStatus = 'DRAFT' | 'PENDING' | 'CONFIRMED' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | 'REFUNDED';
+export type InvoiceStatus = 'DRAFT' | 'ISSUED' | 'SENT' | 'CANCELLED';
 
 export type PaymentStatus = 'PENDING' | 'PAID' | 'PARTIALLY_PAID' | 'OVERDUE' | 'CANCELLED' | 'REFUNDED';
 

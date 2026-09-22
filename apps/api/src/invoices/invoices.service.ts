@@ -378,6 +378,7 @@ export class InvoicesService {
         `Cannot edit invoice in ${invoice.status} status. Only DRAFT invoices can be edited.`,
       );
     }
+    // lifecycle immutability: ISSUED/SENT/CANCELLED are immutable
 
     // If customerId is being changed, validate it belongs to org
     if (dto.customerId && dto.customerId !== invoice.customerId) {
@@ -433,6 +434,7 @@ export class InvoicesService {
         `Cannot delete invoice in ${invoice.status} status. Only DRAFT invoices can be deleted.`,
       );
     }
+    // lifecycle immutability: ISSUED/SENT/CANCELLED are immutable
 
     await this.prisma.invoice.delete({
       where: { id: invoiceId },
@@ -470,6 +472,93 @@ export class InvoicesService {
     }
 
     return result.count;
+  }
+
+  async issue(orgId: string, userId: string, invoiceId: string) {
+    const invoice = await this.prisma.invoice.findFirst({
+      where: { id: invoiceId, organizationId: orgId },
+    });
+
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found');
+    }
+
+    if (invoice.status !== 'DRAFT') {
+      throw new BadRequestException(
+        `Cannot issue invoice in ${invoice.status} status. Only DRAFT invoices can be issued.`,
+      );
+    }
+
+    const updated = await this.prisma.invoice.update({
+      where: { id: invoiceId },
+      data: { status: 'ISSUED' },
+      include: {
+        items: true,
+        customer: { select: { id: true, name: true } },
+        salesOrder: { select: { id: true, orderNumber: true } },
+      },
+    });
+
+    await this.auditService.record({
+      userId,
+      organizationId: orgId,
+      action: 'INVOICE_ISSUED',
+      entity: 'Invoice',
+      entityId: invoiceId,
+      status: 'SUCCESS',
+      metadata: { invoiceNumber: updated.invoiceNumber, from: 'DRAFT', to: 'ISSUED' },
+    });
+
+    return updated;
+  }
+
+  async cancel(orgId: string, userId: string, invoiceId: string) {
+    const invoice = await this.prisma.invoice.findFirst({
+      where: { id: invoiceId, organizationId: orgId },
+    });
+
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found');
+    }
+
+    if (invoice.status !== 'ISSUED' && invoice.status !== 'SENT') {
+      throw new BadRequestException(
+        `Cannot cancel invoice in ${invoice.status} status. Only ISSUED or SENT invoices can be cancelled.`,
+      );
+    }
+
+    const paidAmount = Number(invoice.paidAmount);
+    if (paidAmount > 0 || invoice.paymentStatus === 'PARTIALLY_PAID' || invoice.paymentStatus === 'PAID') {
+      throw new BadRequestException(
+        'Cannot cancel an invoice with recorded payments. Void or refund payments first.',
+      );
+    }
+
+    const previousStatus = invoice.status;
+    const updated = await this.prisma.invoice.update({
+      where: { id: invoiceId },
+      data: {
+        status: 'CANCELLED',
+        paymentStatus: 'CANCELLED',
+      },
+      include: {
+        items: true,
+        customer: { select: { id: true, name: true } },
+        salesOrder: { select: { id: true, orderNumber: true } },
+      },
+    });
+
+    await this.auditService.record({
+      userId,
+      organizationId: orgId,
+      action: 'INVOICE_CANCELLED',
+      entity: 'Invoice',
+      entityId: invoiceId,
+      status: 'SUCCESS',
+      metadata: { invoiceNumber: updated.invoiceNumber, from: previousStatus, to: 'CANCELLED' },
+    });
+
+    return updated;
   }
 
   async generatePdf(orgId: string, invoiceId: string): Promise<Buffer> {
@@ -569,6 +658,9 @@ export class InvoicesService {
 
     if (!invoice) throw new NotFoundException('Invoice not found');
     if (!invoice.customer?.email) throw new BadRequestException('Customer has no email address');
+    if (invoice.status === 'DRAFT') {
+      throw new BadRequestException('Cannot email a DRAFT invoice. Issue it first.');
+    }
 
     try {
       await this.mailService.sendOrgEmail(orgId, {
@@ -584,14 +676,26 @@ export class InvoicesService {
         },
       });
 
+      if (invoice.status === 'ISSUED') {
+        await this.prisma.invoice.update({
+          where: { id: invoiceId },
+          data: { status: 'SENT' },
+        });
+      }
+
       await this.auditService.record({
         userId: 'system',
         organizationId: orgId,
-        action: 'INVOICE_EMAIL_SENT',
+        action: 'INVOICE_SENT',
         entity: 'Invoice',
         entityId: invoiceId,
         status: 'SUCCESS',
-        metadata: { invoiceNumber: invoice.invoiceNumber, recipient: invoice.customer.email },
+        metadata: {
+          invoiceNumber: invoice.invoiceNumber,
+          recipient: invoice.customer.email,
+          from: invoice.status,
+          to: invoice.status === 'ISSUED' ? 'SENT' : invoice.status,
+        },
       });
 
       return { message: 'Invoice emailed successfully' };

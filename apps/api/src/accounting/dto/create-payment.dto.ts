@@ -45,4 +45,10 @@ export class CreatePaymentDto {
   @IsString()
   @IsUUID()
   payableId?: string;
+
+  @ApiPropertyOptional({ description: 'Invoice ID to allocate this payment to (for standalone invoice payments)' })
+  @IsOptional()
+  @IsString()
+  @IsUUID()
+  invoiceId?: string;
 }
