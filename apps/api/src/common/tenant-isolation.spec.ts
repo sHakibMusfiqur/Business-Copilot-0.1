@@ -21,7 +21,10 @@ function buildInvoicesService(overrides: Record<string, jest.Mock> = {}) {
     } as unknown as PrismaService,
     { record: jest.fn() } as never,
     {} as never,
-    { updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0) } as never,
+    {
+      updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0),
+      updatePayableOverdueStatuses: jest.fn().mockResolvedValue(0),
+    } as never,
   );
 
   return { service, invoiceFindFirst, invoiceFindMany, invoiceCount };

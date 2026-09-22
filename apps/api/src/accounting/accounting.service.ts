@@ -548,6 +548,26 @@ export class AccountingService {
     return result.count;
   }
 
+  async updatePayableOverdueStatuses(orgId: string): Promise<number> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const result = await this.prisma.payable.updateMany({
+      where: {
+        organizationId: orgId,
+        dueDate: { lt: today },
+        status: { in: ['PENDING', 'PARTIALLY_PAID'] },
+      },
+      data: { status: 'OVERDUE' },
+    });
+
+    if (result.count > 0) {
+      this.logger.log(`Updated ${result.count} payables to OVERDUE status for org ${orgId}`);
+    }
+
+    return result.count;
+  }
+
   // ─── Payables ─────────────────────────────────────────────────
 
   async findAllPayables(orgId: string, query: { page?: number; limit?: number; status?: string; search?: string }) {

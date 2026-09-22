@@ -281,7 +281,7 @@ describe('Concurrency Tests', () => {
   describe('A. Invoice number generation — concurrent unique numbers', () => {
     it('should produce different invoice numbers under concurrent requests via create', async () => {
       const mockPrisma = createMockPrisma();
-      const service = new InvoicesService(mockPrisma as unknown as never, createAuditService(), createMailService(), { updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0) } as never);
+      const service = new InvoicesService(mockPrisma as unknown as never, createAuditService(), createMailService(), { updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0), updatePayableOverdueStatuses: jest.fn().mockResolvedValue(0) } as never);
 
       const dto = {
         customerId: 'cust-1',
@@ -306,7 +306,7 @@ describe('Concurrency Tests', () => {
 
     it('should recover from P2002 and produce unique numbers', async () => {
       const mockPrisma = createMockPrisma();
-      const service = new InvoicesService(mockPrisma as unknown as never, createAuditService(), createMailService(), { updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0) } as never);
+      const service = new InvoicesService(mockPrisma as unknown as never, createAuditService(), createMailService(), { updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0), updatePayableOverdueStatuses: jest.fn().mockResolvedValue(0) } as never);
 
       let createCalls = 0;
       mockPrisma.invoice.create.mockImplementation(async (args: Record<string, unknown>) => {
@@ -351,7 +351,7 @@ describe('Concurrency Tests', () => {
 
     it('should not produce duplicate numbers across different orgs', async () => {
       const mockPrisma = createMockPrisma();
-      const service = new InvoicesService(mockPrisma as unknown as never, createAuditService(), createMailService(), { updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0) } as never);
+      const service = new InvoicesService(mockPrisma as unknown as never, createAuditService(), createMailService(), { updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0), updatePayableOverdueStatuses: jest.fn().mockResolvedValue(0) } as never);
 
       const makeDto = () => ({
         customerId: 'cust-1',

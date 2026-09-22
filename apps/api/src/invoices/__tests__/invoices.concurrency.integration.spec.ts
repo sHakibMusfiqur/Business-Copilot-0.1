@@ -128,7 +128,10 @@ async function seedBase() {
 
   const auditService = createAuditService();
   const mailService = createMailService();
-  const accountingService = { updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0) } as never;
+  const accountingService = {
+    updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0),
+    updatePayableOverdueStatuses: jest.fn().mockResolvedValue(0),
+  } as never;
   invoicesServiceA = new InvoicesService(createPrismaService(), auditService, mailService, accountingService);
   invoicesServiceB = new InvoicesService(createPrismaService(), auditService, mailService, accountingService);
 }
@@ -431,7 +434,7 @@ describe('Invoice Concurrency Integration — Real Service', () => {
       });
 
       const auditService = createAuditService();
-      const freshService = new InvoicesService(createPrismaService(), auditService, createMailService(), { updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0) } as never);
+      const freshService = new InvoicesService(createPrismaService(), auditService, createMailService(), { updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0), updatePayableOverdueStatuses: jest.fn().mockResolvedValue(0) } as never);
 
       const COUNT = 8;
 
@@ -495,7 +498,7 @@ describe('Invoice Concurrency Integration — Real Service', () => {
       await prisma.product.create({ data: { id: stressProduct, organizationId: stressOrg, name: 'Stress Product', sku: `SKU-STRESS-${Date.now()}` } });
 
       const auditService = createAuditService();
-      const stressService = new InvoicesService(createPrismaService(), auditService, createMailService(), { updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0) } as never);
+      const stressService = new InvoicesService(createPrismaService(), auditService, createMailService(), { updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0), updatePayableOverdueStatuses: jest.fn().mockResolvedValue(0) } as never);
 
       const COUNT = 20;
       const salesOrders = await Promise.all(
@@ -571,8 +574,8 @@ describe('Invoice Concurrency Integration — Real Service', () => {
 
       const auditService = createAuditService();
       const mailService = createMailService();
-      const stressServiceX = new InvoicesService(createPrismaService(), auditService, mailService, { updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0) } as never);
-      const stressServiceY = new InvoicesService(createPrismaService(), auditService, mailService, { updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0) } as never);
+      const stressServiceX = new InvoicesService(createPrismaService(), auditService, mailService, { updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0), updatePayableOverdueStatuses: jest.fn().mockResolvedValue(0) } as never);
+      const stressServiceY = new InvoicesService(createPrismaService(), auditService, mailService, { updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0), updatePayableOverdueStatuses: jest.fn().mockResolvedValue(0) } as never);
 
       const COUNT_PER_ORG = 20;
 

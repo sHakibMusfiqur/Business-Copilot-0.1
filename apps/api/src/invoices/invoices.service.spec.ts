@@ -32,6 +32,7 @@ function createMocks() {
   const auditRecord = jest.fn().mockResolvedValue(undefined);
   const sendOrgEmail = jest.fn().mockResolvedValue({ sent: true });
   const updateReceivableOverdueStatuses = jest.fn().mockResolvedValue(0);
+  const updatePayableOverdueStatuses = jest.fn().mockResolvedValue(0);
 
   const prisma = {
     invoice: {
@@ -53,7 +54,10 @@ function createMocks() {
 
   const auditService = { record: auditRecord } as unknown as AuditService;
   const mailService = { sendOrgEmail } as unknown as MailService;
-  const accountingService = { updateReceivableOverdueStatuses } as unknown as AccountingService;
+  const accountingService = {
+    updateReceivableOverdueStatuses,
+    updatePayableOverdueStatuses,
+  } as unknown as AccountingService;
 
   const service = new InvoicesService(prisma, auditService, mailService, accountingService);
 
@@ -79,6 +83,7 @@ function createMocks() {
     auditRecord,
     sendOrgEmail,
     updateReceivableOverdueStatuses,
+    updatePayableOverdueStatuses,
   };
 }
 
@@ -1144,6 +1149,70 @@ describe('InvoicesService', () => {
 
       expect(m.invoiceUpdateMany).toHaveBeenCalledTimes(2);
       expect(m.updateReceivableOverdueStatuses).toHaveBeenCalledTimes(1);
+    });
+
+    it('calls updatePayableOverdueStatuses for every organization', async () => {
+      const m = createMocks();
+      m.orgFindMany.mockResolvedValue([{ id: 'org-1' }, { id: 'org-2' }]);
+      m.invoiceUpdateMany.mockResolvedValue({ count: 0 });
+      m.updateReceivableOverdueStatuses.mockResolvedValue(0);
+      m.updatePayableOverdueStatuses.mockResolvedValue(1);
+
+      await m.service.handleOverdueInvoices();
+
+      expect(m.updatePayableOverdueStatuses).toHaveBeenCalledTimes(2);
+      expect(m.updatePayableOverdueStatuses).toHaveBeenNthCalledWith(1, 'org-1');
+      expect(m.updatePayableOverdueStatuses).toHaveBeenNthCalledWith(2, 'org-2');
+    });
+
+    it('payable failure for org A does not stop org B', async () => {
+      const m = createMocks();
+      m.orgFindMany.mockResolvedValue([{ id: 'org-1' }, { id: 'org-2' }]);
+      m.invoiceUpdateMany.mockResolvedValue({ count: 0 });
+      m.updateReceivableOverdueStatuses.mockResolvedValue(0);
+      m.updatePayableOverdueStatuses
+        .mockRejectedValueOnce(new Error('Payable service down'))
+        .mockResolvedValueOnce(1);
+
+      await m.service.handleOverdueInvoices();
+
+      expect(m.updatePayableOverdueStatuses).toHaveBeenCalledTimes(2);
+      expect(m.updatePayableOverdueStatuses).toHaveBeenNthCalledWith(1, 'org-1');
+      expect(m.updatePayableOverdueStatuses).toHaveBeenNthCalledWith(2, 'org-2');
+      expect(m.invoiceUpdateMany).toHaveBeenCalledTimes(2);
+      expect(m.updateReceivableOverdueStatuses).toHaveBeenCalledTimes(2);
+    });
+
+    it('keeps invoice and receivable behavior intact when payables succeed', async () => {
+      const m = createMocks();
+      m.orgFindMany.mockResolvedValue([{ id: 'org-1' }]);
+      m.invoiceUpdateMany.mockResolvedValue({ count: 3 });
+      m.updateReceivableOverdueStatuses.mockResolvedValue(2);
+      m.updatePayableOverdueStatuses.mockResolvedValue(1);
+
+      await m.service.handleOverdueInvoices();
+
+      expect(m.invoiceUpdateMany).toHaveBeenCalledTimes(1);
+      expect(m.updateReceivableOverdueStatuses).toHaveBeenCalledWith('org-1');
+      expect(m.updatePayableOverdueStatuses).toHaveBeenCalledWith('org-1');
+    });
+
+    it('does not call updatePayableOverdueStatuses when organization list fails', async () => {
+      const m = createMocks();
+      m.orgFindMany.mockRejectedValue(new Error('DB connection lost'));
+
+      await expect(m.service.handleOverdueInvoices()).rejects.toThrow('DB connection lost');
+
+      expect(m.updatePayableOverdueStatuses).not.toHaveBeenCalled();
+    });
+
+    it('does not call updatePayableOverdueStatuses for zero organizations', async () => {
+      const m = createMocks();
+      m.orgFindMany.mockResolvedValue([]);
+
+      await m.service.handleOverdueInvoices();
+
+      expect(m.updatePayableOverdueStatuses).not.toHaveBeenCalled();
     });
   });
 

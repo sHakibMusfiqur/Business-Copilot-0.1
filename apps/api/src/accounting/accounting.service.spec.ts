@@ -403,6 +403,31 @@ describe('AccountingService processPaymentAllocation (P3-H1 / P3-H2)', () => {
       expect(tx.paymentAllocation.create).not.toHaveBeenCalled();
       expect(tx.payable.update).not.toHaveBeenCalled();
     });
+
+    it('accepts a partial payment against an OVERDUE payable (payment remains allowed)', async () => {
+      tx.payable.findFirst.mockResolvedValue(payable({ paidAmount: 40, status: 'OVERDUE' }));
+
+      await service.createPayment(ORG_ID, USER_ID, makeSupplierDto({ amount: 20 }));
+
+      expect(tx.paymentAllocation.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ payableId: 'pay-1', amount: 20 }),
+      });
+      expect(tx.payable.update).toHaveBeenCalledWith({
+        where: { id: 'pay-1' },
+        data: { paidAmount: 60, status: 'PARTIALLY_PAID' },
+      });
+    });
+
+    it('accepts an exact remaining-balance payment against an OVERDUE payable and marks it PAID', async () => {
+      tx.payable.findFirst.mockResolvedValue(payable({ paidAmount: 40, status: 'OVERDUE' }));
+
+      await service.createPayment(ORG_ID, USER_ID, makeSupplierDto({ amount: 60 }));
+
+      expect(tx.payable.update).toHaveBeenCalledWith({
+        where: { id: 'pay-1' },
+        data: { paidAmount: 100, status: 'PAID' },
+      });
+    });
   });
 });
 
@@ -1651,6 +1676,142 @@ describe('AccountingService updateReceivableOverdueStatuses', () => {
     await service.updateReceivableOverdueStatuses('org-A');
 
     expect(receivableUpdateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ organizationId: 'org-A' }),
+      }),
+    );
+  });
+});
+
+describe('AccountingService updatePayableOverdueStatuses', () => {
+  let service: AccountingService;
+  let payableUpdateMany: jest.Mock;
+
+  beforeEach(() => {
+    payableUpdateMany = jest.fn();
+
+    const prisma = {
+      payable: {
+        updateMany: payableUpdateMany,
+      },
+    } as unknown as PrismaService;
+
+    service = new AccountingService(prisma);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('transitions overdue payables from PENDING to OVERDUE', async () => {
+    payableUpdateMany.mockResolvedValue({ count: 3 });
+
+    const count = await service.updatePayableOverdueStatuses(ORG_ID);
+
+    expect(count).toBe(3);
+    expect(payableUpdateMany).toHaveBeenCalledWith({
+      where: {
+        organizationId: ORG_ID,
+        dueDate: { lt: expect.any(Date) },
+        status: { in: ['PENDING', 'PARTIALLY_PAID'] },
+      },
+      data: { status: 'OVERDUE' },
+    });
+  });
+
+  it('transitions overdue payables from PARTIALLY_PAID to OVERDUE', async () => {
+    payableUpdateMany.mockResolvedValue({ count: 1 });
+
+    const count = await service.updatePayableOverdueStatuses(ORG_ID);
+
+    expect(count).toBe(1);
+    expect(payableUpdateMany).toHaveBeenCalledWith({
+      where: {
+        organizationId: ORG_ID,
+        dueDate: { lt: expect.any(Date) },
+        status: { in: ['PENDING', 'PARTIALLY_PAID'] },
+      },
+      data: { status: 'OVERDUE' },
+    });
+  });
+
+  it('filters by past due date only', async () => {
+    payableUpdateMany.mockResolvedValue({ count: 0 });
+
+    await service.updatePayableOverdueStatuses(ORG_ID);
+
+    const where = payableUpdateMany.mock.calls[0][0].where;
+    expect(where.dueDate).toEqual({ lt: expect.any(Date) });
+    expect(where.dueDate.lt).toBeInstanceOf(Date);
+  });
+
+  it('filters by status IN [PENDING, PARTIALLY_PAID]', async () => {
+    payableUpdateMany.mockResolvedValue({ count: 0 });
+
+    await service.updatePayableOverdueStatuses(ORG_ID);
+
+    const where = payableUpdateMany.mock.calls[0][0].where;
+    expect(where.status).toEqual({ in: ['PENDING', 'PARTIALLY_PAID'] });
+    expect(where.status.in).not.toContain('PAID');
+    expect(where.status.in).not.toContain('CANCELLED');
+    expect(where.status.in).not.toContain('OVERDUE');
+  });
+
+  it('does not transition PAID payables', async () => {
+    payableUpdateMany.mockResolvedValue({ count: 0 });
+
+    await service.updatePayableOverdueStatuses(ORG_ID);
+
+    expect(payableUpdateMany).toHaveBeenCalledWith({
+      where: {
+        organizationId: ORG_ID,
+        dueDate: { lt: expect.any(Date) },
+        status: { in: ['PENDING', 'PARTIALLY_PAID'] },
+      },
+      data: { status: 'OVERDUE' },
+    });
+  });
+
+  it('does not transition CANCELLED payables', async () => {
+    payableUpdateMany.mockResolvedValue({ count: 0 });
+
+    await service.updatePayableOverdueStatuses(ORG_ID);
+
+    expect(payableUpdateMany).toHaveBeenCalledWith({
+      where: {
+        organizationId: ORG_ID,
+        dueDate: { lt: expect.any(Date) },
+        status: { in: ['PENDING', 'PARTIALLY_PAID'] },
+      },
+      data: { status: 'OVERDUE' },
+    });
+  });
+
+  it('returns 0 when no payables are overdue (zero-row behavior)', async () => {
+    payableUpdateMany.mockResolvedValue({ count: 0 });
+
+    const count = await service.updatePayableOverdueStatuses(ORG_ID);
+
+    expect(count).toBe(0);
+  });
+
+  it('is idempotent - repeated calls produce same result', async () => {
+    payableUpdateMany.mockResolvedValue({ count: 2 });
+
+    const count1 = await service.updatePayableOverdueStatuses(ORG_ID);
+    const count2 = await service.updatePayableOverdueStatuses(ORG_ID);
+
+    expect(count1).toBe(2);
+    expect(count2).toBe(2);
+    expect(payableUpdateMany).toHaveBeenCalledTimes(2);
+  });
+
+  it('isolates by organization - only updates org-scoped payables', async () => {
+    payableUpdateMany.mockResolvedValue({ count: 1 });
+
+    await service.updatePayableOverdueStatuses('org-A');
+
+    expect(payableUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ organizationId: 'org-A' }),
       }),

@@ -12,7 +12,10 @@ function createMail() {
 }
 
 function createAccounting() {
-  return { updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0) } as never;
+  return {
+    updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0),
+    updatePayableOverdueStatuses: jest.fn().mockResolvedValue(0),
+  } as never;
 }
 
 function createPrisma(overrides: Record<string, unknown> = {}) {
@@ -295,6 +298,112 @@ describe('Cron Failure Tests', () => {
 
       await service.handleOverdueInvoices();
       expect(prisma.invoice.updateMany).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('E. Payable overdue integration — called per org, failures isolated', () => {
+    it('should call updatePayableOverdueStatuses for every organization', async () => {
+      const prisma = createPrisma({
+        orgs: [{ id: 'org-1' }, { id: 'org-2' }, { id: 'org-3' }],
+      });
+      (prisma.invoice.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+
+      const accounting = {
+        updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0),
+        updatePayableOverdueStatuses: jest.fn().mockResolvedValue(2),
+      };
+      const service = new InvoicesService(
+        prisma as unknown as PrismaService,
+        createAudit(),
+        createMail(),
+        accounting as never,
+      );
+
+      await service.handleOverdueInvoices();
+
+      expect(accounting.updatePayableOverdueStatuses).toHaveBeenCalledTimes(3);
+      expect(accounting.updatePayableOverdueStatuses).toHaveBeenNthCalledWith(1, 'org-1');
+      expect(accounting.updatePayableOverdueStatuses).toHaveBeenNthCalledWith(2, 'org-2');
+      expect(accounting.updatePayableOverdueStatuses).toHaveBeenNthCalledWith(3, 'org-3');
+    });
+
+    it('should continue processing remaining orgs when payable update fails for org A', async () => {
+      const prisma = createPrisma({
+        orgs: [{ id: 'org-bad' }, { id: 'org-ok' }],
+      });
+      (prisma.invoice.updateMany as jest.Mock).mockResolvedValue({ count: 1 });
+
+      const accounting = {
+        updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0),
+        updatePayableOverdueStatuses: jest.fn()
+          .mockRejectedValueOnce(new Error('payable timeout'))
+          .mockResolvedValueOnce(1),
+      };
+      const service = new InvoicesService(
+        prisma as unknown as PrismaService,
+        createAudit(),
+        createMail(),
+        accounting as never,
+      );
+
+      const loggerSpy = jest.spyOn(service['logger'], 'error').mockImplementation();
+
+      await expect(service.handleOverdueInvoices()).resolves.toBeUndefined();
+
+      expect(accounting.updatePayableOverdueStatuses).toHaveBeenCalledTimes(2);
+      expect(prisma.invoice.updateMany).toHaveBeenCalledTimes(2);
+      expect(loggerSpy).toHaveBeenCalledWith(expect.stringContaining('org-bad'));
+
+      loggerSpy.mockRestore();
+    });
+
+    it('should keep invoice and receivable behavior intact when payable succeeds', async () => {
+      const prisma = createPrisma({
+        orgs: [{ id: 'org-1' }],
+      });
+      (prisma.invoice.updateMany as jest.Mock).mockResolvedValue({ count: 4 });
+
+      const accounting = {
+        updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(3),
+        updatePayableOverdueStatuses: jest.fn().mockResolvedValue(2),
+      };
+      const service = new InvoicesService(
+        prisma as unknown as PrismaService,
+        createAudit(),
+        createMail(),
+        accounting as never,
+      );
+
+      await service.handleOverdueInvoices();
+
+      expect(prisma.invoice.updateMany).toHaveBeenCalledTimes(1);
+      expect(prisma.invoice.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ organizationId: 'org-1' }),
+          data: { paymentStatus: 'OVERDUE' },
+        }),
+      );
+      expect(accounting.updateReceivableOverdueStatuses).toHaveBeenCalledWith('org-1');
+      expect(accounting.updatePayableOverdueStatuses).toHaveBeenCalledWith('org-1');
+    });
+
+    it('should not call updatePayableOverdueStatuses when organization listing fails', async () => {
+      const prisma = createPrisma();
+      (prisma.organization.findMany as jest.Mock).mockRejectedValue(new Error('Database timeout'));
+
+      const accounting = {
+        updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0),
+        updatePayableOverdueStatuses: jest.fn().mockResolvedValue(0),
+      };
+      const service = new InvoicesService(
+        prisma as unknown as PrismaService,
+        createAudit(),
+        createMail(),
+        accounting as never,
+      );
+
+      await expect(service.handleOverdueInvoices()).rejects.toThrow('Database timeout');
+      expect(accounting.updatePayableOverdueStatuses).not.toHaveBeenCalled();
     });
   });
 });

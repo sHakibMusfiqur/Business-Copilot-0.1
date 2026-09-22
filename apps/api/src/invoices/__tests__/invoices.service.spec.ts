@@ -108,7 +108,10 @@ describe('InvoicesService', () => {
     prismaMocks = mockPrismaService();
     auditService = mockAuditService();
     const mailService = { sendOrgEmail: jest.fn().mockResolvedValue({ sent: true }) } as never;
-    const accountingService = { updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0) } as never;
+    const accountingService = {
+      updateReceivableOverdueStatuses: jest.fn().mockResolvedValue(0),
+      updatePayableOverdueStatuses: jest.fn().mockResolvedValue(0),
+    } as never;
     service = new InvoicesService(prismaMocks.prisma, auditService as unknown as AuditService, mailService, accountingService);
   });
 
