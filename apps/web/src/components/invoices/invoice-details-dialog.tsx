@@ -204,21 +204,23 @@ export function InvoiceDetailsDialog({ invoice, open, onClose }: InvoiceDetailsD
               </Button>
             </RequirePermission>
             <RequirePermission permission={INVOICES_READ}>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={async () => {
-                  try {
-                    await emailInvoice(display.id);
-                    toast({ title: 'Invoice emailed successfully' });
-                    invalidate();
-                  } catch {
-                    toast({ variant: 'destructive', title: 'Failed to email invoice' });
-                  }
-                }}
-              >
-                Email Invoice
-              </Button>
+              {(display.status === 'ISSUED' || display.status === 'SENT') && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      await emailInvoice(display.id);
+                      toast({ title: 'Invoice emailed successfully' });
+                      invalidate();
+                    } catch {
+                      toast({ variant: 'destructive', title: 'Failed to email invoice' });
+                    }
+                  }}
+                >
+                  Email Invoice
+                </Button>
+              )}
             </RequirePermission>
             <RequirePermission permission={INVOICES_APPROVE}>
               {display.status === 'DRAFT' && (

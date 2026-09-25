@@ -1031,6 +1031,19 @@ describe('InvoicesService', () => {
       expect(m.sendOrgEmail).not.toHaveBeenCalled();
     });
 
+    it('rejects CANCELLED invoice', async () => {
+      const m = createMocks();
+      m.invoiceFindFirst.mockResolvedValue({
+        ...mockInvoice({ status: 'CANCELLED' }),
+        customer: { email: 'test@example.com' },
+        organization: { name: 'Test Org' },
+      });
+
+      await expect(m.service.emailInvoice(ORG_ID, 'inv-1')).rejects.toThrow(BadRequestException);
+      expect(m.sendOrgEmail).not.toHaveBeenCalled();
+      expect(m.invoiceUpdate).not.toHaveBeenCalled();
+    });
+
     it('records failure audit and throws on send error', async () => {
       const m = createMocks();
       m.invoiceFindFirst.mockResolvedValue({

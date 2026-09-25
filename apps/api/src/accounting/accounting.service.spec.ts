@@ -1119,7 +1119,7 @@ describe('AccountingService D-B1: rejects payments without receivable/payable al
   it('rejects a customer payment without receivableId', async () => {
     await expect(
       service.createPayment(ORG_ID, USER_ID, makeDto({ receivableId: undefined })),
-    ).rejects.toThrow('receivableId is required for customer payments');
+    ).rejects.toThrow('receivableId or invoiceId is required for customer payments');
   });
 
   it('rejects a supplier payment without payableId', async () => {
@@ -1172,6 +1172,228 @@ describe('AccountingService D-B1: rejects payments without receivable/payable al
     await expect(
       service.createPayment(ORG_ID, USER_ID, makeDto({ amount: 20 })),
     ).rejects.toThrow('Payment amount exceeds the remaining balance');
+  });
+});
+
+describe('AccountingService standalone invoice payment (Decision S)', () => {
+  interface InvoiceTxMock extends TxMock {
+    invoice: { findFirst: jest.Mock; update: jest.Mock; updateMany: jest.Mock };
+  }
+
+  let service: AccountingService;
+  let tx: InvoiceTxMock;
+
+  const INVOICE_ID = 'inv-1';
+
+  const makeInvoiceDto = (overrides: Record<string, unknown> = {}) => ({
+    type: PaymentType.CUSTOMER_PAYMENT,
+    customerId: 'cust-1',
+    amount: 60,
+    invoiceId: INVOICE_ID,
+    receivableId: undefined,
+    ...overrides,
+  });
+
+  const invoice = (overrides: Record<string, unknown> = {}) => ({
+    id: INVOICE_ID,
+    organizationId: ORG_ID,
+    total: 100,
+    paidAmount: 40,
+    status: 'ISSUED',
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    tx = {
+      $queryRaw: jest.fn().mockResolvedValue([1]),
+      customer: { findFirst: jest.fn().mockResolvedValue({ id: 'cust-1' }) },
+      supplier: { findFirst: jest.fn().mockResolvedValue({ id: 'sup-1' }) },
+      payment: {
+        create: jest.fn().mockImplementation(async () => ({ id: 'p-1' })),
+        findUnique: jest.fn().mockResolvedValue({ reference: 'REF' }),
+      },
+      receivable: { findFirst: jest.fn(), update: jest.fn() },
+      payable: { findFirst: jest.fn(), update: jest.fn() },
+      paymentAllocation: { create: jest.fn().mockResolvedValue(undefined) },
+      journalEntry: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: 'je-1' }),
+      },
+      account: { findFirst: jest.fn().mockResolvedValue({ id: 'acct-1' }) },
+      invoice: {
+        findFirst: jest.fn().mockResolvedValue(invoice()),
+        update: jest.fn().mockResolvedValue(undefined),
+        updateMany: jest.fn().mockResolvedValue(undefined),
+      },
+    };
+
+    const prisma = {
+      $transaction: jest.fn().mockImplementation(
+        (callback: (client: unknown) => unknown) => callback(tx),
+      ),
+    } as unknown as PrismaService;
+
+    service = new AccountingService(prisma);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('accepts an invoiceId-only customer payment and creates a PaymentAllocation with invoiceId', async () => {
+    const result = await service.createPayment(ORG_ID, USER_ID, makeInvoiceDto({ amount: 20 }));
+
+    expect(result).toBeDefined();
+    expect(tx.payment.create).toHaveBeenCalledTimes(1);
+    expect(tx.paymentAllocation.create).toHaveBeenCalledTimes(1);
+    expect(tx.paymentAllocation.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ invoiceId: INVOICE_ID, amount: 20 }),
+    });
+  });
+
+  it('updates invoice paidAmount and sets paymentStatus PARTIALLY_PAID', async () => {
+    await service.createPayment(ORG_ID, USER_ID, makeInvoiceDto({ amount: 20 }));
+
+    expect(tx.invoice.update).toHaveBeenCalledWith({
+      where: { id: INVOICE_ID },
+      data: { paidAmount: 60, paymentStatus: 'PARTIALLY_PAID' },
+    });
+  });
+
+  it('sets paymentStatus PAID when the payment settles the invoice', async () => {
+    await service.createPayment(ORG_ID, USER_ID, makeInvoiceDto({ amount: 60 }));
+
+    expect(tx.invoice.update).toHaveBeenCalledWith({
+      where: { id: INVOICE_ID },
+      data: { paidAmount: 100, paymentStatus: 'PAID' },
+    });
+  });
+
+  it('rejects an overpayment beyond the remaining invoice balance', async () => {
+    await expect(
+      service.createPayment(ORG_ID, USER_ID, makeInvoiceDto({ amount: 61 })),
+    ).rejects.toThrow('Payment amount exceeds the remaining balance');
+
+    expect(tx.paymentAllocation.create).not.toHaveBeenCalled();
+    expect(tx.invoice.update).not.toHaveBeenCalled();
+    expect(tx.journalEntry.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a payment against a CANCELLED invoice', async () => {
+    tx.invoice.findFirst.mockResolvedValue(invoice({ status: 'CANCELLED' }));
+
+    await expect(
+      service.createPayment(ORG_ID, USER_ID, makeInvoiceDto({ amount: 10 })),
+    ).rejects.toThrow('Invoice is cancelled and cannot receive payments');
+
+    expect(tx.paymentAllocation.create).not.toHaveBeenCalled();
+    expect(tx.invoice.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects a cross-organization invoice', async () => {
+    tx.invoice.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.createPayment(ORG_ID, USER_ID, makeInvoiceDto({ amount: 10 })),
+    ).rejects.toThrow(NotFoundException);
+
+    expect(tx.paymentAllocation.create).not.toHaveBeenCalled();
+    expect(tx.invoice.update).not.toHaveBeenCalled();
+  });
+
+  it('creates only the receivable allocation when receivableId and invoiceId are both provided (mutual exclusion)', async () => {
+    tx.receivable.findFirst.mockResolvedValue({
+      id: 'rec-1',
+      organizationId: ORG_ID,
+      totalAmount: 100,
+      paidAmount: 40,
+      status: 'PENDING',
+    });
+
+    await service.createPayment(ORG_ID, USER_ID, makeInvoiceDto({ receivableId: 'rec-1', amount: 20 }));
+
+    expect(tx.paymentAllocation.create).toHaveBeenCalledTimes(1);
+    expect(tx.paymentAllocation.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ receivableId: 'rec-1' }),
+    });
+    expect(tx.paymentAllocation.create).not.toHaveBeenCalledWith(
+      expect.objectContaining({ invoiceId: INVOICE_ID }),
+    );
+    expect(tx.invoice.findFirst).not.toHaveBeenCalled();
+    expect(tx.invoice.update).not.toHaveBeenCalled();
+  });
+
+  it('creates the expected cash/AR journal entry for an invoice payment', async () => {
+    await service.createPayment(ORG_ID, USER_ID, makeInvoiceDto({ amount: 20 }));
+
+    expect(tx.journalEntry.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          referenceId: 'p-1',
+          referenceType: 'PAYMENT',
+          organizationId: ORG_ID,
+          lines: {
+            create: [
+              expect.objectContaining({ accountId: 'acct-1', debit: 20, credit: 0 }),
+              expect.objectContaining({ accountId: 'acct-1', debit: 0, credit: 20 }),
+            ],
+          },
+        }),
+      }),
+    );
+  });
+
+  it('does not duplicate the journal entry when a PAYMENT journal already exists (idempotency)', async () => {
+    tx.journalEntry.findFirst.mockResolvedValue({ id: 'je-existing', entryNumber: 'JE-2026-000001' });
+
+    await service.createPayment(ORG_ID, USER_ID, makeInvoiceDto({ amount: 20 }));
+
+    expect(tx.journalEntry.create).not.toHaveBeenCalled();
+  });
+
+  it('preserves the existing receivableId customer-payment path', async () => {
+    tx.receivable.findFirst.mockResolvedValue({
+      id: 'rec-1',
+      organizationId: ORG_ID,
+      totalAmount: 100,
+      paidAmount: 40,
+      status: 'PENDING',
+    });
+
+    await service.createPayment(ORG_ID, USER_ID, makeInvoiceDto({ receivableId: 'rec-1', amount: 20 }));
+
+    expect(tx.paymentAllocation.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ receivableId: 'rec-1', amount: 20 }),
+    });
+    expect(tx.receivable.update).toHaveBeenCalledWith({
+      where: { id: 'rec-1' },
+      data: { paidAmount: 60, status: 'PARTIALLY_PAID' },
+    });
+  });
+
+  it('preserves the existing payable payment path', async () => {
+    tx.payable.findFirst.mockResolvedValue({
+      id: 'pay-1',
+      organizationId: ORG_ID,
+      totalAmount: 100,
+      paidAmount: 40,
+      status: 'PENDING',
+    });
+
+    await service.createPayment(ORG_ID, USER_ID, {
+      type: PaymentType.SUPPLIER_PAYMENT,
+      supplierId: 'sup-1',
+      amount: 20,
+      payableId: 'pay-1',
+    });
+
+    expect(tx.paymentAllocation.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ payableId: 'pay-1', amount: 20 }),
+    });
+    expect(tx.payable.update).toHaveBeenCalledWith({
+      where: { id: 'pay-1' },
+      data: { paidAmount: 60, status: 'PARTIALLY_PAID' },
+    });
   });
 });
 

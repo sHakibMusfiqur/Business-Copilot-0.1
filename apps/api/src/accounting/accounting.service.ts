@@ -669,11 +669,12 @@ export class AccountingService {
       throw new BadRequestException('supplierId is required for supplier payments');
     }
 
-    // D-B1: customer/supplier payments must be allocated to an existing receivable/payable.
-    // Without this, payments can exist without any accounting journal, creating
-    // orphan/unreconciled entries. The allocation method below validates org-scoping.
-    if (dto.type === PaymentType.CUSTOMER_PAYMENT && !dto.receivableId) {
-      throw new BadRequestException('receivableId is required for customer payments');
+    // D-B1: customer/supplier payments must be allocated to an existing receivable,
+    // invoice, or payable. Without this, payments can exist without any accounting
+    // journal, creating orphan/unreconciled entries. The allocation method below
+    // validates org-scoping.
+    if (dto.type === PaymentType.CUSTOMER_PAYMENT && !dto.receivableId && !dto.invoiceId) {
+      throw new BadRequestException('receivableId or invoiceId is required for customer payments');
     }
 
     if (dto.type === PaymentType.SUPPLIER_PAYMENT && !dto.payableId) {
@@ -1792,6 +1793,58 @@ export class AccountingService {
     const ref = payment?.reference ?? dto.reference ?? '';
 
     if (dto.type === PaymentType.CUSTOMER_PAYMENT && dto.receivableId) {
+      const cashAccount = await this.findAccountByCode(orgId, '1000', tx);
+      const arAccount = await this.findAccountByCode(orgId, '1100', tx);
+
+      const entryNumber = await this.generateJournalEntryNumber(orgId, tx);
+      const existing = await tx.journalEntry.findFirst({
+        where: {
+          referenceId: paymentId,
+          referenceType: 'PAYMENT',
+          organizationId: orgId,
+          deletedAt: null,
+        },
+      });
+      if (existing) return existing;
+
+      return tx.journalEntry.create({
+        data: {
+          entryNumber,
+          organizationId: orgId,
+          description: `Customer Payment: ${ref || paymentId}`,
+          date: new Date(),
+          status: 'POSTED',
+          referenceId: paymentId,
+          referenceType: 'PAYMENT',
+          createdById: userId,
+          lines: {
+            create: [
+              {
+                accountId: cashAccount.id,
+                debit: Number(dto.amount),
+                credit: 0,
+                description: `Cash - ${ref || paymentId}`,
+              },
+              {
+                accountId: arAccount.id,
+                debit: 0,
+                credit: Number(dto.amount),
+                description: `Accounts Receivable - ${ref || paymentId}`,
+              },
+            ],
+          },
+        },
+        select: {
+          id: true,
+          entryNumber: true,
+          date: true,
+          status: true,
+          createdAt: true,
+        },
+      });
+    }
+
+    if (dto.type === PaymentType.CUSTOMER_PAYMENT && dto.invoiceId && !dto.receivableId) {
       const cashAccount = await this.findAccountByCode(orgId, '1000', tx);
       const arAccount = await this.findAccountByCode(orgId, '1100', tx);
 

@@ -661,6 +661,9 @@ export class InvoicesService {
     if (invoice.status === 'DRAFT') {
       throw new BadRequestException('Cannot email a DRAFT invoice. Issue it first.');
     }
+    if (invoice.status === 'CANCELLED') {
+      throw new BadRequestException('Cannot email a CANCELLED invoice.');
+    }
 
     try {
       await this.mailService.sendOrgEmail(orgId, {
