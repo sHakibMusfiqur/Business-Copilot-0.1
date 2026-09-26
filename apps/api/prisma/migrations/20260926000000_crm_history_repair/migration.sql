@@ -1,3 +1,13 @@
+-- CRM history repair (reconciliation of pre-existing drift).
+-- Purpose: make migration history reproduce the actual current CRM end state that already
+-- exists in the live development database (DB == schema.prisma for these objects, proven by
+-- `prisma migrate diff --from-schema-datasource --to-schema-datamodel` = Batch-1-only output).
+-- The deletive/altering half of the CRM redesign was previously applied to the database
+-- outside the migration workflow; this migration records it so fresh/shadow databases
+-- converge. On the live DB every statement below is a no-op or a drop-and-recreate-identical
+-- (the target state is already present). Scope: ONLY the audited drift items.
+
+-- Activity
 ALTER TABLE "Activity" DROP CONSTRAINT IF EXISTS "Activity_userId_fkey";
 DROP INDEX IF EXISTS "Activity_userId_idx";
 ALTER TABLE "Activity" DROP COLUMN IF EXISTS "userId";
