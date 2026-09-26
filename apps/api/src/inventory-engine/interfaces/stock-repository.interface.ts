@@ -1,10 +1,11 @@
 import type { Stock } from './stock.interface';
 
 export interface StockRepository {
-  findById(id: string): Promise<Stock | null>;
+  findById(organizationId: string, id: string): Promise<Stock | null>;
   findByOrganization(organizationId: string): Promise<Stock[]>;
   create(data: Omit<Stock, 'id' | 'createdAt' | 'updatedAt'>): Promise<Stock>;
   update(
+    organizationId: string,
     id: string,
     data: Partial<Omit<Stock, 'id' | 'createdAt' | 'updatedAt'>>,
   ): Promise<Stock>;
