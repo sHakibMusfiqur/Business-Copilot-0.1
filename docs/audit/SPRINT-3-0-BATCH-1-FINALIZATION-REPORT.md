@@ -1,90 +1,107 @@
-# SPRINT 3.0 — Batch 1 Finalization Report
+# SPRINT 3.0 — Batch 1 Finalization Report (FINAL — APPLIED)
 
-**Date:** 2026-09-26 · **Repo:** `D:\my projected\Business-Copilot-0.1` · **Base HEAD:** `e25ae75` (external commit) on `main`
-**Task history:** restore applied CRM-repair migration to resolve-time content → generate + inspect Batch 1 migration → validate → commit & push verified artifacts (Batch 1 NOT applied).
+**Date:** 2026-09-26 · **Repo:** `D:\my projected\Business-Copilot-0.1` · **HEAD:** `140a262` (`main`, pushed)
+**Task:** apply the authorized Batch 1 migration to the real development database and verify.
 
-## Verdict: **PASS**
+## Final state
+
+| Item | Status |
+|---|---|
+| Batch 1 migration GENERATED (`--create-only`) | ✅ |
+| Batch 1 migration INSPECTED (purely additive) | ✅ |
+| Batch 1 migration **APPLIED** to real DB | ✅ |
+| Database schema == schema.prisma | ✅ (empty `migrate diff`) |
+| Migration status clean (36 applied, 0 pending) | ✅ |
+| Validation battery green | ✅ |
+| Batch 2 **NOT STARTED** | ✅ |
 
 ---
 
-## 1. Why the applied migration was restored
+## 1. Migration
 
-Round 1 recorded `20260926000000_crm_history_repair` as applied with checksum `816484a2…` (hash of the resolve-time file). External commit **`0965edf`** stripped the file's header/section comments (bytes → `dae4a41b…`), which made `prisma migrate dev` abort with *"modified after it was applied"* + a reset proposal. Restoration (authorized; no `migrate resolve`, no history-row changes) puts the file back in byte-exact agreement with the applied record.
+- **Path:** `apps/api/prisma/migrations/20260926155915_add_universal_inventory_engine/migration.sql` (438 lines; committed in `e25ae75`, unchanged at apply time — SHA-256 `685d0d600f8431d77db05e026f6ec86ded963fc88cf789981aa6043586204b39`)
+- **Inspected SQL:** 8 `CREATE TYPE` · 9 `CREATE TABLE` · 7 nullable `InventoryTransaction` columns · 49+4 indexes (incl. Stock composite unique `[warehouseId, productId, batchId, serialNumberId]`) · 28 FKs · zero `DROP`/`TRUNCATE`/`DELETE`/`UPDATE` · no Invoice/Accounting/Payroll/Sales/Purchase/RBAC/CRM objects · `InventoryTransaction` the only pre-existing table altered · `OpeningStock` has no Stock relation.
 
-**Round-2 regression (this commit's reason):** external commit **`e25ae75`** (base of this commit) did NOT carry the restored comments — it committed a third variant (stripped content minus its leading blank line, on-disk `94ac8c30…` ≠ `816484a2…`), reintroducing a mismatch. The exact resolve-time bytes were recovered from opencode session history (three independent `write` calls to the file, all hashing to the target) and re-restored.
+## 2. Pre-flight (before apply)
 
-## 2. Restored checksum — EXACT MATCH (current worktree)
+- `npx prisma migrate status`: **36 migrations found, exactly 1 pending = `20260926155915_add_universal_inventory_engine`**, no drift, no modified-migration warning, no reset proposal (EXIT=1 solely from the pending migration).
+- `git status --short`: clean, `## main...origin/main`.
+- Batch 1 file re-verified: 438 lines, 8/9/7 counts, zero forbidden statements.
 
-```
-Get-FileHash -Algorithm SHA256 ...20260926000000_crm_history_repair\migration.sql
-→ 816484A29C634C55B82F49D50A57F044E16D903BDA0E322A4CBD2901F55DA4B2
-```
-Expected applied value `816484a29c634c55b82f49d50a57f044e16d903bda0e322a4cbd2901f55da4b2` → **identical** ✓
-
-## 3. Proof only comments changed
-
-`git diff` vs base `e25ae75` for the repair file shows **+10 lines, zero SQL lines added/removed/modified**: the 8-line header block, the blank separator line (part of resolve-time content; `e25ae75` had removed it), and the `-- Activity` section comment. All 17 DDL statements byte-identical.
-
-## 4. Migration history verification (SELECT-only, earlier this session)
+## 3. Apply — exact command and result
 
 ```
-totals={"total":36,"applied_clean":35,"rolled_back":1}
-repair_row: checksum 816484a2… , finished_at 2026-09-26T14:06:28.940Z , rolled_back_at null
-stale_20260922 = 0 ; integrity_issues = [] ; import_job rows retained
+$ cd apps/api
+$ npx prisma migrate dev          # NO --create-only, authorized APPLY
+Applying migration `20260926155915_add_universal_inventory_engine`
+The following migration(s) have been applied: 20260926155915_add_universal_inventory_engine/migration.sql
+Your database is now in sync with your schema.
+Running generate... ✔ Generated Prisma Client (v6.19.3)
+APPLY_EXIT=0
 ```
-No `_prisma_migrations` row deleted/updated at any point.
+- Only the intended pending migration applied. **No reset proposed or accepted. No drift. No other migration touched.**
 
-## 5. `npx prisma migrate status`
+## 4. Migration history result (read-only `_prisma_migrations`)
+
+```
+PASS batch1 row exists
+PASS batch1 finished_at = Sat Sep 26 2026 23:14:20 GMT+0600
+PASS batch1 rolled_back_at null
+PASS batch1 checksum == file sha256 (685d0d60…)
+PASS history rows total = 37 (36 applied + 1 rolled-back)
+PASS only rolled-back row = 20260918000000_add_import_job (retained)
+PASS 20260926000000_crm_history_repair checksum intact (816484a2…) + applied
+```
+No history row was manually edited, deleted, or updated.
+
+## 5. `npx prisma migrate status` (post-apply)
 
 ```
 36 migrations found in prisma/migrations
-Following migration have not yet been applied:
-20260926155915_add_universal_inventory_engine
+Database schema is up to date!
+STATUS_EXIT=0
 ```
-(EXIT=1 solely due to the intentionally-unapplied Batch 1 — **no modified-after-applied warning**.)
 
-## 6. Batch 1 migration — GENERATED, INSPECTED, NOT APPLIED
+## 6. Schema-vs-DB diff result
 
-- `npx prisma migrate dev --create-only --name add_universal_inventory_engine` → **EXIT=0**, no reset proposal (ran on the verified `816484a2…` state).
-- Path: `apps/api/prisma/migrations/20260926155915_add_universal_inventory_engine/migration.sql` (438 lines)
+```
+npx prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-url <DATABASE_URL> --script
+→ "-- This is an empty migration."   (DIFF_EXIT=0)
+```
+**No schema differences — database exactly matches schema.prisma.**
 
-| Operation | Count | Notes |
-|---|---|---|
-| `CREATE TYPE` | **8** ✓ | exact authorized enum value sets |
-| `CREATE TABLE` | **9** ✓ | Batch, SerialNumber, Stock, StockMovement, StockReservation, StockAdjustment, WarehouseTransfer, WarehouseTransferItem, OpeningStock |
-| `ALTER TABLE "InventoryTransaction" ADD COLUMN` | **7** ✓ | only pre-existing table altered |
-| `CREATE INDEX` / `CREATE UNIQUE INDEX` | 49 / 4 | incl. Stock composite unique `[warehouseId, productId, batchId, serialNumberId]` |
-| `ADD CONSTRAINT … FOREIGN KEY` | 28 | Organization/Product/Warehouse/etc. only |
+## 7. New database objects — verified
 
-**STOP-condition scan:** zero `DROP`/`TRUNCATE`/`DELETE`/`UPDATE` statements · zero references to Invoice, PaymentAllocation, JournalEntry, Payroll, SalesOrder, PurchaseOrder, Activity, Lead, AuditLog, User, Role, Tenant · no duplicate InventoryTransaction table · OpeningStock has no Stock relation.
+- **8 inventory enums**, every value **exactly matching schema.prisma**: AdjustmentType(3), BatchStatus(4), InventoryTransactionType(8), ReservationStatus(6), SerialStatus(7), StockMovementType(15), StockStatus(7), TransferStatus(7). *(DB total 34 enums = 8 new + 26 pre-existing business enums.)*
+- **9 tables** present: Batch, SerialNumber, Stock, StockMovement, StockReservation, StockAdjustment, WarehouseTransfer, WarehouseTransferItem, OpeningStock.
+- **7 InventoryTransaction engine columns**: metadata, referenceId, referenceType, status, totalQuantity, totalValue, transactionType.
+- **Indexes**: `InventoryTransaction_transactionType_idx`, `InventoryTransaction_referenceType_referenceId_idx`, `Stock_warehouseId_productId_batchId_serialNumberId_key` (composite unique).
+- **28 foreign keys** across the 9 new tables.
+- **Exactly ONE** `InventoryTransaction` table (no duplicate) · **`OpeningStock` has no `stockId` column** (no Stock relation).
 
-## 7. Validation results (all green, on this exact code state)
+## 8. Validation battery (all green)
 
 | Check | Result |
 |---|---|
 | `npx prisma validate` | ✅ EXIT=0 |
-| `npx prisma generate` | ✅ Client v6.19.3, EXIT=0 |
+| `npx prisma generate` | ✅ v6.19.3, EXIT=0 |
 | `npx tsc --noEmit` | ✅ EXIT=0 |
-| `npm run build` | ✅ EXIT=0 |
-| `npx jest` | ✅ 111/111 suites, **2,176/2,176 tests** |
+| `npm run build` (`nest build`) | ✅ EXIT=0 |
+| `npx jest` | ✅ **111/111 suites, 2,176/2,176 tests** |
 | `git diff --check` | ✅ EXIT=0 |
+| `git status --short` | ✅ clean (reports intentionally updated afterward) |
 
-## 8. Git state
+## 9. Final git status
 
-- Base: **`e25ae75`** (external commit: Batch 1 migration `A` + the stripped repair variant — authored externally, already pushed).
-- This commit (`chore(inventory): add universal inventory engine batch 1 migration`) adds:
-  - repair migration restored to resolve-time comments (only comments; SHA-256 `816484a2…`)
-  - `migration_lock.toml` Prisma 6.19.3 boilerplate normalization `(i.e. Git)` → `(e.g., Git)` (provider still `postgresql`)
-  - `docs/audit/SPRINT-3-0-BATCH-1-FINALIZATION-REPORT.md`, `docs/audit/SPRINT-3-0-BATCH-1-RECREATION-REPORT.md`
-- `schema.prisma`, `apps/api/src/inventory-engine/`, and all application/business code: **unchanged** (`git diff 0965edf..e25ae75` touched only the two migration paths; this commit touches none of them).
+- HEAD: **`140a262`** (`chore(inventory): add universal inventory engine batch 1 migration`), branch `main` == `origin/main`.
+- After this report update: only ` M docs/audit/SPRINT-3-0-BATCH-1-FINALIZATION-REPORT.md` and ` M docs/audit/SPRINT-3-0-BATCH-1-RECREATION-REPORT.md` (intentional).
 
-## 9. Explicit statements
+## 10. Explicit confirmations
 
-- **Batch 1 migration: generated, inspected, validated — NOT applied** (`migrate status` lists it as the only pending migration).
-- **Batch 2: not started.**
-- No `migrate reset`, no `db push`, no `migrate dev` (in any form) since the `--create-only` generation, no `_prisma_migrations` row changes, no migration SQL semantics altered (comments only), no business-data DML/DDL.
+- **No `prisma migrate reset`, no `prisma db push`, no manual/hand-written SQL against the real DB, no `_prisma_migrations` edits, no other migration applied manually or modified.**
+- **Accounting/financial logic untouched**; no Payroll/Sales/Purchase/RBAC/Auth changes; `schema.prisma`, inventory-engine interfaces and application code unchanged this round.
+- **Batch 2 NOT started.**
 
-## 10. Caveats
+## 11. Next (separate authorization)
 
-- `core.autocrlf` will convert the LF repair file to CRLF on future checkouts → on-disk hash would drift. Keep this file out of renormalization until the checksum-sensitive period passes (or attribute/normalize accordingly).
-- The applied-checksum invariant for `20260926000000_crm_history_repair` depends on worktree bytes = `816484a2…`. Verify after any checkout/pull: `Get-FileHash -Algorithm SHA256`.
+Commit the two updated reports → start Batch 2 (service/repository layer over the applied engine tables).
