@@ -136,6 +136,91 @@ enum TaxType {
   FIXED
 }
 
+// Sprint 3.0 — Universal Inventory Engine (Batch 1)
+// Exact values recovered from historical migration
+// 20260709130000_add_inventory_engine and historical schema.prisma.
+
+enum StockMovementType {
+  OPENING
+  PURCHASE
+  PURCHASE_RETURN
+  SALE
+  SALE_RETURN
+  TRANSFER_IN
+  TRANSFER_OUT
+  ADJUSTMENT
+  PRODUCTION_IN
+  PRODUCTION_OUT
+  SCRAP
+  RETURN
+  DAMAGE
+  RESERVATION
+  RELEASE
+}
+
+enum StockStatus {
+  ACTIVE
+  RESERVED
+  DAMAGED
+  RETURNED
+  IN_TRANSIT
+  EXPIRED
+  QUARANTINE
+}
+
+enum ReservationStatus {
+  PENDING
+  CONFIRMED
+  PARTIAL
+  RELEASED
+  CANCELLED
+  FULFILLED
+}
+
+enum AdjustmentType {
+  ADD
+  SUBTRACT
+  SET
+}
+
+enum TransferStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  IN_TRANSIT
+  RECEIVED
+  COMPLETED
+  CANCELLED
+}
+
+enum InventoryTransactionType {
+  PURCHASE
+  SALE
+  TRANSFER
+  ADJUSTMENT
+  PRODUCTION
+  SCRAP
+  RETURN
+  OPENING
+}
+
+enum BatchStatus {
+  ACTIVE
+  EXPIRED
+  DEPLETED
+  QUARANTINE
+}
+
+enum SerialStatus {
+  AVAILABLE
+  RESERVED
+  SOLD
+  DAMAGED
+  RETURNED
+  IN_TRANSIT
+  SCRAPED
+}
+
 model Organization {
   id            String    @id @default(cuid())
   name          String    @unique
@@ -193,6 +278,17 @@ model Organization {
   pipelines             Pipeline[]
   deals                 Deal[]
   importJobs            ImportJob[]
+
+  // Sprint 3.0 — Universal Inventory Engine (Batch 1)
+  batches                Batch[]
+  serialNumbers          SerialNumber[]
+  stocks                 Stock[]
+  stockMovements         StockMovement[]
+  stockReservations      StockReservation[]
+  stockAdjustments       StockAdjustment[]
+  warehouseTransfers     WarehouseTransfer[]
+  warehouseTransferItems WarehouseTransferItem[]
+  openingStocks          OpeningStock[]
 }
 
 model OrganizationMember {
@@ -451,6 +547,12 @@ model Product {
   salesOrderItems       SalesOrderItem[]
   inventoryTransactions InventoryTransaction[]
 
+  batches         Batch[]
+  serialNumbers   SerialNumber[]
+  stocks          Stock[]
+  transferItems   WarehouseTransferItem[]
+  openingStocks   OpeningStock[]
+
   @@unique([organizationId, sku])
   @@index([organizationId])
   @@index([categoryId])
@@ -467,7 +569,11 @@ model Warehouse {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  inventories Inventory[]
+  inventories      Inventory[]
+  stocks           Stock[]
+  sourceTransfers  WarehouseTransfer[] @relation("SourceWarehouse")
+  destTransfers    WarehouseTransfer[] @relation("DestWarehouse")
+  openingStocks    OpeningStock[]
 
   @@index([organizationId])
 }
@@ -508,10 +614,282 @@ model InventoryTransaction {
   createdBy        User            @relation("CreatedByUserTransactions", fields: [createdById], references: [id])
   createdAt        DateTime        @default(now())
 
+  // Sprint 3.0 Batch 1 — engine transaction capabilities (additive, nullable).
+  // Legacy fields above are preserved untouched; no semantic mapping from the
+  // legacy TransactionType bucket to InventoryTransactionType is performed and
+  // existing rows are never backfilled.
+  transactionType  InventoryTransactionType?
+  referenceType    String?
+  referenceId      String?
+  totalQuantity    Int?
+  totalValue       Decimal?
+  status           String?
+  metadata         Json?
+
   @@index([organizationId])
   @@index([productId])
   @@index([createdAt])
   @@index([organizationId, createdAt])
+  @@index([transactionType])
+  @@index([referenceType, referenceId])
+}
+
+// Sprint 3.0 — Universal Inventory Engine (Batch 1)
+// Historical models from 20260709130000_add_inventory_engine, adapted to
+// current conventions: cuid ids, camelCase columns (no @map), organization
+// scoping only (no Tenant model exists in this schema).
+
+model Batch {
+  id                String       @id @default(cuid())
+  organizationId    String
+  productId         String
+  batchNumber       String
+  manufacturingDate DateTime?
+  expiryDate        DateTime?
+  status            BatchStatus  @default(ACTIVE)
+  metadata          Json         @default("{}")
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  deletedAt         DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  stocks        Stock[]
+  serialNumbers SerialNumber[]
+  openingStocks OpeningStock[]
+
+  @@unique([organizationId, productId, batchNumber])
+  @@index([organizationId])
+  @@index([productId])
+  @@index([batchNumber])
+  @@index([expiryDate])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model SerialNumber {
+  id             String       @id @default(cuid())
+  organizationId String
+  productId      String
+  batchId        String?
+  serialNumber   String
+  status         SerialStatus @default(AVAILABLE)
+  metadata       Json         @default("{}")
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product      Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  batch        Batch?        @relation(fields: [batchId], references: [id], onDelete: SetNull)
+
+  stocks        Stock[]
+  openingStocks OpeningStock[]
+
+  @@unique([organizationId, productId, serialNumber])
+  @@index([organizationId])
+  @@index([productId])
+  @@index([batchId])
+  @@index([serialNumber])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model Stock {
+  id                String      @id @default(cuid())
+  organizationId    String
+  warehouseId       String
+  productId         String
+  batchId           String?
+  serialNumberId    String?
+
+  quantity          Int         @default(0)
+  reservedQuantity  Int         @default(0)
+  damagedQuantity   Int         @default(0)
+  returnedQuantity  Int         @default(0)
+  inTransitQuantity Int         @default(0)
+  safetyStock       Int         @default(0)
+  reorderLevel      Int         @default(0)
+
+  unitCost          Decimal     @default(0)
+  totalValue        Decimal     @default(0)
+
+  status            StockStatus @default(ACTIVE)
+  metadata          Json        @default("{}")
+
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  warehouse    Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  product      Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  batch        Batch?        @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  serialNumber SerialNumber? @relation(fields: [serialNumberId], references: [id], onDelete: SetNull)
+
+  movements     StockMovement[]
+  reservations  StockReservation[]
+  adjustments   StockAdjustment[]
+  transferItems WarehouseTransferItem[]
+
+  @@unique([warehouseId, productId, batchId, serialNumberId])
+  @@index([organizationId])
+  @@index([warehouseId])
+  @@index([productId])
+  @@index([batchId])
+  @@index([serialNumberId])
+  @@index([status])
+}
+
+// Append-only: no updatedAt, never mutated after creation.
+model StockMovement {
+  id             String            @id @default(cuid())
+  organizationId String
+  stockId        String
+  movementType   StockMovementType
+  quantity       Int
+  unitCost       Decimal           @default(0)
+  totalCost      Decimal           @default(0)
+  referenceType  String?
+  referenceId    String?
+  notes          String?
+  metadata       Json              @default("{}")
+  createdAt      DateTime          @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  stock        Stock        @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([stockId])
+  @@index([movementType])
+  @@index([referenceType, referenceId])
+  @@index([createdAt])
+}
+
+model StockReservation {
+  id               String            @id @default(cuid())
+  organizationId   String
+  stockId          String
+  quantity         Int
+  reservedQuantity Int               @default(0)
+  status           ReservationStatus @default(PENDING)
+  referenceType    String?
+  referenceId      String?
+  notes            String?
+  expiresAt        DateTime?
+  metadata         Json              @default("{}")
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  stock        Stock        @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([stockId])
+  @@index([status])
+  @@index([referenceType, referenceId])
+  @@index([expiresAt])
+}
+
+// Append-only: no updatedAt, never mutated after creation.
+model StockAdjustment {
+  id             String         @id @default(cuid())
+  organizationId String
+  stockId        String
+  adjustmentType AdjustmentType
+  quantityBefore Int
+  quantityAfter  Int
+  adjustmentQty  Int
+  reason         String?
+  notes          String?
+  metadata       Json           @default("{}")
+  createdAt      DateTime       @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  stock        Stock        @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([stockId])
+  @@index([adjustmentType])
+  @@index([createdAt])
+}
+
+model WarehouseTransfer {
+  id                String         @id @default(cuid())
+  organizationId    String
+  sourceWarehouseId String
+  destWarehouseId   String
+  transferNumber    String
+  status            TransferStatus @default(DRAFT)
+  notes             String?
+  metadata          Json           @default("{}")
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  deletedAt         DateTime?
+
+  organization    Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sourceWarehouse Warehouse            @relation("SourceWarehouse", fields: [sourceWarehouseId], references: [id], onDelete: Cascade)
+  destWarehouse    Warehouse            @relation("DestWarehouse", fields: [destWarehouseId], references: [id], onDelete: Cascade)
+  items            WarehouseTransferItem[]
+
+  @@unique([organizationId, transferNumber])
+  @@index([organizationId])
+  @@index([sourceWarehouseId])
+  @@index([destWarehouseId])
+  @@index([status])
+  @@index([deletedAt])
+}
+
+model WarehouseTransferItem {
+  id               String   @id @default(cuid())
+  organizationId   String
+  transferId       String
+  stockId          String
+  productId        String
+  quantity         Int
+  receivedQuantity Int      @default(0)
+  metadata         Json     @default("{}")
+  createdAt        DateTime @default(now())
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  transfer     WarehouseTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  stock        Stock             @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  product      Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([transferId])
+  @@index([stockId])
+  @@index([productId])
+}
+
+// Standalone by design: deliberately has NO relation back to Stock.
+model OpeningStock {
+  id             String   @id @default(cuid())
+  organizationId String
+  warehouseId    String
+  productId      String
+  batchId        String?
+  serialNumberId String?
+  quantity       Int
+  unitCost       Decimal  @default(0)
+  totalValue     Decimal  @default(0)
+  referenceDate  DateTime
+  notes          String?
+  metadata       Json     @default("{}")
+  createdAt      DateTime @default(now())
+
+  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  warehouse     Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  batch         Batch?        @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  serialNumber  SerialNumber? @relation(fields: [serialNumberId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([warehouseId])
+  @@index([productId])
+  @@index([batchId])
+  @@index([serialNumberId])
+  @@index([referenceDate])
 }
 
 model Invoice {
