@@ -1,4 +1,3 @@
-
 ALTER TABLE "Activity" DROP CONSTRAINT IF EXISTS "Activity_userId_fkey";
 DROP INDEX IF EXISTS "Activity_userId_idx";
 ALTER TABLE "Activity" DROP COLUMN IF EXISTS "userId";
