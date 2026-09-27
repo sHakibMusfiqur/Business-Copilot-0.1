@@ -43,4 +43,25 @@ export class PrismaSerialNumberRepository implements SerialNumberRepository {
       data: { deletedAt: new Date() },
     });
   }
+
+  async verifyReferences(
+    organizationId: string,
+    references: { productId?: string; batchId?: string },
+  ): Promise<boolean> {
+    if (references.productId !== undefined) {
+      const product = await this.prisma.product.findFirst({
+        where: { id: references.productId, organizationId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!product) return false;
+    }
+    if (references.batchId !== undefined) {
+      const batch = await this.prisma.batch.findFirst({
+        where: { id: references.batchId, organizationId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!batch) return false;
+    }
+    return true;
+  }
 }

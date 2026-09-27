@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsEnum, IsInt, IsIn, IsOptional, IsString, Max, Min } from 'class-validator';
 import { StockStatus } from '@prisma/client';
 
 export class QueryStockDto {
@@ -31,6 +31,6 @@ export class QueryStockDto {
 
   @ApiPropertyOptional({ default: 'desc' })
   @IsOptional()
-  @IsString()
+  @IsIn(['asc', 'desc'])
   sortOrder?: 'asc' | 'desc' = 'desc';
 }

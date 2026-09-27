@@ -48,4 +48,25 @@ export class PrismaWarehouseTransferRepository
       data: { deletedAt: new Date() },
     });
   }
+
+  async verifyReferences(
+    organizationId: string,
+    references: { sourceWarehouseId?: string; destWarehouseId?: string },
+  ): Promise<boolean> {
+    if (references.sourceWarehouseId !== undefined) {
+      const sourceWarehouse = await this.prisma.warehouse.findFirst({
+        where: { id: references.sourceWarehouseId, organizationId },
+        select: { id: true },
+      });
+      if (!sourceWarehouse) return false;
+    }
+    if (references.destWarehouseId !== undefined) {
+      const destWarehouse = await this.prisma.warehouse.findFirst({
+        where: { id: references.destWarehouseId, organizationId },
+        select: { id: true },
+      });
+      if (!destWarehouse) return false;
+    }
+    return true;
+  }
 }

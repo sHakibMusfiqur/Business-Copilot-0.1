@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { SerialStatus } from '@prisma/client';
+import { IsSafeJson } from '../../common/validators/safe-json.validator';
 
 export class UpdateSerialNumberDto {
   @ApiPropertyOptional()
@@ -10,11 +11,11 @@ export class UpdateSerialNumberDto {
   @MaxLength(100)
   serialNumber?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true, maxLength: 40 })
   @IsOptional()
   @IsString()
   @MaxLength(40)
-  batchId?: string;
+  batchId?: string | null;
 
   @ApiPropertyOptional({ enum: SerialStatus })
   @IsOptional()
@@ -23,6 +24,6 @@ export class UpdateSerialNumberDto {
 
   @ApiPropertyOptional({ type: 'object', additionalProperties: true })
   @IsOptional()
-  @IsObject()
+  @IsSafeJson()
   metadata?: Record<string, unknown>;
 }

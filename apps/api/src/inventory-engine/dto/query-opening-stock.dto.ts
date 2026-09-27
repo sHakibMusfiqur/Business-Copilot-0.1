@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsInt, IsIn, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 
 export class QueryOpeningStockDto {
   @ApiPropertyOptional({ default: 1, minimum: 1 })
@@ -21,6 +21,7 @@ export class QueryOpeningStockDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(40)
   warehouseId?: string;
 
   @ApiPropertyOptional({ default: 'createdAt' })
@@ -30,6 +31,6 @@ export class QueryOpeningStockDto {
 
   @ApiPropertyOptional({ default: 'desc' })
   @IsOptional()
-  @IsString()
+  @IsIn(['asc', 'desc'])
   sortOrder?: 'asc' | 'desc' = 'desc';
 }

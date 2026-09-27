@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsEnum, IsInt, IsObject, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
+import { IsDateString, IsEnum, IsInt, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
 import { ReservationStatus } from '@prisma/client';
+import { IsSafeJson } from '../../common/validators/safe-json.validator';
 
 export class CreateStockReservationDto {
   @ApiProperty()
@@ -50,6 +51,6 @@ export class CreateStockReservationDto {
 
   @ApiPropertyOptional({ type: 'object', additionalProperties: true })
   @IsOptional()
-  @IsObject()
+  @IsSafeJson()
   metadata?: Record<string, unknown>;
 }

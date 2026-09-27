@@ -11,4 +11,13 @@ export interface OpeningStockRepository {
     id: string,
     data: Partial<Omit<OpeningStock, 'id' | 'createdAt'>>,
   ): Promise<OpeningStock>;
+  verifyReferences(
+    organizationId: string,
+    references: {
+      warehouseId?: string;
+      productId?: string;
+      batchId?: string;
+      serialNumberId?: string;
+    },
+  ): Promise<boolean>;
 }

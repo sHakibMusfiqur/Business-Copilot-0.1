@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsEnum, IsInt, IsIn, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { SerialStatus } from '@prisma/client';
 
 export class QuerySerialNumberDto {
@@ -22,6 +22,7 @@ export class QuerySerialNumberDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   search?: string;
 
   @ApiPropertyOptional({ enum: SerialStatus })
@@ -36,6 +37,6 @@ export class QuerySerialNumberDto {
 
   @ApiPropertyOptional({ default: 'desc' })
   @IsOptional()
-  @IsString()
+  @IsIn(['asc', 'desc'])
   sortOrder?: 'asc' | 'desc' = 'desc';
 }

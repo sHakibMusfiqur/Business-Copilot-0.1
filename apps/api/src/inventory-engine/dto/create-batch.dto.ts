@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsEnum, IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsDateString, IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { BatchStatus } from '@prisma/client';
+import { IsSafeJson } from '../../common/validators/safe-json.validator';
 
 export class CreateBatchDto {
   @ApiProperty()
@@ -32,6 +33,6 @@ export class CreateBatchDto {
 
   @ApiPropertyOptional({ type: 'object', additionalProperties: true })
   @IsOptional()
-  @IsObject()
+  @IsSafeJson()
   metadata?: Record<string, unknown>;
 }

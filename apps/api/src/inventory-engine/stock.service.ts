@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -65,6 +66,16 @@ export class StockService {
   }
 
   async create(organizationId: string, currentUserId: string, dto: CreateStockDto) {
+    const referencesValid = await this.stockRepository.verifyReferences(organizationId, {
+      warehouseId: dto.warehouseId,
+      productId: dto.productId,
+      batchId: dto.batchId,
+      serialNumberId: dto.serialNumberId,
+    });
+    if (!referencesValid) {
+      throw new BadRequestException('Related record not found');
+    }
+
     const data = {
       organizationId,
       warehouseId: dto.warehouseId,
@@ -110,6 +121,23 @@ export class StockService {
   }
 
   async update(organizationId: string, currentUserId: string, id: string, dto: UpdateStockDto) {
+    const changedReferences: { batchId?: string; serialNumberId?: string } = {};
+    if (dto.batchId !== undefined && dto.batchId !== null) {
+      changedReferences.batchId = dto.batchId;
+    }
+    if (dto.serialNumberId !== undefined && dto.serialNumberId !== null) {
+      changedReferences.serialNumberId = dto.serialNumberId;
+    }
+    if (Object.keys(changedReferences).length > 0) {
+      const referencesValid = await this.stockRepository.verifyReferences(
+        organizationId,
+        changedReferences,
+      );
+      if (!referencesValid) {
+        throw new BadRequestException('Related record not found');
+      }
+    }
+
     const data: Partial<Parameters<StockRepository['update']>[2]> = {};
 
     if (dto.batchId !== undefined) data.batchId = dto.batchId;

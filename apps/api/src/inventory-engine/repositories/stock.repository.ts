@@ -36,4 +36,44 @@ export class PrismaStockRepository implements StockRepository {
       data: data as Prisma.StockUncheckedUpdateInput,
     });
   }
+
+  async verifyReferences(
+    organizationId: string,
+    references: {
+      warehouseId?: string;
+      productId?: string;
+      batchId?: string;
+      serialNumberId?: string;
+    },
+  ): Promise<boolean> {
+    if (references.warehouseId !== undefined) {
+      const warehouse = await this.prisma.warehouse.findFirst({
+        where: { id: references.warehouseId, organizationId },
+        select: { id: true },
+      });
+      if (!warehouse) return false;
+    }
+    if (references.productId !== undefined) {
+      const product = await this.prisma.product.findFirst({
+        where: { id: references.productId, organizationId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!product) return false;
+    }
+    if (references.batchId !== undefined) {
+      const batch = await this.prisma.batch.findFirst({
+        where: { id: references.batchId, organizationId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!batch) return false;
+    }
+    if (references.serialNumberId !== undefined) {
+      const serialNumber = await this.prisma.serialNumber.findFirst({
+        where: { id: references.serialNumberId, organizationId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!serialNumber) return false;
+    }
+    return true;
+  }
 }

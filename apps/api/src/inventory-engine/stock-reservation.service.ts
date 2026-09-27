@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -71,6 +72,13 @@ export class StockReservationService {
   }
 
   async create(organizationId: string, currentUserId: string, dto: CreateStockReservationDto) {
+    const referencesValid = await this.stockReservationRepository.verifyReferences(organizationId, {
+      stockId: dto.stockId,
+    });
+    if (!referencesValid) {
+      throw new BadRequestException('Related record not found');
+    }
+
     const data = {
       organizationId,
       stockId: dto.stockId,

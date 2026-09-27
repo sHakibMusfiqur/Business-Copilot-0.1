@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -72,6 +73,14 @@ export class WarehouseTransferService {
   }
 
   async create(organizationId: string, currentUserId: string, dto: CreateWarehouseTransferDto) {
+    const referencesValid = await this.warehouseTransferRepository.verifyReferences(organizationId, {
+      sourceWarehouseId: dto.sourceWarehouseId,
+      destWarehouseId: dto.destWarehouseId,
+    });
+    if (!referencesValid) {
+      throw new BadRequestException('Related record not found');
+    }
+
     const data = {
       organizationId,
       sourceWarehouseId: dto.sourceWarehouseId,

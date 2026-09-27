@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsObject, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { TransferStatus } from '@prisma/client';
+import { IsSafeJson } from '../../common/validators/safe-json.validator';
 
 export class CreateWarehouseTransferDto {
   @ApiProperty()
@@ -34,6 +35,6 @@ export class CreateWarehouseTransferDto {
 
   @ApiPropertyOptional({ type: 'object', additionalProperties: true })
   @IsOptional()
-  @IsObject()
+  @IsSafeJson()
   metadata?: Record<string, unknown>;
 }

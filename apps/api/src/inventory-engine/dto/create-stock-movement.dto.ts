@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsInt, IsNumber, IsObject, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
+import { IsEnum, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
 import { StockMovementType } from '@prisma/client';
+import { IsSafeJson } from '../../common/validators/safe-json.validator';
 
 export class CreateStockMovementDto {
   @ApiProperty()
@@ -50,6 +51,6 @@ export class CreateStockMovementDto {
 
   @ApiPropertyOptional({ type: 'object', additionalProperties: true })
   @IsOptional()
-  @IsObject()
+  @IsSafeJson()
   metadata?: Record<string, unknown>;
 }

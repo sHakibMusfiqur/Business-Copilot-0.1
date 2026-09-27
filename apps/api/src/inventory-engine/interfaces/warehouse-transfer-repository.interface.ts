@@ -12,4 +12,8 @@ export interface WarehouseTransferRepository {
     data: Partial<Omit<WarehouseTransfer, 'id' | 'createdAt' | 'updatedAt'>>,
   ): Promise<WarehouseTransfer>;
   delete(organizationId: string, id: string): Promise<void>;
+  verifyReferences(
+    organizationId: string,
+    references: { sourceWarehouseId?: string; destWarehouseId?: string },
+  ): Promise<boolean>;
 }

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -72,6 +73,16 @@ export class OpeningStockService {
   }
 
   async create(organizationId: string, currentUserId: string, dto: CreateOpeningStockDto) {
+    const referencesValid = await this.openingStockRepository.verifyReferences(organizationId, {
+      warehouseId: dto.warehouseId,
+      productId: dto.productId,
+      batchId: dto.batchId,
+      serialNumberId: dto.serialNumberId,
+    });
+    if (!referencesValid) {
+      throw new BadRequestException('Related record not found');
+    }
+
     const data = {
       organizationId,
       warehouseId: dto.warehouseId,

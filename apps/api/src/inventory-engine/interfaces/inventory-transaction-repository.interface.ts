@@ -7,4 +7,8 @@ export interface InventoryTransactionRepository {
   create(
     data: Omit<InventoryTransaction, 'id' | 'createdAt'>,
   ): Promise<InventoryTransaction>;
+  verifyReferences(
+    organizationId: string,
+    references: { productId?: string },
+  ): Promise<boolean>;
 }

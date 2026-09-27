@@ -10,4 +10,8 @@ export interface BatchRepository {
     data: Partial<Omit<Batch, 'id' | 'createdAt' | 'updatedAt'>>,
   ): Promise<Batch>;
   delete(organizationId: string, id: string): Promise<void>;
+  verifyReferences(
+    organizationId: string,
+    references: { productId?: string },
+  ): Promise<boolean>;
 }

@@ -1,19 +1,20 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsInt, IsNumber, IsObject, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsEnum, IsInt, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { StockStatus } from '@prisma/client';
+import { IsSafeJson } from '../../common/validators/safe-json.validator';
 
 export class UpdateStockDto {
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true, maxLength: 40 })
   @IsOptional()
   @IsString()
   @MaxLength(40)
-  batchId?: string;
+  batchId?: string | null;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true, maxLength: 40 })
   @IsOptional()
   @IsString()
   @MaxLength(40)
-  serialNumberId?: string;
+  serialNumberId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -76,6 +77,6 @@ export class UpdateStockDto {
 
   @ApiPropertyOptional({ type: 'object', additionalProperties: true })
   @IsOptional()
-  @IsObject()
+  @IsSafeJson()
   metadata?: Record<string, unknown>;
 }

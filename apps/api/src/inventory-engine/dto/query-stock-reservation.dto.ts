@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsEnum, IsInt, IsIn, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { ReservationStatus } from '@prisma/client';
 
 export class QueryStockReservationDto {
@@ -27,6 +27,7 @@ export class QueryStockReservationDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(40)
   stockId?: string;
 
   @ApiPropertyOptional({ default: 'createdAt' })
@@ -36,6 +37,6 @@ export class QueryStockReservationDto {
 
   @ApiPropertyOptional({ default: 'desc' })
   @IsOptional()
-  @IsString()
+  @IsIn(['asc', 'desc'])
   sortOrder?: 'asc' | 'desc' = 'desc';
 }

@@ -26,4 +26,18 @@ export class PrismaStockAdjustmentRepository implements StockAdjustmentRepositor
       data: data as Prisma.StockAdjustmentUncheckedCreateInput,
     });
   }
+
+  async verifyReferences(
+    organizationId: string,
+    references: { stockId?: string },
+  ): Promise<boolean> {
+    if (references.stockId !== undefined) {
+      const stock = await this.prisma.stock.findFirst({
+        where: { id: references.stockId, organizationId },
+        select: { id: true },
+      });
+      if (!stock) return false;
+    }
+    return true;
+  }
 }

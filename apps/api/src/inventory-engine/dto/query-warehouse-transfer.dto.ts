@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsEnum, IsInt, IsIn, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { TransferStatus } from '@prisma/client';
 
 export class QueryWarehouseTransferDto {
@@ -22,6 +22,7 @@ export class QueryWarehouseTransferDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   search?: string;
 
   @ApiPropertyOptional({ enum: TransferStatus })
@@ -36,6 +37,6 @@ export class QueryWarehouseTransferDto {
 
   @ApiPropertyOptional({ default: 'desc' })
   @IsOptional()
-  @IsString()
+  @IsIn(['asc', 'desc'])
   sortOrder?: 'asc' | 'desc' = 'desc';
 }

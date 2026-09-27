@@ -5,4 +5,8 @@ export interface StockMovementRepository {
   findById(organizationId: string, id: string): Promise<StockMovement | null>;
   findByOrganization(organizationId: string): Promise<StockMovement[]>;
   create(data: Omit<StockMovement, 'id' | 'createdAt'>): Promise<StockMovement>;
+  verifyReferences(
+    organizationId: string,
+    references: { stockId?: string },
+  ): Promise<boolean>;
 }

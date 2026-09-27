@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsEnum, IsInt, IsIn, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
 import { InventoryTransactionType, TransactionType } from '@prisma/client';
 
 export class QueryInventoryTransactionDto {
@@ -32,6 +32,7 @@ export class QueryInventoryTransactionDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(40)
   productId?: string;
 
   @ApiPropertyOptional({ default: 'createdAt' })
@@ -41,6 +42,6 @@ export class QueryInventoryTransactionDto {
 
   @ApiPropertyOptional({ default: 'desc' })
   @IsOptional()
-  @IsString()
+  @IsIn(['asc', 'desc'])
   sortOrder?: 'asc' | 'desc' = 'desc';
 }

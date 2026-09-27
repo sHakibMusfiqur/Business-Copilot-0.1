@@ -7,4 +7,8 @@ export interface StockAdjustmentRepository {
   create(
     data: Omit<StockAdjustment, 'id' | 'createdAt'>,
   ): Promise<StockAdjustment>;
+  verifyReferences(
+    organizationId: string,
+    references: { stockId?: string },
+  ): Promise<boolean>;
 }

@@ -9,4 +9,13 @@ export interface StockRepository {
     id: string,
     data: Partial<Omit<Stock, 'id' | 'createdAt' | 'updatedAt'>>,
   ): Promise<Stock>;
+  verifyReferences(
+    organizationId: string,
+    references: {
+      warehouseId?: string;
+      productId?: string;
+      batchId?: string;
+      serialNumberId?: string;
+    },
+  ): Promise<boolean>;
 }

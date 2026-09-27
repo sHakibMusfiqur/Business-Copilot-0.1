@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -79,6 +80,13 @@ export class InventoryTransactionService {
   }
 
   async create(organizationId: string, currentUserId: string, dto: CreateInventoryTransactionDto) {
+    const referencesValid = await this.inventoryTransactionRepository.verifyReferences(organizationId, {
+      productId: dto.productId,
+    });
+    if (!referencesValid) {
+      throw new BadRequestException('Related record not found');
+    }
+
     const data = {
       organizationId,
       productId: dto.productId,

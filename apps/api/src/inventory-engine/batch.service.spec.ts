@@ -44,14 +44,15 @@ const buildService = (overrides: Record<string, jest.Mock> = {}) => {
   const create = overrides.create ?? jest.fn();
   const update = overrides.update ?? jest.fn();
   const deleteFn = overrides.delete ?? jest.fn().mockResolvedValue(undefined);
+  const verifyReferences = overrides.verifyReferences ?? jest.fn().mockResolvedValue(true);
   const auditRecord = overrides.auditRecord ?? jest.fn().mockResolvedValue(undefined);
 
   const service = new BatchService(
-    { findById, findByOrganization, create, update, delete: deleteFn } as unknown as BatchRepository,
+    { findById, findByOrganization, create, update, delete: deleteFn, verifyReferences } as unknown as BatchRepository,
     { record: auditRecord } as unknown as AuditService,
   );
 
-  return { service, findById, findByOrganization, create, update, deleteFn, auditRecord };
+  return { service, findById, findByOrganization, create, update, deleteFn, verifyReferences, auditRecord };
 };
 
 describe('BatchService', () => {

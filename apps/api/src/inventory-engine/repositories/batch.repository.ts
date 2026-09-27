@@ -43,4 +43,18 @@ export class PrismaBatchRepository implements BatchRepository {
       data: { deletedAt: new Date() },
     });
   }
+
+  async verifyReferences(
+    organizationId: string,
+    references: { productId?: string },
+  ): Promise<boolean> {
+    if (references.productId !== undefined) {
+      const product = await this.prisma.product.findFirst({
+        where: { id: references.productId, organizationId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!product) return false;
+    }
+    return true;
+  }
 }

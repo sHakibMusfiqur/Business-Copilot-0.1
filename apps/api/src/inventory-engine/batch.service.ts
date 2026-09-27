@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -72,6 +73,13 @@ export class BatchService {
   }
 
   async create(organizationId: string, currentUserId: string, dto: CreateBatchDto) {
+    const referencesValid = await this.batchRepository.verifyReferences(organizationId, {
+      productId: dto.productId,
+    });
+    if (!referencesValid) {
+      throw new BadRequestException('Related record not found');
+    }
+
     const data = {
       organizationId,
       productId: dto.productId,

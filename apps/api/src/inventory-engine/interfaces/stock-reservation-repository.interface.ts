@@ -11,4 +11,8 @@ export interface StockReservationRepository {
     id: string,
     data: Partial<Omit<StockReservation, 'id' | 'createdAt' | 'updatedAt'>>,
   ): Promise<StockReservation>;
+  verifyReferences(
+    organizationId: string,
+    references: { stockId?: string },
+  ): Promise<boolean>;
 }

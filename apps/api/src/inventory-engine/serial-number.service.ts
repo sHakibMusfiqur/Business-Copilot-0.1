@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -72,6 +73,14 @@ export class SerialNumberService {
   }
 
   async create(organizationId: string, currentUserId: string, dto: CreateSerialNumberDto) {
+    const referencesValid = await this.serialNumberRepository.verifyReferences(organizationId, {
+      productId: dto.productId,
+      batchId: dto.batchId,
+    });
+    if (!referencesValid) {
+      throw new BadRequestException('Related record not found');
+    }
+
     const data = {
       organizationId,
       productId: dto.productId,
@@ -108,6 +117,15 @@ export class SerialNumberService {
   }
 
   async update(organizationId: string, currentUserId: string, id: string, dto: UpdateSerialNumberDto) {
+    if (dto.batchId !== undefined && dto.batchId !== null) {
+      const referencesValid = await this.serialNumberRepository.verifyReferences(organizationId, {
+        batchId: dto.batchId,
+      });
+      if (!referencesValid) {
+        throw new BadRequestException('Related record not found');
+      }
+    }
+
     const data: Partial<Parameters<SerialNumberRepository['update']>[2]> = {};
 
     if (dto.serialNumber !== undefined) data.serialNumber = dto.serialNumber.trim();

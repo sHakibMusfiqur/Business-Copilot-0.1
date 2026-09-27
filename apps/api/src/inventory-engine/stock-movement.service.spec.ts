@@ -35,14 +35,15 @@ const buildService = (overrides: Record<string, jest.Mock> = {}) => {
   const findById = overrides.findById ?? jest.fn();
   const findByOrganization = overrides.findByOrganization ?? jest.fn().mockResolvedValue([]);
   const create = overrides.create ?? jest.fn();
+  const verifyReferences = overrides.verifyReferences ?? jest.fn().mockResolvedValue(true);
   const auditRecord = overrides.auditRecord ?? jest.fn().mockResolvedValue(undefined);
 
   const service = new StockMovementService(
-    { findById, findByOrganization, create } as unknown as StockMovementRepository,
+    { findById, findByOrganization, create, verifyReferences } as unknown as StockMovementRepository,
     { record: auditRecord } as unknown as AuditService,
   );
 
-  return { service, findById, findByOrganization, create, auditRecord };
+  return { service, findById, findByOrganization, create, verifyReferences, auditRecord };
 };
 
 describe('StockMovementService', () => {

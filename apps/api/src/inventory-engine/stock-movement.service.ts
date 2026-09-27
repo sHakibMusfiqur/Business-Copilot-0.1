@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -12,10 +13,7 @@ import type { StockMovementRepository } from './interfaces/stock-movement-reposi
 import type { CreateStockMovementDto } from './dto/create-stock-movement.dto';
 import type { QueryStockMovementDto } from './dto/query-stock-movement.dto';
 
-/**
- * Append-only ledger service: create/read only. No update or delete methods
- * exist by design; StockMovement rows are never mutated after creation.
- */
+
 @Injectable()
 export class StockMovementService {
   private readonly logger = new Logger(StockMovementService.name);
@@ -74,6 +72,13 @@ export class StockMovementService {
   }
 
   async create(organizationId: string, currentUserId: string, dto: CreateStockMovementDto) {
+    const referencesValid = await this.stockMovementRepository.verifyReferences(organizationId, {
+      stockId: dto.stockId,
+    });
+    if (!referencesValid) {
+      throw new BadRequestException('Related record not found');
+    }
+
     const data = {
       organizationId,
       stockId: dto.stockId,
