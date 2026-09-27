@@ -60,6 +60,23 @@ describe('isSafeJson rule set', () => {
     expect(isSafeJson(JSON.parse('{"list": [{"constructor": 1}]}'))).toBe(false);
   });
 
+  it('rejects non-plain nested objects (same plain-object rule as the top level)', () => {
+    expect(isSafeJson({ nested: new Map([['k', 'v']]) })).toBe(false);
+    expect(isSafeJson({ nested: new Date() })).toBe(false);
+    expect(isSafeJson({ nested: new Set([1]) })).toBe(false);
+    expect(isSafeJson({ nested: new Error('x') })).toBe(false);
+    expect(
+      isSafeJson({ list: [1, { inner: new Map() }] }),
+    ).toBe(false);
+  });
+
+  it('accepts plain and null-prototype nested objects', () => {
+    expect(isSafeJson({ nested: { a: 1, b: { c: [true, null] } } })).toBe(true);
+    const nullProtoChild: Record<string, unknown> = Object.create(null);
+    nullProtoChild.ok = 1;
+    expect(isSafeJson({ nested: nullProtoChild })).toBe(true);
+  });
+
   it('enforces the documented depth limit', () => {
     expect(isSafeJson(nest(SAFE_JSON_MAX_DEPTH))).toBe(true);
     expect(isSafeJson(nest(SAFE_JSON_MAX_DEPTH + 1))).toBe(false);

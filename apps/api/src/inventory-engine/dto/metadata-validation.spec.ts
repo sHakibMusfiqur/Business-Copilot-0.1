@@ -87,6 +87,17 @@ describe.each(metadataDtos.map((dto) => [dto.name, dto]))('%s safe metadata vali
     expect(await metadataError(Dto, JSON.parse('{"prototype": 1}'))).toBeDefined();
   });
 
+  it('rejects non-plain nested objects (Map/Date/Set/Error)', async () => {
+    expect(await metadataError(Dto, { nested: new Map([['k', 'v']]) })).toBeDefined();
+    expect(await metadataError(Dto, { nested: new Date() })).toBeDefined();
+    expect(await metadataError(Dto, { nested: new Set([1]) })).toBeDefined();
+    expect(await metadataError(Dto, { nested: new Error('x') })).toBeDefined();
+  });
+
+  it('accepts plain nested objects', async () => {
+    expect(await metadataError(Dto, { nested: { a: 1, b: { c: [true, null] } } })).toBeUndefined();
+  });
+
   it('rejects payloads deeper than the documented depth limit', async () => {
     expect(await metadataError(Dto, nest(SAFE_JSON_MAX_DEPTH + 1))).toBeDefined();
   });

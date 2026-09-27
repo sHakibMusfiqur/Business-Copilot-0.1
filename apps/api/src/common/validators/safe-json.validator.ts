@@ -22,6 +22,10 @@ function isSafeJsonValue(value: unknown, depth: number): boolean {
     }
     return true;
   }
+  const prototype = Object.getPrototypeOf(value) as object | null;
+  if (prototype !== Object.prototype && prototype !== null) {
+    return false;
+  }
   for (const key of Object.keys(value)) {
     if (FORBIDDEN_KEYS.has(key)) return false;
     if (!isSafeJsonValue((value as Record<string, unknown>)[key], depth + 1)) {

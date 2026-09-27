@@ -3,8 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import type { OpeningStock, OpeningStockRepository } from '../interfaces';
 
-// Standalone ledger: deliberately no relation to Stock; batchId/serialNumberId
-// remain plain nullable scalars.
+
 export class PrismaOpeningStockRepository implements OpeningStockRepository {
   constructor(private readonly prisma: PrismaService) {}
 
