@@ -45,14 +45,14 @@ describe('PrismaBatchRepository', () => {
     expect(create).toHaveBeenCalledWith({ data });
   });
 
-  it('create: propagates unique-constraint failure on organization + product + batchNumber', async () => {
+  it('create: propagates unique-constraint failure (P2002) on organization + product + batchNumber', async () => {
     const { repository, create } = buildRepository();
     create.mockRejectedValue(
-      Object.assign(new Error('Unique constraint failed'), { code: 'P2022' }),
+      Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }),
     );
 
     await expect(repository.create(buildBatchData())).rejects.toMatchObject({
-      code: 'P2022',
+      code: 'P2002',
     });
   });
 

@@ -47,14 +47,14 @@ describe('PrismaSerialNumberRepository', () => {
     expect((create.mock.calls[0][0] as { data: { batchId: string | null } }).data.batchId).toBeNull();
   });
 
-  it('create: propagates unique-constraint failure on organization + product + serialNumber', async () => {
+  it('create: propagates unique-constraint failure (P2002) on organization + product + serialNumber', async () => {
     const { repository, create } = buildRepository();
     create.mockRejectedValue(
-      Object.assign(new Error('Unique constraint failed'), { code: 'P2022' }),
+      Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }),
     );
 
     await expect(repository.create(buildSerialNumberData())).rejects.toMatchObject({
-      code: 'P2022',
+      code: 'P2002',
     });
   });
 

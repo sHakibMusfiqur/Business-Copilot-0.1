@@ -55,19 +55,19 @@ describe('PrismaStockRepository', () => {
     expect(create).toHaveBeenCalledWith({ data });
   });
 
-  it('create: propagates composite unique-constraint failure on [warehouseId, productId, batchId, serialNumberId]', async () => {
+  it('create: propagates composite unique-constraint failure (P2002) on [warehouseId, productId, batchId, serialNumberId]', async () => {
     const { repository, create } = buildRepository();
     create.mockRejectedValue(
       Object.assign(
         new Error(
           'Unique constraint failed on the fields: (`warehouseId`,`productId`,`batchId`,`serialNumberId`)',
         ),
-        { code: 'P2022' },
+        { code: 'P2002' },
       ),
     );
 
     await expect(repository.create(buildStockData())).rejects.toMatchObject({
-      code: 'P2022',
+      code: 'P2002',
     });
   });
 

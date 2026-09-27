@@ -55,14 +55,14 @@ describe('PrismaWarehouseTransferRepository', () => {
     expect(passed.transferNumber).toBe('TRF-0001');
   });
 
-  it('create: propagates unique-constraint failure on organization + transferNumber', async () => {
+  it('create: propagates unique-constraint failure (P2002) on organization + transferNumber', async () => {
     const { repository, create } = buildRepository();
     create.mockRejectedValue(
-      Object.assign(new Error('Unique constraint failed'), { code: 'P2022' }),
+      Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }),
     );
 
     await expect(repository.create(buildTransferData())).rejects.toMatchObject({
-      code: 'P2022',
+      code: 'P2002',
     });
   });
 
