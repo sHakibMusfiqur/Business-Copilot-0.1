@@ -4,7 +4,9 @@ import { getMetadataStorage, validate } from 'class-validator';
 import { CreateOpeningStockDto } from './create-opening-stock.dto';
 import { UpdateOpeningStockDto } from './update-opening-stock.dto';
 
-const declaredProps = (target: Function) =>
+type ClassConstructor = abstract new (...args: never[]) => unknown;
+
+const declaredProps = (target: ClassConstructor) =>
   getMetadataStorage()
     .getTargetValidationMetadatas(target, '', false, false)
     .map((meta) => meta.propertyName);

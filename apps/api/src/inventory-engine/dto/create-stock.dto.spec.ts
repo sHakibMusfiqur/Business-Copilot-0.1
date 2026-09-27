@@ -1,11 +1,12 @@
 import { plainToInstance } from 'class-transformer';
 import { getMetadataStorage, validate } from 'class-validator';
-import { StockStatus } from '@prisma/client';
 
 import { CreateStockDto } from './create-stock.dto';
 import { UpdateStockDto } from './update-stock.dto';
 
-const declaredProps = (target: Function) =>
+type ClassConstructor = abstract new (...args: never[]) => unknown;
+
+const declaredProps = (target: ClassConstructor) =>
   getMetadataStorage()
     .getTargetValidationMetadatas(target, '', false, false)
     .map((meta) => meta.propertyName);

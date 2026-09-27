@@ -5,7 +5,9 @@ import { ReservationStatus } from '@prisma/client';
 import { CreateStockReservationDto } from './create-stock-reservation.dto';
 import { UpdateStockReservationDto } from './update-stock-reservation.dto';
 
-const declaredProps = (target: Function) =>
+type ClassConstructor = abstract new (...args: never[]) => unknown;
+
+const declaredProps = (target: ClassConstructor) =>
   getMetadataStorage()
     .getTargetValidationMetadatas(target, '', false, false)
     .map((meta) => meta.propertyName);

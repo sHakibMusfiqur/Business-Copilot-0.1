@@ -5,7 +5,9 @@ import { SerialStatus } from '@prisma/client';
 import { CreateSerialNumberDto } from './create-serial-number.dto';
 import { UpdateSerialNumberDto } from './update-serial-number.dto';
 
-const declaredProps = (target: Function) =>
+type ClassConstructor = abstract new (...args: never[]) => unknown;
+
+const declaredProps = (target: ClassConstructor) =>
   getMetadataStorage()
     .getTargetValidationMetadatas(target, '', false, false)
     .map((meta) => meta.propertyName);

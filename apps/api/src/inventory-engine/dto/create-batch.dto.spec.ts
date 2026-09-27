@@ -6,7 +6,9 @@ import { CreateBatchDto } from './create-batch.dto';
 import { UpdateBatchDto } from './update-batch.dto';
 import { QueryBatchDto } from './query-batch.dto';
 
-const declaredProps = (target: Function) =>
+type ClassConstructor = abstract new (...args: never[]) => unknown;
+
+const declaredProps = (target: ClassConstructor) =>
   getMetadataStorage()
     .getTargetValidationMetadatas(target, '', false, false)
     .map((meta) => meta.propertyName);

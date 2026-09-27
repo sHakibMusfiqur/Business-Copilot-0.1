@@ -5,7 +5,9 @@ import { StockMovementType } from '@prisma/client';
 import { CreateStockMovementDto } from './create-stock-movement.dto';
 import { QueryStockMovementDto } from './query-stock-movement.dto';
 
-const declaredProps = (target: Function) =>
+type ClassConstructor = abstract new (...args: never[]) => unknown;
+
+const declaredProps = (target: ClassConstructor) =>
   getMetadataStorage()
     .getTargetValidationMetadatas(target, '', false, false)
     .map((meta) => meta.propertyName);

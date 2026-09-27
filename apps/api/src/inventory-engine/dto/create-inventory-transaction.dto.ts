@@ -1,13 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsEnum, IsInt, IsNumber, IsObject, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
+import { IsEnum, IsInt, IsNumber, IsObject, IsOptional, IsString, MaxLength, Min, MinLength } from 'class-validator';
 import { InventoryTransactionType, TransactionType } from '@prisma/client';
 
-/**
- * Legacy `type` (TransactionType) and engine `transactionType`
- * (InventoryTransactionType) intentionally coexist on this DTO. They are
- * never mapped to each other; nullable engine fields stay nullable.
- * `createdById`, `createdAt` and `id` are server-managed and absent here.
- */
+
 export class CreateInventoryTransactionDto {
   @ApiProperty()
   @IsString()

@@ -5,7 +5,9 @@ import { TransferStatus } from '@prisma/client';
 import { CreateWarehouseTransferDto } from './create-warehouse-transfer.dto';
 import { UpdateWarehouseTransferDto } from './update-warehouse-transfer.dto';
 
-const declaredProps = (target: Function) =>
+type ClassConstructor = abstract new (...args: never[]) => unknown;
+
+const declaredProps = (target: ClassConstructor) =>
   getMetadataStorage()
     .getTargetValidationMetadatas(target, '', false, false)
     .map((meta) => meta.propertyName);
