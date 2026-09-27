@@ -100,6 +100,15 @@ describe('StockReservationService', () => {
       expect(data.reservedQuantity).toBe(0);
     });
 
+    it('persists an explicitly provided null expiresAt as null', async () => {
+      const { service, create } = buildService();
+      create.mockResolvedValue(buildReservation());
+
+      await service.create(ORG_ID, USER_ID, { stockId: 'st1', quantity: 3, expiresAt: null });
+
+      expect(create.mock.calls[0][0].expiresAt).toBeNull();
+    });
+
     it('translates unique-constraint failure (P2002) into ConflictException', async () => {
       const { service, create, auditRecord } = buildService();
       create.mockRejectedValue(p2002());
@@ -168,7 +177,7 @@ describe('StockReservationService', () => {
       const { service, update } = buildService();
       update.mockResolvedValue(buildReservation({ expiresAt: null }));
 
-      await service.update(ORG_ID, USER_ID, 'r1', { expiresAt: null as unknown as string });
+      await service.update(ORG_ID, USER_ID, 'r1', { expiresAt: null });
 
       expect(update).toHaveBeenCalledWith(ORG_ID, 'r1', { expiresAt: null });
     });

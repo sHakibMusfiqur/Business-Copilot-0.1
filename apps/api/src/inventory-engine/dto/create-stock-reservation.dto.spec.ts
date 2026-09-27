@@ -61,12 +61,28 @@ describe('CreateStockReservationDto', () => {
     expect(props).not.toContain('organizationId');
     expect(props).not.toContain('deletedAt');
   });
+
+  it('accepts an explicit null expiresAt (clearing semantics)', async () => {
+    const dto = plainToInstance(CreateStockReservationDto, {
+      stockId: 'st1',
+      quantity: 1,
+      expiresAt: null,
+    });
+    expect(await validate(dto)).toHaveLength(0);
+    expect(dto.expiresAt).toBeNull();
+  });
 });
 
 describe('UpdateStockReservationDto', () => {
   it('passes with all fields optional', async () => {
     const dto = plainToInstance(UpdateStockReservationDto, {});
     expect(await validate(dto)).toHaveLength(0);
+  });
+
+  it('accepts an explicit null expiresAt (clearing semantics)', async () => {
+    const dto = plainToInstance(UpdateStockReservationDto, { expiresAt: null });
+    expect(await validate(dto)).toHaveLength(0);
+    expect(dto.expiresAt).toBeNull();
   });
 
   it('declares no organizationId or stockId properties', () => {

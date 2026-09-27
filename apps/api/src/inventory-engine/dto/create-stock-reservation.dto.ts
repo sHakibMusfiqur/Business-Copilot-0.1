@@ -44,10 +44,10 @@ export class CreateStockReservationDto {
   @MaxLength(500)
   notes?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true })
   @IsOptional()
   @IsDateString()
-  expiresAt?: string;
+  expiresAt?: string | null;
 
   @ApiPropertyOptional({ type: 'object', additionalProperties: true })
   @IsOptional()
