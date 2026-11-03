@@ -110,6 +110,13 @@ export const API_ROUTES = {
     SUMMARY: '/crm/summary',
     LEADS: '/crm/leads',
     ACTIVITIES: '/crm/activities',
+    CONTACTS: '/crm/contacts',
+    DEALS: '/crm/deals',
+    COMPANIES: '/crm/companies',
+    PIPELINES: '/crm/pipelines',
+    DASHBOARD: '/crm/dashboard',
+    REPORTS: '/crm/reports',
+    SALES_TARGETS: '/crm/sales-targets',
   },
   AUDIT: {
     ROOT: '/audit',

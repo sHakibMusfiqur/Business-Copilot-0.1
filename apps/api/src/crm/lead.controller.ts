@@ -207,6 +207,17 @@ export class LeadController {
     return this.activityService.findById(orgId, id);
   }
 
+  @Post('activities')
+  @UseGuards(PermissionGuard)
+  @Permissions(['crm.create'])
+  @ApiOperation({ summary: 'Create an activity linked to a lead, contact, deal or company' })
+  async createGlobalActivity(@CurrentUser() user: CurrentUserPayload, @Body() dto: CreateActivityDto) {
+    const orgId = this.requireOrg(user);
+    await this.requireCrmAccess(user);
+    // The service enforces exactly one primary entity reference
+    return this.activityService.create(orgId, user.id, dto);
+  }
+
   @Get('leads/:id/activities')
   @UseGuards(PermissionGuard)
   @Permissions(['crm.read'])
@@ -232,7 +243,10 @@ export class LeadController {
   ) {
     const orgId = this.requireOrg(user);
     await this.requireCrmAccess(user);
-    return this.activityService.create(orgId, user.id, id, dto);
+    // Legacy route: when the body carries no entity reference, bind to the lead in the path
+    const effectiveDto =
+      !dto.leadId && !dto.contactId && !dto.dealId && !dto.companyId ? { ...dto, leadId: id } : dto;
+    return this.activityService.create(orgId, user.id, effectiveDto);
   }
 
   @Patch('activities/:id/toggle')

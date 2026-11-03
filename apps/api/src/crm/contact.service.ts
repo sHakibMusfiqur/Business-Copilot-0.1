@@ -13,6 +13,26 @@ import type { CreateContactDto } from './dto/create-contact.dto';
 import type { UpdateContactDto } from './dto/update-contact.dto';
 import type { QueryContactsDto } from './dto/query-contacts.dto';
 
+const CONTACT_SELECT = {
+  id: true,
+  firstName: true,
+  lastName: true,
+  email: true,
+  phone: true,
+  company: true,
+  companyId: true,
+  jobTitle: true,
+  status: true,
+  source: true,
+  ownerId: true,
+  leadId: true,
+  notes: true,
+  createdAt: true,
+  updatedAt: true,
+  owner: { select: { id: true, name: true, email: true } },
+  companyRecord: { select: { id: true, name: true } },
+} as const;
+
 @Injectable()
 export class ContactService {
   private readonly logger = new Logger(ContactService.name);
@@ -24,6 +44,9 @@ export class ContactService {
       page = 1,
       limit = 10,
       search,
+      status,
+      ownerId,
+      companyId,
       sortBy = 'createdAt',
       sortOrder = 'desc',
     } = query;
@@ -42,6 +65,9 @@ export class ContactService {
         { company: { contains: sanitized, mode: 'insensitive' } },
       ];
     }
+    if (status) where.status = status;
+    if (ownerId) where.ownerId = ownerId;
+    if (companyId) where.companyId = companyId;
 
     const allowedSortFields = ['firstName', 'lastName', 'email', 'company', 'createdAt', 'updatedAt'];
     const field = allowedSortFields.includes(sortBy) ? sortBy : 'createdAt';
@@ -51,19 +77,7 @@ export class ContactService {
       this.prisma.contact.count({ where }),
       this.prisma.contact.findMany({
         where,
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-          phone: true,
-          company: true,
-          jobTitle: true,
-          leadId: true,
-          notes: true,
-          createdAt: true,
-          updatedAt: true,
-        },
+        select: CONTACT_SELECT,
         orderBy: { [field]: order },
         skip: (page - 1) * limit,
         take: limit,
@@ -80,17 +94,7 @@ export class ContactService {
     const contact = await this.prisma.contact.findFirst({
       where: { id: contactId, organizationId: orgId, deletedAt: null },
       select: {
-        id: true,
-        firstName: true,
-        lastName: true,
-        email: true,
-        phone: true,
-        company: true,
-        jobTitle: true,
-        leadId: true,
-        notes: true,
-        createdAt: true,
-        updatedAt: true,
+        ...CONTACT_SELECT,
         lead: { select: { id: true, leadNumber: true, name: true, status: true } },
       },
     });
@@ -103,35 +107,29 @@ export class ContactService {
     if (dto.leadId) {
       await this.assertLeadAccessible(orgId, dto.leadId);
     }
+    if (dto.companyId) await this.assertCompanyAccessible(orgId, dto.companyId);
+    if (dto.ownerId) await this.assertOwnerAccessible(orgId, dto.ownerId);
 
-    const data: Prisma.ContactCreateInput = {
+    const data: Prisma.ContactUncheckedCreateInput = {
+      organizationId: orgId,
       firstName: dto.firstName.trim(),
       lastName: dto.lastName.trim(),
-      organization: { connect: { id: orgId } },
       ...(dto.email !== undefined && { email: dto.email.toLowerCase().trim() }),
       ...(dto.phone !== undefined && { phone: dto.phone.trim() }),
       ...(dto.company !== undefined && { company: dto.company.trim() }),
       ...(dto.jobTitle !== undefined && { jobTitle: dto.jobTitle.trim() }),
       ...(dto.notes !== undefined && { notes: dto.notes.trim() }),
-      ...(dto.leadId ? { lead: { connect: { id: dto.leadId } } } : {}),
+      ...(dto.status !== undefined && { status: dto.status }),
+      ...(dto.source !== undefined && { source: dto.source.trim() }),
+      ...(dto.companyId !== undefined && { companyId: dto.companyId }),
+      ...(dto.ownerId !== undefined && { ownerId: dto.ownerId }),
+      ...(dto.leadId ? { leadId: dto.leadId } : {}),
     };
 
     const contact = await this.prisma.contact
       .create({
         data,
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-          phone: true,
-          company: true,
-          jobTitle: true,
-          leadId: true,
-          notes: true,
-          createdAt: true,
-          updatedAt: true,
-        },
+        select: CONTACT_SELECT,
       })
       .catch((err: unknown) => {
         if ((err as Prisma.PrismaClientKnownRequestError)?.code === 'P2002') {
@@ -148,6 +146,8 @@ export class ContactService {
     if (dto.leadId) {
       await this.assertLeadAccessible(orgId, dto.leadId);
     }
+    if (dto.companyId) await this.assertCompanyAccessible(orgId, dto.companyId);
+    if (dto.ownerId) await this.assertOwnerAccessible(orgId, dto.ownerId);
 
     const updateData: Prisma.ContactUpdateInput = {};
     if (dto.firstName !== undefined) updateData.firstName = dto.firstName.trim();
@@ -157,6 +157,14 @@ export class ContactService {
     if (dto.company !== undefined) updateData.company = dto.company.trim();
     if (dto.jobTitle !== undefined) updateData.jobTitle = dto.jobTitle.trim();
     if (dto.notes !== undefined) updateData.notes = dto.notes.trim();
+    if (dto.status !== undefined) updateData.status = dto.status;
+    if (dto.source !== undefined) updateData.source = dto.source.trim();
+    if (dto.companyId !== undefined) {
+      updateData.companyRecord = dto.companyId ? { connect: { id: dto.companyId } } : { disconnect: true };
+    }
+    if (dto.ownerId !== undefined) {
+      updateData.owner = dto.ownerId ? { connect: { id: dto.ownerId } } : { disconnect: true };
+    }
     if (dto.leadId !== undefined) {
       updateData.lead = dto.leadId ? { connect: { id: dto.leadId } } : { disconnect: true };
     }
@@ -165,18 +173,7 @@ export class ContactService {
       .update({
         where: { id: contactId, organizationId: orgId, deletedAt: null },
         data: updateData,
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          email: true,
-          phone: true,
-          company: true,
-          jobTitle: true,
-          leadId: true,
-          notes: true,
-          updatedAt: true,
-        },
+        select: CONTACT_SELECT,
       })
       .catch((err: unknown) => {
         if ((err as Prisma.PrismaClientKnownRequestError)?.code === 'P2025') {
@@ -218,6 +215,30 @@ export class ContactService {
 
     if (!lead) {
       throw new BadRequestException('Lead not found or not accessible to this organization');
+    }
+  }
+
+  /** Ensures a company belongs to the organization before linking a contact to it. */
+  private async assertCompanyAccessible(orgId: string, companyId: string): Promise<void> {
+    const company = await this.prisma.company.findFirst({
+      where: { id: companyId, organizationId: orgId, deletedAt: null },
+      select: { id: true },
+    });
+
+    if (!company) {
+      throw new BadRequestException('Company not found or not accessible to this organization');
+    }
+  }
+
+  /** Ensures an owner belongs to the organization before assigning a contact to them. */
+  private async assertOwnerAccessible(orgId: string, ownerId: string): Promise<void> {
+    const owner = await this.prisma.user.findFirst({
+      where: { id: ownerId, organizationId: orgId, deletedAt: null },
+      select: { id: true },
+    });
+
+    if (!owner) {
+      throw new BadRequestException('Owner not found or not accessible to this organization');
     }
   }
 }

@@ -46,6 +46,16 @@ export class QueryDealsDto {
   @IsString()
   ownerId?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  companyId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  contactId?: string;
+
   @ApiPropertyOptional({ enum: allowedSortFields })
   @IsOptional()
   @IsEnum(allowedSortFields)

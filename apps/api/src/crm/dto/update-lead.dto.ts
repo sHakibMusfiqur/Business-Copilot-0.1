@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsString, IsOptional, IsEnum, IsNumber, Min, MinLength } from 'class-validator';
+import { IsString, IsOptional, IsEnum, IsNumber, Min, MinLength, MaxLength } from 'class-validator';
 import { LeadStatus } from '@prisma/client';
 
 export class UpdateLeadDto {
@@ -14,6 +14,12 @@ export class UpdateLeadDto {
   @IsOptional()
   @IsString()
   company?: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  companyId?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()

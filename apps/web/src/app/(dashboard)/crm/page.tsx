@@ -1,167 +1,271 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Users2,
-  Target,
-  TrendingUp,
   DollarSign,
+  TrendingUp,
+  Trophy,
   XCircle,
   CalendarClock,
-  Phone,
-  Mail,
-  Users,
-  ClipboardList,
+  Target,
+  Activity as ActivityIcon,
 } from 'lucide-react';
 
 import { DashboardSkeleton } from '@/components/dashboard/dashboard-skeleton';
 import { DashboardError } from '@/components/dashboard/dashboard-error';
 import { ForbiddenState } from '@/components/rbac/forbidden-state';
+import { DashboardCard } from '@/components/ui/dashboard-card';
+import { RevenueTrendChart, FunnelBars } from '@/components/crm/crm-charts';
 import { usePermissions } from '@/hooks/use-permissions';
 import { CRM_READ } from '@/lib/permissions';
-import { formatDate, formatCurrency } from '@/lib/utils';
-import { getCrmSummary } from '@/lib/api';
-import type { LeadSummary, Activity } from '@/components/crm/crm-types';
-import { ACTIVITY_TYPE_STYLES } from '@/components/crm/crm-types';
+import { formatCurrency, formatDate } from '@/lib/utils';
+import { getCrmDashboard, getOrganizationUsers } from '@/lib/api';
+import type { CrmDashboard } from '@/lib/api';
 
-const activityTypeIcon: Record<string, typeof Phone> = {
-  CALL: Phone,
-  EMAIL: Mail,
-  MEETING: Users,
-  TASK: ClipboardList,
-  NOTE: ClipboardList,
-};
+type RangePreset = '30d' | '90d' | '6m' | '12m' | 'ytd';
+
+const RANGE_PRESETS: Array<{ value: RangePreset; label: string }> = [
+  { value: '30d', label: 'Last 30 days' },
+  { value: '90d', label: 'Last 90 days' },
+  { value: '6m', label: 'Last 6 months' },
+  { value: '12m', label: 'Last 12 months' },
+  { value: 'ytd', label: 'This year' },
+];
+
+function isoDay(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function rangeForPreset(preset: RangePreset): { startDate: string; endDate: string } {
+  const now = new Date();
+  const end = new Date(now);
+  const start = new Date(now);
+
+  switch (preset) {
+    case '30d':
+      start.setUTCDate(start.getUTCDate() - 30);
+      break;
+    case '90d':
+      start.setUTCDate(start.getUTCDate() - 90);
+      break;
+    case '6m':
+      start.setUTCMonth(start.getUTCMonth() - 6);
+      break;
+    case '12m':
+      start.setUTCMonth(start.getUTCMonth() - 12);
+      break;
+    case 'ytd':
+      start.setUTCMonth(0);
+      start.setUTCDate(1);
+      break;
+  }
+
+  return { startDate: isoDay(start), endDate: isoDay(end) };
+}
+
+interface KpiCardProps {
+  icon: typeof DollarSign;
+  iconClassName?: string;
+  label: string;
+  value: string;
+  hint?: string;
+}
+
+function KpiCard({ icon: Icon, iconClassName = 'text-primary', label, value, hint }: KpiCardProps) {
+  return (
+    <DashboardCard>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+          <p className="mt-1.5 truncate text-2xl font-semibold tracking-tight">{value}</p>
+          {hint && <p className="mt-1 truncate text-xs text-muted-foreground">{hint}</p>}
+        </div>
+        <div className="rounded-lg bg-muted p-2">
+          <Icon className={`h-4 w-4 ${iconClassName}`} aria-hidden="true" />
+        </div>
+      </div>
+    </DashboardCard>
+  );
+}
 
 export default function CrmDashboardPage() {
   const { hasPermission, isLoaded } = usePermissions();
   const canRead = isLoaded && hasPermission(CRM_READ);
 
-  const summaryQuery = useQuery<LeadSummary>({
-    queryKey: ['crm', 'summary'],
-    queryFn: () => getCrmSummary(),
+  const [preset, setPreset] = useState<RangePreset>('12m');
+  const [ownerId, setOwnerId] = useState('');
+
+  const range = useMemo(() => rangeForPreset(preset), [preset]);
+
+  const usersQuery = useQuery({
+    queryKey: ['users', 'assignable'],
+    queryFn: ({ signal }) => getOrganizationUsers(signal),
+    enabled: canRead,
+  });
+
+  const dashboardQuery = useQuery<CrmDashboard>({
+    queryKey: ['crm', 'dashboard', { ...range, ownerId }],
+    queryFn: ({ signal }) =>
+      getCrmDashboard({ startDate: range.startDate, endDate: range.endDate, ownerId: ownerId || undefined }, signal),
     enabled: canRead,
   });
 
   if (!canRead) {
-    return <ForbiddenState title="Access restricted" description="You don't have permission to view CRM. Contact your organization administrator." />;
-  }
-
-  if (summaryQuery.isLoading) {
-    return <DashboardSkeleton />;
-  }
-
-  if (summaryQuery.isError) {
     return (
-      <DashboardError
-        message={summaryQuery.error instanceof Error ? summaryQuery.error.message : undefined}
-        onRetry={() => summaryQuery.refetch()}
+      <ForbiddenState
+        title="Access restricted"
+        description="You don't have permission to view the CRM dashboard. Contact your organization administrator."
       />
     );
   }
 
-  const summary = summaryQuery.data as LeadSummary;
+  if (dashboardQuery.isLoading) {
+    return <DashboardSkeleton />;
+  }
 
-  const statCards = [
-    {
-      label: 'Total Leads',
-      value: summary.totalLeads,
-      icon: Users2,
-      color: 'text-blue-600 bg-blue-100 dark:text-blue-400 dark:bg-blue-900/30',
-    },
-    {
-      label: 'Qualified',
-      value: summary.qualifiedLeads,
-      icon: Target,
-      color: 'text-cyan-600 bg-cyan-100 dark:text-cyan-400 dark:bg-cyan-900/30',
-    },
-    {
-      label: 'Won',
-      value: summary.wonLeads,
-      icon: TrendingUp,
-      color: 'text-emerald-600 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-900/30',
-    },
-    {
-      label: 'Lost',
-      value: summary.lostLeads,
-      icon: XCircle,
-      color: 'text-red-600 bg-red-100 dark:text-red-400 dark:bg-red-900/30',
-    },
-    {
-      label: 'Pipeline Value',
-      value: formatCurrency(summary.pipelineValue),
-      icon: DollarSign,
-      color: 'text-purple-600 bg-purple-100 dark:text-purple-400 dark:bg-purple-900/30',
-    },
-    {
-      label: 'Conversion Rate',
-      value: `${summary.conversionRate}%`,
-      icon: TrendingUp,
-      color: 'text-amber-600 bg-amber-100 dark:text-amber-400 dark:bg-amber-900/30',
-    },
-  ];
+  if (dashboardQuery.isError) {
+    return (
+      <DashboardError
+        message={dashboardQuery.error instanceof Error ? dashboardQuery.error.message : undefined}
+        onRetry={() => dashboardQuery.refetch()}
+      />
+    );
+  }
+
+  const dashboard = dashboardQuery.data as CrmDashboard;
+  const { kpis, funnel, revenueTrend, range: servedRange } = dashboard;
+  const users = usersQuery.data ?? [];
+  const targetPercent = kpis.targetAchievement;
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">CRM Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Overview of your sales pipeline and lead activities
-        </p>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        {statCards.map((card) => (
-          <div key={card.label} className="rounded-xl border bg-card p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <div className={`rounded-lg p-1.5 ${card.color}`}>
-                <card.icon className="h-4 w-4" />
-              </div>
-              <span className="text-xs font-medium text-muted-foreground">{card.label}</span>
-            </div>
-            <p className="text-2xl font-semibold">{card.value}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="rounded-xl border bg-card">
-        <div className="flex items-center gap-2 p-4 border-b">
-          <CalendarClock className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-semibold">Upcoming Activities & Tasks</h2>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">CRM Dashboard</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {formatDate(servedRange.startDate)} – {formatDate(servedRange.endDate)}
+            {ownerId ? ` · filtered by owner` : ''}
+          </p>
         </div>
-        {summary.upcomingActivities.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <CalendarClock className="h-8 w-8 text-muted-foreground mb-3" />
-            <p className="text-sm font-medium mb-1">No upcoming activities</p>
-            <p className="text-xs text-muted-foreground">No pending activities or tasks scheduled.</p>
-          </div>
-        ) : (
-          <div className="divide-y">
-            {summary.upcomingActivities.map((activity: Activity) => {
-              const Icon = activityTypeIcon[activity.type] ?? ClipboardList;
-              return (
-                <div key={activity.id} className="flex items-center gap-4 p-4 hover:bg-muted/30 transition-colors">
-                  <div className={`rounded-lg p-1.5 ${ACTIVITY_TYPE_STYLES[activity.type] ?? 'bg-muted text-muted-foreground'}`}>
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{activity.title}</p>
-                    {activity.lead && (
-                      <p className="text-xs text-muted-foreground truncate">
-                        {activity.lead.name} ({activity.lead.leadNumber})
-                      </p>
-                    )}
-                  </div>
-                  {activity.dueDate && (
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                      {formatDate(activity.dueDate)}
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="sr-only" htmlFor="crm-range-preset">
+            Date range
+          </label>
+          <select
+            id="crm-range-preset"
+            value={preset}
+            onChange={(e) => setPreset(e.target.value as RangePreset)}
+            className="flex h-10 rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          >
+            {RANGE_PRESETS.map((p) => (
+              <option key={p.value} value={p.value}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+
+          <label className="sr-only" htmlFor="crm-owner-filter">
+            Owner
+          </label>
+          <select
+            id="crm-owner-filter"
+            value={ownerId}
+            onChange={(e) => setOwnerId(e.target.value)}
+            className="flex h-10 max-w-[200px] rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+          >
+            <option value="">All owners</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <KpiCard
+          icon={DollarSign}
+          label="Revenue (won)"
+          value={formatCurrency(kpis.revenue)}
+          hint={`${kpis.wonCount} won · ${kpis.lostCount} lost`}
+        />
+        <KpiCard
+          icon={TrendingUp}
+          label="Open Pipeline"
+          value={formatCurrency(kpis.openPipelineValue)}
+          hint={`${kpis.openDealCount} open deals · ${formatCurrency(kpis.weightedPipeline)} weighted`}
+        />
+        <KpiCard
+          icon={Trophy}
+          iconClassName="text-emerald-600"
+          label="Win Rate"
+          value={`${kpis.conversionRate}%`}
+          hint={`${kpis.wonCount} of ${kpis.wonCount + kpis.lostCount} closed deals`}
+        />
+        <KpiCard
+          icon={CalendarClock}
+          label="Sales Cycle"
+          value={`${kpis.averageSalesCycleDays} days`}
+          hint={`median ${kpis.medianSalesCycleDays} days · n=${kpis.salesCycleSampleSize}`}
+        />
+        <KpiCard
+          icon={ActivityIcon}
+          label="New Records"
+          value={`${kpis.newLeadCount} leads`}
+          hint={`${kpis.newContactCount} contacts · ${kpis.newDealCount} deals`}
+        />
+        <DashboardCard>
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Target Achievement
+              </p>
+              <p className="mt-1.5 text-2xl font-semibold tracking-tight">
+                {targetPercent === null ? '—' : `${targetPercent}%`}
+              </p>
+              <p className="mt-1 truncate text-xs text-muted-foreground">
+                {kpis.targetAmount > 0
+                  ? `${formatCurrency(kpis.revenue)} of ${formatCurrency(kpis.targetAmount)} target`
+                  : 'No sales targets set for this period'}
+              </p>
+              <div className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-muted" aria-hidden="true">
+                <div
+                  className="h-full rounded-full bg-primary/75"
+                  style={{ width: `${Math.min(targetPercent ?? 0, 100)}%` }}
+                />
+              </div>
+            </div>
+            <div className="rounded-lg bg-muted p-2">
+              <Target className="h-4 w-4 text-primary" aria-hidden="true" />
+            </div>
+          </div>
+        </DashboardCard>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <DashboardCard className="lg:col-span-2">
+          <h2 className="mb-4 text-sm font-medium">Revenue Trend</h2>
+          <RevenueTrendChart trend={revenueTrend} />
+        </DashboardCard>
+
+        <DashboardCard>
+          <h2 className="mb-4 text-sm font-medium">Stage Funnel</h2>
+          <FunnelBars stages={funnel} />
+        </DashboardCard>
+      </div>
+
+      <DashboardCard>
+        <div className="flex items-center gap-2">
+          <XCircle className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+          <p className="text-xs text-muted-foreground">
+            Metrics cover the selected range and owner filter. Deals are counted as won when moved into a won
+            stage; revenue sums their values.
+          </p>
+        </div>
+      </DashboardCard>
     </div>
   );
 }

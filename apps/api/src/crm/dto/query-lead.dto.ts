@@ -36,6 +36,11 @@ export class QueryLeadDto {
   @IsString()
   assignedToId?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  companyId?: string;
+
   @ApiPropertyOptional({ enum: allowedSortFields })
   @IsOptional()
   @IsEnum(allowedSortFields)

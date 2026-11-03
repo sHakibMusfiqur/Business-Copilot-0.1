@@ -117,6 +117,12 @@ enum ActivityType {
   NOTE
 }
 
+enum ContactStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+}
+
 enum NotificationType {
   INFO
   SUCCESS
@@ -277,6 +283,9 @@ model Organization {
   contacts              Contact[]
   pipelines             Pipeline[]
   deals                 Deal[]
+  companies             Company[]
+  salesTargets          SalesTarget[]
+  activities            Activity[]
   importJobs            ImportJob[]
 
   // Sprint 3.0 — Universal Inventory Engine (Batch 1)
@@ -347,6 +356,11 @@ model User {
   reports               User[]                 @relation("DirectReports")
   inviteeInvitations    Invitation[]           @relation("InvitedReportingManager")
   ownedDeals            Deal[]                 @relation("DealOwner")
+  ownedContacts         Contact[]              @relation("ContactOwner")
+  ownedCompanies        Company[]              @relation("CompanyOwner")
+  assignedActivities    Activity[]             @relation("AssignedActivities")
+  dealStageChanges      DealStageHistory[]
+  salesTargets          SalesTarget[]          @relation("SalesTargetOwner")
   acceptedInvitation    Invitation?            @relation("AcceptedInvitation")
   importJobs            ImportJob[]
 
@@ -547,11 +561,11 @@ model Product {
   salesOrderItems       SalesOrderItem[]
   inventoryTransactions InventoryTransaction[]
 
-  batches         Batch[]
-  serialNumbers   SerialNumber[]
-  stocks          Stock[]
-  transferItems   WarehouseTransferItem[]
-  openingStocks   OpeningStock[]
+  batches       Batch[]
+  serialNumbers SerialNumber[]
+  stocks        Stock[]
+  transferItems WarehouseTransferItem[]
+  openingStocks OpeningStock[]
 
   @@unique([organizationId, sku])
   @@index([organizationId])
@@ -569,11 +583,11 @@ model Warehouse {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  inventories      Inventory[]
-  stocks           Stock[]
-  sourceTransfers  WarehouseTransfer[] @relation("SourceWarehouse")
-  destTransfers    WarehouseTransfer[] @relation("DestWarehouse")
-  openingStocks    OpeningStock[]
+  inventories     Inventory[]
+  stocks          Stock[]
+  sourceTransfers WarehouseTransfer[] @relation("SourceWarehouse")
+  destTransfers   WarehouseTransfer[] @relation("DestWarehouse")
+  openingStocks   OpeningStock[]
 
   @@index([organizationId])
 }
@@ -618,13 +632,13 @@ model InventoryTransaction {
   // Legacy fields above are preserved untouched; no semantic mapping from the
   // legacy TransactionType bucket to InventoryTransactionType is performed and
   // existing rows are never backfilled.
-  transactionType  InventoryTransactionType?
-  referenceType    String?
-  referenceId      String?
-  totalQuantity    Int?
-  totalValue       Decimal?
-  status           String?
-  metadata         Json?
+  transactionType InventoryTransactionType?
+  referenceType   String?
+  referenceId     String?
+  totalQuantity   Int?
+  totalValue      Decimal?
+  status          String?
+  metadata        Json?
 
   @@index([organizationId])
   @@index([productId])
@@ -640,16 +654,16 @@ model InventoryTransaction {
 // scoping only (no Tenant model exists in this schema).
 
 model Batch {
-  id                String       @id @default(cuid())
+  id                String      @id @default(cuid())
   organizationId    String
   productId         String
   batchNumber       String
   manufacturingDate DateTime?
   expiryDate        DateTime?
-  status            BatchStatus  @default(ACTIVE)
-  metadata          Json         @default("{}")
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  status            BatchStatus @default(ACTIVE)
+  metadata          Json        @default("{}")
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
   deletedAt         DateTime?
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -680,9 +694,9 @@ model SerialNumber {
   updatedAt      DateTime     @updatedAt
   deletedAt      DateTime?
 
-  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  product      Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
-  batch        Batch?        @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  product      Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+  batch        Batch?       @relation(fields: [batchId], references: [id], onDelete: SetNull)
 
   stocks        Stock[]
   openingStocks OpeningStock[]
@@ -697,29 +711,29 @@ model SerialNumber {
 }
 
 model Stock {
-  id                String      @id @default(cuid())
-  organizationId    String
-  warehouseId       String
-  productId         String
-  batchId           String?
-  serialNumberId    String?
+  id             String  @id @default(cuid())
+  organizationId String
+  warehouseId    String
+  productId      String
+  batchId        String?
+  serialNumberId String?
 
-  quantity          Int         @default(0)
-  reservedQuantity  Int         @default(0)
-  damagedQuantity   Int         @default(0)
-  returnedQuantity  Int         @default(0)
-  inTransitQuantity Int         @default(0)
-  safetyStock       Int         @default(0)
-  reorderLevel      Int         @default(0)
+  quantity          Int @default(0)
+  reservedQuantity  Int @default(0)
+  damagedQuantity   Int @default(0)
+  returnedQuantity  Int @default(0)
+  inTransitQuantity Int @default(0)
+  safetyStock       Int @default(0)
+  reorderLevel      Int @default(0)
 
-  unitCost          Decimal     @default(0)
-  totalValue        Decimal     @default(0)
+  unitCost   Decimal @default(0)
+  totalValue Decimal @default(0)
 
-  status            StockStatus @default(ACTIVE)
-  metadata          Json        @default("{}")
+  status   StockStatus @default(ACTIVE)
+  metadata Json        @default("{}")
 
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   warehouse    Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
@@ -827,10 +841,10 @@ model WarehouseTransfer {
   updatedAt         DateTime       @updatedAt
   deletedAt         DateTime?
 
-  organization    Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  sourceWarehouse Warehouse            @relation("SourceWarehouse", fields: [sourceWarehouseId], references: [id], onDelete: Cascade)
-  destWarehouse    Warehouse            @relation("DestWarehouse", fields: [destWarehouseId], references: [id], onDelete: Cascade)
-  items            WarehouseTransferItem[]
+  organization    Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sourceWarehouse Warehouse               @relation("SourceWarehouse", fields: [sourceWarehouseId], references: [id], onDelete: Cascade)
+  destWarehouse   Warehouse               @relation("DestWarehouse", fields: [destWarehouseId], references: [id], onDelete: Cascade)
+  items           WarehouseTransferItem[]
 
   @@unique([organizationId, transferNumber])
   @@index([organizationId])
@@ -878,11 +892,11 @@ model OpeningStock {
   metadata       Json     @default("{}")
   createdAt      DateTime @default(now())
 
-  organization  Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  warehouse     Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
-  product       Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
-  batch         Batch?        @relation(fields: [batchId], references: [id], onDelete: SetNull)
-  serialNumber  SerialNumber? @relation(fields: [serialNumberId], references: [id], onDelete: SetNull)
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  warehouse    Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  product      Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  batch        Batch?        @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  serialNumber SerialNumber? @relation(fields: [serialNumberId], references: [id], onDelete: SetNull)
 
   @@index([organizationId])
   @@index([warehouseId])
@@ -917,7 +931,7 @@ model Invoice {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  items InvoiceItem[]
+  items       InvoiceItem[]
   allocations PaymentAllocation[]
 
   @@unique([organizationId, invoiceNumber])
@@ -1318,25 +1332,25 @@ model Leave {
 }
 
 model Payroll {
-  id          String         @id @default(cuid())
+  id          String        @id @default(cuid())
   employeeId  String
-  employee    Employee       @relation(fields: [employeeId], references: [id])
+  employee    Employee      @relation(fields: [employeeId], references: [id])
   periodStart DateTime
   periodEnd   DateTime
-  basicSalary Decimal        @default(0)
-  allowances  Decimal        @default(0)
-  deductions  Decimal        @default(0)
-  tax         Decimal        @default(0)
-  netSalary   Decimal        @default(0)
-  status      PayrollStatus  @default(DRAFT)
+  basicSalary Decimal       @default(0)
+  allowances  Decimal       @default(0)
+  deductions  Decimal       @default(0)
+  tax         Decimal       @default(0)
+  netSalary   Decimal       @default(0)
+  status      PayrollStatus @default(DRAFT)
   paymentDate DateTime?
   approvedBy  String?
   approvedAt  DateTime?
   rejectedBy  String?
   rejectedAt  DateTime?
   notes       String?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
 
   @@index([employeeId])
   @@index([status])
@@ -1350,6 +1364,8 @@ model Lead {
   leadNumber            String
   name                  String
   company               String?
+  companyId             String?
+  companyRecord         Company?     @relation("LeadCompany", fields: [companyId], references: [id], onDelete: SetNull)
   email                 String?
   phone                 String?
   source                String?
@@ -1360,6 +1376,7 @@ model Lead {
   notes                 String?
   convertedToCustomerId String?
   convertedToCustomer   Customer?    @relation("ConvertedLeads", fields: [convertedToCustomerId], references: [id])
+  convertedAt           DateTime?
   createdAt             DateTime     @default(now())
   updatedAt             DateTime     @updatedAt
   deletedAt             DateTime?
@@ -1373,31 +1390,42 @@ model Lead {
   @@index([organizationId])
   @@index([status])
   @@index([assignedToId])
+  @@index([companyId])
   @@index([deletedAt])
 }
 
 model Contact {
-  id             String       @id @default(cuid())
+  id             String        @id @default(cuid())
   organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  organization   Organization  @relation(fields: [organizationId], references: [id])
   firstName      String
   lastName       String
   email          String?
   phone          String?
   company        String?
+  companyId      String?
+  companyRecord  Company?      @relation("ContactCompany", fields: [companyId], references: [id], onDelete: SetNull)
   jobTitle       String?
+  status         ContactStatus @default(ACTIVE)
+  source         String?
+  ownerId        String?
+  owner          User?         @relation("ContactOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   leadId         String?
-  lead           Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  lead           Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
   notes          String?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
   deletedAt      DateTime?
 
-  deals Deal[]
+  deals      Deal[]
+  activities Activity[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
   @@index([leadId])
+  @@index([companyId])
+  @@index([ownerId])
+  @@index([status])
   @@index([deletedAt])
 }
 
@@ -1452,43 +1480,137 @@ model Deal {
   stage             PipelineStage? @relation(fields: [stageId], references: [id], onDelete: SetNull)
   contactId         String?
   contact           Contact?       @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  companyId         String?
+  companyRecord     Company?       @relation("DealCompany", fields: [companyId], references: [id], onDelete: SetNull)
   leadId            String?
   lead              Lead?          @relation(fields: [leadId], references: [id], onDelete: SetNull)
   ownerId           String?
   owner             User?          @relation("DealOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   expectedCloseDate DateTime?
+  probability       Int            @default(0)
+  wonAt             DateTime?
+  lostAt            DateTime?
+  lostReason        String?
   notes             String?
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
   deletedAt         DateTime?
 
+  activities   Activity[]
+  stageHistory DealStageHistory[]
+
   @@index([organizationId])
   @@index([pipelineId])
   @@index([stageId])
   @@index([contactId])
+  @@index([companyId])
   @@index([leadId])
+  @@index([ownerId])
+  @@index([deletedAt])
+  @@index([organizationId, wonAt])
+  @@index([organizationId, lostAt])
+}
+
+model DealStageHistory {
+  id            String   @id @default(cuid())
+  dealId        String
+  deal          Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  fromStageId   String?
+  fromStageName String?
+  toStageId     String
+  toStageName   String
+  changedById   String?
+  changedBy     User?    @relation(fields: [changedById], references: [id], onDelete: SetNull)
+  createdAt     DateTime @default(now())
+
+  @@index([dealId, createdAt])
+}
+
+model Company {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  domain         String?
+  industry       String?
+  phone          String?
+  email          String?
+  website        String?
+  address        String?
+  city           String?
+  state          String?
+  zipCode        String?
+  country        String?
+  ownerId        String?
+  owner          User?        @relation("CompanyOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  deletedAt      DateTime?
+
+  contacts   Contact[]  @relation("ContactCompany")
+  deals      Deal[]     @relation("DealCompany")
+  leads      Lead[]     @relation("LeadCompany")
+  activities Activity[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
   @@index([ownerId])
   @@index([deletedAt])
 }
 
-model Activity {
-  id          String       @id @default(cuid())
-  leadId      String
-  lead        Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  type        ActivityType
-  title       String
-  description String?
-  dueDate     DateTime?
-  completed   Boolean      @default(false)
-  deletedAt   DateTime?
-  createdById String
-  createdBy   User         @relation("CreatedByActivities", fields: [createdById], references: [id])
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+model SalesTarget {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  ownerId        String?
+  owner          User?        @relation("SalesTargetOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  periodStart    DateTime
+  periodEnd      DateTime
+  amount         Decimal      @default(0)
+  notes          String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
+  @@unique([organizationId, ownerId, periodStart])
+  @@index([organizationId, periodStart])
+}
+
+model Activity {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  leadId         String?
+  lead           Lead?        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  contactId      String?
+  contact        Contact?     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  dealId         String?
+  deal           Deal?        @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  companyId      String?
+  company        Company?     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  type           ActivityType
+  title          String
+  description    String?
+  dueDate        DateTime?
+  completed      Boolean      @default(false)
+  completedAt    DateTime?
+  assignedToId   String?
+  assignedTo     User?        @relation("AssignedActivities", fields: [assignedToId], references: [id], onDelete: SetNull)
+  deletedAt      DateTime?
+  createdById    String
+  createdBy      User         @relation("CreatedByActivities", fields: [createdById], references: [id])
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId, dueDate])
   @@index([leadId])
+  @@index([contactId])
+  @@index([dealId])
+  @@index([companyId])
+  @@index([assignedToId])
   @@index([createdById])
   @@index([deletedAt])
+  @@index([organizationId, completed, dueDate])
 }
 
 model Notification {

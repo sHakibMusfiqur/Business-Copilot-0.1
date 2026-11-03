@@ -22,8 +22,13 @@ export class CreateLeadDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  @MaxLength(200)
   company?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  companyId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

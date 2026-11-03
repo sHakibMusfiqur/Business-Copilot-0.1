@@ -1,10 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsInt,
   IsString,
   IsOptional,
   IsNumber,
   Min,
+  Max,
   MinLength,
   MaxLength,
   IsDateString,
@@ -46,6 +48,12 @@ export class CreateDealDto {
   @IsOptional()
   @IsString()
   @MaxLength(40)
+  companyId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
   leadId?: string;
 
   @ApiPropertyOptional()
@@ -58,6 +66,14 @@ export class CreateDealDto {
   @IsOptional()
   @IsDateString()
   expectedCloseDate?: string;
+
+  @ApiPropertyOptional({ minimum: 0, maximum: 100 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  probability?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

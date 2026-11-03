@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsOptional, IsInt, Min, Max, IsString, IsEnum } from 'class-validator';
+import { IsEnum, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { ContactStatus } from '@prisma/client';
 
 const allowedSortFields = [
   'firstName',
@@ -32,13 +33,28 @@ export class QueryContactsDto {
   @IsString()
   search?: string;
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  companyId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  ownerId?: string;
+
+  @ApiPropertyOptional({ enum: ContactStatus })
+  @IsOptional()
+  @IsEnum(ContactStatus)
+  status?: ContactStatus;
+
   @ApiPropertyOptional({ enum: allowedSortFields })
   @IsOptional()
   @IsEnum(allowedSortFields)
   sortBy?: string = 'createdAt';
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ enum: ['asc', 'desc'] })
   @IsOptional()
-  @IsString()
+  @IsIn(['asc', 'desc'])
   sortOrder?: 'asc' | 'desc' = 'desc';
 }

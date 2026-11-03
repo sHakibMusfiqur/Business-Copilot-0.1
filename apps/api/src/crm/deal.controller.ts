@@ -25,6 +25,7 @@ import { DealService } from './deal.service';
 import type { CreateDealDto } from './dto/create-deal.dto';
 import type { UpdateDealDto } from './dto/update-deal.dto';
 import type { QueryDealsDto } from './dto/query-deals.dto';
+import type { MoveDealStageDto } from './dto/move-deal-stage.dto';
 
 @ApiTags('CRM')
 @UseGuards(JwtAuthGuard)
@@ -90,6 +91,33 @@ export class DealController {
     const orgId = this.requireOrg(user);
     await this.requireCrmAccess(user);
     return this.dealService.update(orgId, user.id, id, dto);
+  }
+
+  @Patch('deals/:id/stage')
+  @UseGuards(PermissionGuard)
+  @Permissions(['crm.update'])
+  @ApiOperation({ summary: 'Move a deal to another stage' })
+  async moveStage(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id', ParseCuidPipe) id: string,
+    @Body() dto: MoveDealStageDto,
+  ) {
+    const orgId = this.requireOrg(user);
+    await this.requireCrmAccess(user);
+    return this.dealService.moveStage(orgId, user.id, id, dto);
+  }
+
+  @Get('deals/:id/stage-history')
+  @UseGuards(PermissionGuard)
+  @Permissions(['crm.read'])
+  @ApiOperation({ summary: 'Get stage transition history for a deal' })
+  async getStageHistory(
+    @CurrentUser() user: CurrentUserPayload,
+    @Param('id', ParseCuidPipe) id: string,
+  ) {
+    const orgId = this.requireOrg(user);
+    await this.requireCrmAccess(user);
+    return this.dealService.getStageHistory(orgId, id);
   }
 
   @Delete('deals/:id')

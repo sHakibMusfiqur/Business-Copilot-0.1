@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsEmail, IsOptional, MinLength, MaxLength } from 'class-validator';
+import { IsEmail, IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { Transform } from 'class-transformer';
+import { ContactStatus } from '@prisma/client';
 
 export class CreateContactDto {
   @ApiProperty()
@@ -37,8 +38,31 @@ export class CreateContactDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(40)
+  companyId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   @MaxLength(120)
   jobTitle?: string;
+
+  @ApiPropertyOptional({ enum: ContactStatus })
+  @IsOptional()
+  @IsEnum(ContactStatus)
+  status?: ContactStatus;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  source?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  ownerId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

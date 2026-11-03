@@ -7,10 +7,12 @@ import {
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
+import { stageProbability } from './crm-metrics';
 
 import type { CreateDealDto } from './dto/create-deal.dto';
 import type { UpdateDealDto } from './dto/update-deal.dto';
 import type { QueryDealsDto } from './dto/query-deals.dto';
+import type { MoveDealStageDto } from './dto/move-deal-stage.dto';
 
 const CONTACT_SELECT = {
   id: true,
@@ -47,6 +49,8 @@ export class DealService {
       stageId,
       pipelineId,
       ownerId,
+      companyId,
+      contactId,
       sortBy = 'createdAt',
       sortOrder = 'desc',
     } = query;
@@ -68,6 +72,8 @@ export class DealService {
     if (stageId) where.stageId = stageId;
     if (pipelineId) where.pipelineId = pipelineId;
     if (ownerId) where.ownerId = ownerId;
+    if (companyId) where.companyId = companyId;
+    if (contactId) where.contactId = contactId;
 
     const allowedSortFields = ['title', 'value', 'expectedCloseDate', 'createdAt', 'updatedAt'];
     const field = allowedSortFields.includes(sortBy) ? sortBy : 'createdAt';
@@ -83,12 +89,18 @@ export class DealService {
           value: true,
           pipelineId: true,
           stageId: true,
+          companyId: true,
+          probability: true,
           expectedCloseDate: true,
           ownerId: true,
           notes: true,
+          wonAt: true,
+          lostAt: true,
+          lostReason: true,
           createdAt: true,
           updatedAt: true,
           stage: { select: { id: true, name: true, position: true, isWon: true, isLost: true } },
+          companyRecord: { select: { id: true, name: true } },
           contact: { select: CONTACT_SELECT },
           lead: { select: LEAD_SELECT },
           owner: { select: OWNER_SELECT },
@@ -119,15 +131,21 @@ export class DealService {
         value: true,
         pipelineId: true,
         stageId: true,
+        companyId: true,
+        probability: true,
         contactId: true,
         leadId: true,
         ownerId: true,
         expectedCloseDate: true,
         notes: true,
+        wonAt: true,
+        lostAt: true,
+        lostReason: true,
         createdAt: true,
         updatedAt: true,
         pipeline: { select: { id: true, name: true, isDefault: true } },
         stage: { select: { id: true, name: true, position: true, isWon: true, isLost: true } },
+        companyRecord: { select: { id: true, name: true } },
         contact: { select: CONTACT_SELECT },
         lead: { select: LEAD_SELECT },
         owner: { select: OWNER_SELECT },
@@ -151,6 +169,7 @@ export class DealService {
       stageId = resolved.stageId;
     }
     if (dto.contactId) await this.assertContactAccessible(orgId, dto.contactId);
+    if (dto.companyId) await this.assertCompanyAccessible(orgId, dto.companyId);
     if (dto.leadId) await this.assertLeadAccessible(orgId, dto.leadId);
     if (dto.ownerId) await this.assertOwnerAccessible(orgId, dto.ownerId);
 
@@ -162,8 +181,10 @@ export class DealService {
         pipelineId,
         stageId,
         contactId: dto.contactId ?? null,
+        companyId: dto.companyId ?? null,
         leadId: dto.leadId ?? null,
         ownerId: dto.ownerId ?? null,
+        probability: dto.probability ?? 0,
         expectedCloseDate: dto.expectedCloseDate ? new Date(dto.expectedCloseDate) : null,
         notes: dto.notes ? dto.notes.trim() : null,
       },
@@ -173,11 +194,15 @@ export class DealService {
         value: true,
         pipelineId: true,
         stageId: true,
+        companyId: true,
+        probability: true,
         contactId: true,
         leadId: true,
         ownerId: true,
         expectedCloseDate: true,
         notes: true,
+        wonAt: true,
+        lostAt: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -196,6 +221,7 @@ export class DealService {
       }
     }
     if (dto.contactId) await this.assertContactAccessible(orgId, dto.contactId);
+    if (dto.companyId) await this.assertCompanyAccessible(orgId, dto.companyId);
     if (dto.leadId) await this.assertLeadAccessible(orgId, dto.leadId);
     if (dto.ownerId) await this.assertOwnerAccessible(orgId, dto.ownerId);
 
@@ -221,12 +247,16 @@ export class DealService {
     if (dto.contactId !== undefined) {
       updateData.contact = dto.contactId ? { connect: { id: dto.contactId } } : { disconnect: true };
     }
+    if (dto.companyId !== undefined) {
+      updateData.companyRecord = dto.companyId ? { connect: { id: dto.companyId } } : { disconnect: true };
+    }
     if (dto.leadId !== undefined) {
       updateData.lead = dto.leadId ? { connect: { id: dto.leadId } } : { disconnect: true };
     }
     if (dto.ownerId !== undefined) {
       updateData.owner = dto.ownerId ? { connect: { id: dto.ownerId } } : { disconnect: true };
     }
+    if (dto.probability !== undefined) updateData.probability = dto.probability;
     if (dto.expectedCloseDate !== undefined) {
       updateData.expectedCloseDate = dto.expectedCloseDate ? new Date(dto.expectedCloseDate) : null;
     }
@@ -242,11 +272,15 @@ export class DealService {
           value: true,
           pipelineId: true,
           stageId: true,
+          companyId: true,
+          probability: true,
           contactId: true,
           leadId: true,
           ownerId: true,
           expectedCloseDate: true,
           notes: true,
+          wonAt: true,
+          lostAt: true,
           updatedAt: true,
         },
       })
@@ -259,6 +293,141 @@ export class DealService {
 
     this.logger.log(`Deal updated: ${dealId} by ${userId}`);
     return { ...updated, value: Number(updated.value) };
+  }
+
+  /**
+   * Moves a deal to another stage, keeping won/lost bookkeeping and stage
+   * history consistent. Won/lost timestamps are server-set only; moving out of
+   * a won/lost stage clears them (reopen).
+   */
+  async moveStage(orgId: string, userId: string, dealId: string, dto: MoveDealStageDto) {
+    const deal = await this.prisma.deal.findFirst({
+      where: { id: dealId, organizationId: orgId, deletedAt: null },
+      select: { id: true, stageId: true, pipelineId: true },
+    });
+    if (!deal) throw new NotFoundException('Deal not found');
+
+    const stage = await this.prisma.pipelineStage.findFirst({
+      where: { id: dto.stageId, deletedAt: null, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        position: true,
+        isWon: true,
+        isLost: true,
+        pipelineId: true,
+        pipeline: { select: { id: true, organizationId: true } },
+      },
+    });
+    if (!stage) throw new BadRequestException('Stage not found or not active');
+
+    if (stage.pipeline.organizationId !== null && stage.pipeline.organizationId !== orgId) {
+      throw new BadRequestException('Stage does not belong to a pipeline accessible to this organization');
+    }
+
+    if (stage.isLost && !dto.lostReason?.trim()) {
+      throw new BadRequestException('lostReason is required when moving a deal into a lost stage');
+    }
+
+    const [siblingStages, previousStage] = await Promise.all([
+      this.prisma.pipelineStage.findMany({
+        where: { pipelineId: stage.pipelineId, deletedAt: null, isActive: true },
+        select: { position: true },
+        orderBy: { position: 'asc' },
+      }),
+      deal.stageId
+        ? this.prisma.pipelineStage.findFirst({
+            where: { id: deal.stageId },
+            select: { id: true, name: true },
+          })
+        : Promise.resolve(null),
+    ]);
+
+    const maxPosition = siblingStages.length > 0 ? siblingStages[siblingStages.length - 1].position : 0;
+    const probability =
+      dto.probability ?? stageProbability(stage.position, maxPosition, stage.isWon, stage.isLost);
+
+    const now = new Date();
+    const wonAt = stage.isWon ? now : null;
+    const lostAt = stage.isLost ? now : null;
+    const lostReason = stage.isLost ? dto.lostReason?.trim() ?? null : null;
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      await tx.dealStageHistory.create({
+        data: {
+          dealId,
+          fromStageId: previousStage?.id ?? null,
+          fromStageName: previousStage?.name ?? null,
+          toStageId: stage.id,
+          toStageName: stage.name,
+          changedById: userId,
+        },
+      });
+
+      return tx.deal.update({
+        where: { id: dealId },
+        data: {
+          stageId: stage.id,
+          pipelineId: stage.pipelineId,
+          probability,
+          wonAt,
+          lostAt,
+          lostReason,
+        },
+        select: {
+          id: true,
+          title: true,
+          value: true,
+          pipelineId: true,
+          stageId: true,
+          companyId: true,
+          probability: true,
+          contactId: true,
+          leadId: true,
+          ownerId: true,
+          expectedCloseDate: true,
+          notes: true,
+          wonAt: true,
+          lostAt: true,
+          lostReason: true,
+          createdAt: true,
+          updatedAt: true,
+          stage: { select: { id: true, name: true, position: true, isWon: true, isLost: true } },
+          companyRecord: { select: { id: true, name: true } },
+          contact: { select: CONTACT_SELECT },
+          lead: { select: LEAD_SELECT },
+          owner: { select: OWNER_SELECT },
+        },
+      });
+    });
+
+    this.logger.log(`Deal ${dealId} moved to stage ${stage.name} by ${userId}`);
+    return { ...updated, value: Number(updated.value) };
+  }
+
+  /** Stage transition history for a deal, newest first. */
+  async getStageHistory(orgId: string, dealId: string) {
+    const deal = await this.prisma.deal.findFirst({
+      where: { id: dealId, organizationId: orgId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!deal) throw new NotFoundException('Deal not found');
+
+    const history = await this.prisma.dealStageHistory.findMany({
+      where: { dealId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        fromStageId: true,
+        fromStageName: true,
+        toStageId: true,
+        toStageName: true,
+        createdAt: true,
+        changedBy: { select: { id: true, name: true } },
+      },
+    });
+
+    return { data: history };
   }
 
   async softDelete(orgId: string, userId: string, dealId: string) {
@@ -376,6 +545,17 @@ export class DealService {
 
     if (!contact) {
       throw new BadRequestException('Contact not found or not accessible to this organization');
+    }
+  }
+
+  private async assertCompanyAccessible(orgId: string, companyId: string): Promise<void> {
+    const company = await this.prisma.company.findFirst({
+      where: { id: companyId, organizationId: orgId, deletedAt: null },
+      select: { id: true },
+    });
+
+    if (!company) {
+      throw new BadRequestException('Company not found or not accessible to this organization');
     }
   }
 
