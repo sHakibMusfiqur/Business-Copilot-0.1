@@ -73,10 +73,17 @@ describe('ContactService.create (tenant isolation)', () => {
         lastName: 'Doe',
         email: 'jane@acme.com',
         phone: '555',
-        organization: { connect: { id: ORG_ID } },
+        organizationId: ORG_ID,
       }),
       select: expect.anything(),
     });
+
+    // Tenant isolation: create uses the scalar FK (UncheckedCreateInput),
+    // never relation-connect syntax for the organization.
+    const created = contactCreate.mock.calls[0][0];
+    expect(created.data.organizationId).toBe(ORG_ID);
+    expect(created.data).not.toHaveProperty('organization');
+    expect(created.data).not.toHaveProperty('lead');
   });
 
   it('rejects a duplicate email within the organization as a ConflictException', async () => {
@@ -102,8 +109,16 @@ describe('ContactService.create (lead association)', () => {
       select: { id: true },
     });
     expect(contactCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ data: expect.objectContaining({ lead: { connect: { id: 'lead-1' } } }) }),
+      expect.objectContaining({
+        data: expect.objectContaining({ leadId: 'lead-1', organizationId: ORG_ID }),
+      }),
     );
+
+    // The lead association is stored as the scalar FK; no relation-connect syntax.
+    const created = contactCreate.mock.calls[0][0];
+    expect(created.data.leadId).toBe('lead-1');
+    expect(created.data).not.toHaveProperty('lead');
+    expect(created.data.organizationId).toBe(ORG_ID);
   });
 
   it('rejects associating a lead from another organization', async () => {
