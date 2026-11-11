@@ -224,17 +224,24 @@ export class CrmDashboardService {
     // SalesTargetService.findAll/findById.
     const targets = targetRows.map((t) => {
       const amount = toNumber(t.amount);
-      const achieved = round2(
-        deals
-          .filter(
-            (d) =>
-              d.wonAt !== null &&
-              d.wonAt >= t.periodStart &&
-              d.wonAt < startOfNextUtcDay(t.periodEnd) &&
-              (t.ownerId ? d.ownerId === t.ownerId : true),
-          )
-          .reduce((sum, d) => sum + d.value, 0),
-      );
+      // Exact decimal accumulation over the RAW Prisma rows — `dealRows`
+      // keeps `value` as Prisma.Decimal — matching SalesTargetService's
+      // precision behaviour (`let sum = new Prisma.Decimal(0);
+      // sum = sum.plus(d.value)`, converted to a number only once at the end).
+      // JavaScript number accumulation (0.1 + 0.2 → 0.30000000000000004) can
+      // no longer leak into achievement figures.
+      let achievedSum = new Prisma.Decimal(0);
+      for (const d of dealRows) {
+        if (
+          d.wonAt !== null &&
+          d.wonAt >= t.periodStart &&
+          d.wonAt < startOfNextUtcDay(t.periodEnd) &&
+          (t.ownerId ? d.ownerId === t.ownerId : true)
+        ) {
+          achievedSum = achievedSum.plus(d.value);
+        }
+      }
+      const achieved = round2(toNumber(achievedSum));
       return {
         id: t.id,
         ownerId: t.ownerId,

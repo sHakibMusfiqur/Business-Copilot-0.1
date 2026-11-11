@@ -1,4 +1,5 @@
 import {
+  buildBuckets,
   computeFunnel,
   computeRevenueTrend,
   startOfNextUtcDay,
@@ -175,5 +176,58 @@ describe('computeRevenueTrend (exclusive range.end)', () => {
 
     expect(trend.labels).toEqual(['2026-05', '2026-06']);
     expect(trend.revenue).toEqual([0, 50]);
+  });
+});
+
+describe('buildBuckets (exclusive range end contract)', () => {
+  const DAY = 86_400_000;
+  const start = new Date('2026-06-01T00:00:00.000Z');
+
+  it('creates NO extra bucket when range.end is an exclusive next-day boundary', () => {
+    const buckets = buildBuckets({ start, end: new Date('2026-06-16T00:00:00.000Z') }, 'day');
+
+    // [Jun 1, Jun 16) covers Jun 1..Jun 15 = 15 buckets, no trailing Jun 16.
+    expect(buckets).toHaveLength(15);
+    expect(buckets[buckets.length - 1].toISOString()).toBe('2026-06-15T00:00:00.000Z');
+    expect(buckets.map((d) => d.toISOString().slice(0, 10))).not.toContain('2026-06-16');
+    expect(buckets[0].toISOString()).toBe('2026-06-01T00:00:00.000Z');
+  });
+
+  it('produces byte-identical buckets for an inclusive 23:59:59.999 end', () => {
+    const exclusive = buildBuckets({ start, end: new Date('2026-06-16T00:00:00.000Z') }, 'day');
+    const inclusive = buildBuckets({ start, end: new Date('2026-06-15T23:59:59.999Z') }, 'day');
+
+    expect(inclusive).toEqual(exclusive);
+  });
+
+  it('honours exclusive ends for week and month granularity too', () => {
+    // Week buckets are Monday-anchored: [Mon Jun 8, Mon Jun 15) = one bucket.
+    const weeks = buildBuckets(
+      { start: new Date('2026-06-08T00:00:00.000Z'), end: new Date('2026-06-15T00:00:00.000Z') },
+      'week',
+    );
+    expect(weeks.map((d) => d.toISOString().slice(0, 10))).toEqual(['2026-06-08']);
+
+    // [Jun 1, Jul 1) covers June only — no trailing July bucket.
+    const months = buildBuckets(
+      { start: new Date('2026-06-01T00:00:00.000Z'), end: new Date('2026-07-01T00:00:00.000Z') },
+      'month',
+    );
+    expect(months.map((d) => d.toISOString().slice(0, 7))).toEqual(['2026-06']);
+  });
+
+  it('returns an empty list for a zero-length exclusive range instead of looping', () => {
+    const empty = new Date('2026-06-01T00:00:00.000Z');
+    expect(buildBuckets({ start: empty, end: new Date(empty.getTime()) }, 'day')).toHaveLength(0);
+    expect(buildBuckets({ start: empty, end: new Date(empty.getTime() - DAY) }, 'day')).toHaveLength(0);
+  });
+
+  it('day buckets advance exactly one day at a time across the range', () => {
+    const buckets = buildBuckets({ start, end: new Date('2026-06-04T00:00:00.000Z') }, 'day');
+    expect(buckets.map((d) => d.getTime())).toEqual([
+      start.getTime(),
+      start.getTime() + DAY,
+      start.getTime() + 2 * DAY,
+    ]);
   });
 });

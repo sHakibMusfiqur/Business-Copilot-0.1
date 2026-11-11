@@ -1,4 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 
@@ -124,6 +125,9 @@ describe('resolveRange', () => {
       { startDate: '2026-06-01', endDate: '2026-02-30' },
       { startDate: '2026-04-31', endDate: '2026-06-15' }, // April has 30 days
       { startDate: '2026-06-01', endDate: '2026-13-01' }, // month 13
+      { startDate: '2026-06-01', endDate: '2026-02-30T10:00:00.000Z' }, // datetime rollover
+      { startDate: '2026-06-01', endDate: '2026-06-15T25:00:00.000Z' }, // hour 25
+      { startDate: '2026-06-01', endDate: '2026-06-15T12:00:00+25:00' }, // offset hour 25
     ]) {
       let thrown: unknown;
       try {
@@ -271,11 +275,75 @@ describe('CrmDashboardService.getReports (date boundary behaviour)', () => {
       }),
     );
   });
+
+  it('computes target achievement with exact decimal accumulation (0.1 + 0.2 = 0.3)', async () => {
+    const prisma = {
+      pipeline: { findMany: jest.fn().mockResolvedValue([]) },
+      deal: {
+        findMany: jest.fn().mockResolvedValue([
+          makeDeal('d-a', '2026-06-10T09:00:00.000Z', 0.1),
+          makeDeal('d-b', '2026-06-11T09:00:00.000Z', 0.2),
+        ]),
+        count: jest.fn().mockResolvedValue(0),
+      },
+      dealStageHistory: { findMany: jest.fn().mockResolvedValue([]) },
+      salesTarget: { findMany: jest.fn().mockResolvedValue([{ ...TARGET, amount: 1 }]) },
+      lead: { count: jest.fn().mockResolvedValue(0) },
+      contact: { count: jest.fn().mockResolvedValue(0) },
+    };
+    const service = new CrmDashboardService(prisma as never);
+
+    const report = await service.getReports('org-1', { startDate: '2026-06-01', endDate: '2026-06-15' });
+
+    // Strict equality — must be 0.3, never 0.30000000000000004.
+    expect(report.targets[0].achieved).toBe(0.3);
+    expect(report.kpis.targetAmount).toBe(1);
+    expect(report.kpis.targetAchievement).toBe(30); // 0.3 / 1 → 30%
+  });
+
+  it('sums raw Prisma.Decimal row values exactly, excluding out-of-period deals', async () => {
+    const prisma = {
+      pipeline: { findMany: jest.fn().mockResolvedValue([]) },
+      deal: {
+        findMany: jest.fn().mockResolvedValue([
+          // Production-shaped rows: Prisma returns Decimal values, exactly
+          // what SalesTargetService sums with `sum.plus(d.value)`.
+          { ...makeDeal('d-1', '2026-06-10T09:00:00.000Z', 0.1), value: new Prisma.Decimal('0.1') },
+          { ...makeDeal('d-2', '2026-06-11T09:00:00.000Z', 0.2), value: new Prisma.Decimal('0.2') },
+          { ...makeDeal('d-3', '2026-06-12T09:00:00.000Z', 0.3), value: new Prisma.Decimal('0.3') },
+          // Won Jul 1 — outside BOTH the report range and the target period.
+          { ...makeDeal('d-4', '2026-07-01T00:00:00.000Z', 0.4), value: new Prisma.Decimal('0.4') },
+        ]),
+        count: jest.fn().mockResolvedValue(0),
+      },
+      dealStageHistory: { findMany: jest.fn().mockResolvedValue([]) },
+      salesTarget: { findMany: jest.fn().mockResolvedValue([{ ...TARGET, amount: 10 }]) },
+      lead: { count: jest.fn().mockResolvedValue(0) },
+      contact: { count: jest.fn().mockResolvedValue(0) },
+    };
+    const service = new CrmDashboardService(prisma as never);
+
+    const report = await service.getReports('org-1', { startDate: '2026-06-01', endDate: '2026-06-15' });
+
+    // 0.1 + 0.2 + 0.3 exactly (plain float chain would be 0.6000000000000001);
+    // the 0.4 deal is excluded by both period predicates.
+    expect(report.targets[0].achieved).toBe(0.6);
+    expect(report.kpis.targetAchievement).toBe(6); // 0.6 / 10 → 6%
+  });
 });
 
 describe('QueryCrmReportsDto (ValidationPipe contract — strict calendar dates)', () => {
   it('accepts the real-date formats clients send', async () => {
-    for (const startDate of ['2026-06-01', '2026-06-01T12:00:00.000Z']) {
+    const accepted = [
+      '2026-06-01', // date-only
+      '2026-06-01T12:00:00.000Z', // datetime with Z
+      '2024-02-29', // valid leap day
+      '2000-02-29', // divisible-by-400 leap day
+      '2026-06-15T12:00:00+05:30', // positive timezone offset
+      '2026-06-15T12:00:00-08:00', // negative timezone offset
+      '2026-06-15T12:00:00+0530', // offset without colon
+    ];
+    for (const startDate of accepted) {
       const dto = plainToInstance(QueryCrmReportsDto, { startDate, endDate: '2026-06-15' });
       expect(await validate(dto)).toHaveLength(0);
     }
@@ -284,7 +352,22 @@ describe('QueryCrmReportsDto (ValidationPipe contract — strict calendar dates)
   it('rejects impossible calendar dates at the pipe (before any service runs)', async () => {
     // Previously `@IsDateString()` accepted all of these; 2026-02-30 would
     // then silently become 2026-03-02 via `new Date()`.
-    for (const startDate of ['2026-02-30', '2026-02-29', '2026-04-31', '2026-13-01', 'not-a-date']) {
+    const rejected = [
+      '2026-02-30', // invalid month length (Feb 30)
+      '2026-02-29', // non-leap year
+      '1900-02-29', // divisible-by-100 century is NOT a leap year
+      '2026-04-31', // April has 30 days
+      '2026-06-31', // June has 30 days
+      '2026-13-01', // month 13
+      '2026-02-30T10:00:00.000Z', // impossible date inside a datetime string
+      '2026-06-15T25:00:00.000Z', // hour 25
+      '2026-06-15T12:60:00.000Z', // minute 60
+      '2026-06-15T12:00:60.000Z', // second 60
+      '2026-06-15T12:00:00+25:00', // timezone offset hour 25
+      '2026-06-15T12:00:00+05:60', // timezone offset minute 60
+      'not-a-date',
+    ];
+    for (const startDate of rejected) {
       const dto = plainToInstance(QueryCrmReportsDto, { startDate });
       const errors = await validate(dto);
       expect(errors.find((e) => e.property === 'startDate')).toBeDefined();

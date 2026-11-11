@@ -102,10 +102,33 @@ export function bucketLabel(date: Date, granularity: Granularity): string {
   return date.toISOString().slice(0, 10);
 }
 
+/**
+ * Builds the aligned bucket starts covering `[range.start, range.end)`.
+ *
+ * Contract:
+ * - `range.end` is EXCLUSIVE: the range covers every instant from `start` up
+ *   to (not including) `end`. When `end` sits on a bucket boundary — e.g.
+ *   `2026-06-16T00:00:00Z` for day granularity — NO bucket is emitted for the
+ *   end day, so an exclusive range never gets an empty trailing bucket.
+ * - An INCLUSIVE end (`23:59:59.999` of the last covered day) yields
+ *   byte-identical buckets: only the end's UTC day/week/month matters, and
+ *   the 1 ms probe stays inside that same bucket.
+ * - The first bucket is `bucketStart(range.start)`; buckets then advance by
+ *   day / week (Monday) / month in UTC. Returns `[]` when the exclusive range
+ *   covers nothing (`end <= start`).
+ *
+ * Caller audit (checked before this contract was fixed): the only caller
+ * anywhere in the repo is `computeRevenueTrend`, which previously
+ * pre-subtracted 1 ms from `range.end` to avoid the trailing bucket; it now
+ * passes its exclusive range through unchanged. No other production or test
+ * code calls `buildBuckets`.
+ */
 export function buildBuckets(range: DateRange, granularity: Granularity): Date[] {
   const buckets: Date[] = [];
   const cursor = bucketStart(range.start, granularity);
-  const last = bucketStart(range.end, granularity);
+  // Probe the LAST MILLISECOND the exclusive range actually covers, so an
+  // end at 00:00 sharp never contributes its own (empty) bucket.
+  const last = bucketStart(new Date(range.end.getTime() - 1), granularity);
 
   while (cursor <= last) {
     buckets.push(new Date(cursor));
@@ -129,18 +152,16 @@ export function percentage(part: number, total: number): number {
 /**
  * Buckets won deals into the revenue trend.
  *
- * `range.end` is an EXCLUSIVE boundary (next-day start). The last bucket is
- * therefore derived from the last millisecond the range actually covers, so a
- * date-scoped range like [Jun 1, Jun 16) still ends at the Jun 15 bucket
- * instead of producing an empty trailing Jun 16 bucket.
+ * `range.end` is an EXCLUSIVE boundary (next-day start); `buildBuckets`
+ * honours that contract, so a date-scoped range like [Jun 1, Jun 16) ends at
+ * the Jun 15 bucket instead of producing an empty trailing Jun 16 bucket.
  */
 export function computeRevenueTrend(
   wonDeals: MetricDeal[],
   range: DateRange,
   granularity: Granularity,
 ): { labels: string[]; revenue: number[]; deals: number[] } {
-  const lastCoveredInstant = new Date(range.end.getTime() - 1);
-  const buckets = buildBuckets({ start: range.start, end: lastCoveredInstant }, granularity);
+  const buckets = buildBuckets(range, granularity);
   const index = new Map<string, number>();
   buckets.forEach((bucket, i) => index.set(bucket.toISOString().slice(0, 10), i));
 

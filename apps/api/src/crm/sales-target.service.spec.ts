@@ -254,7 +254,14 @@ describe('SalesTargetService.create/update (invalid dates → HTTP 400)', () => 
 
 describe('Sales target DTOs (ValidationPipe contract — strict calendar dates)', () => {
   it('CreateSalesTargetDto accepts the real-date formats clients send', async () => {
-    for (const periodStart of ['2026-06-01', '2026-06-01T00:00:00.000Z']) {
+    const accepted = [
+      '2026-06-01', // date-only (what the UI sends)
+      '2026-06-01T00:00:00.000Z', // toISOString() datetime
+      '2024-02-29T00:00:00.000Z', // valid leap day as datetime
+      '2026-06-15T12:00:00+05:30', // positive timezone offset
+      '2026-06-15T12:00:00-08:00', // negative timezone offset
+    ];
+    for (const periodStart of accepted) {
       const dto = plainToInstance(CreateSalesTargetDto, {
         periodStart,
         periodEnd: '2026-06-15',
@@ -262,6 +269,30 @@ describe('Sales target DTOs (ValidationPipe contract — strict calendar dates)'
       });
       expect(await validate(dto)).toHaveLength(0);
     }
+  });
+
+  it('CreateSalesTargetDto rejects invalid datetime strings, leap mistakes and bad offsets', async () => {
+    const rejected = [
+      '2026-02-30T10:00:00.000Z', // impossible date inside a datetime
+      '1900-02-29', // century non-leap day
+      '2026-06-15T12:00:00+25:00', // timezone offset hour 25
+      '2026-06-15T12:60:00.000Z', // minute 60
+    ];
+    for (const periodStart of rejected) {
+      const dto = plainToInstance(CreateSalesTargetDto, {
+        periodStart,
+        periodEnd: '2026-06-15',
+        amount: 100,
+      });
+      expect((await validate(dto)).find((e) => e.property === 'periodStart')).toBeDefined();
+    }
+
+    const badEnd = plainToInstance(CreateSalesTargetDto, {
+      periodStart: '2026-06-01',
+      periodEnd: '2026-02-30T10:00:00.000Z',
+      amount: 100,
+    });
+    expect((await validate(badEnd)).find((e) => e.property === 'periodEnd')).toBeDefined();
   });
 
   it('CreateSalesTargetDto rejects impossible calendar dates in both period fields', async () => {
