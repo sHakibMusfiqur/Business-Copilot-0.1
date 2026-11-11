@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
-import { createContact, updateContact, getCompanies, getOrganizationUsers } from '@/lib/api';
+import { createContact, updateContact, getCompanies, getOrganizationUsers, fetchAllPages } from '@/lib/api';
 import type { ContactListItem, ContactStatus } from '@/lib/api';
 
 const contactSchema = z.object({
@@ -87,9 +87,12 @@ export function ContactDialog({ open, contact, onClose, onSaved }: ContactDialog
     }
   }, [open, contact]);
 
+  // Every page is loaded (bounded) so dropdowns are not silently truncated
+  // at the first 100 records.
   const companiesQuery = useQuery({
     queryKey: ['crm', 'companies', 'options'],
-    queryFn: ({ signal }) => getCompanies({ limit: 100, sortBy: 'name', sortOrder: 'asc' }, signal),
+    queryFn: ({ signal }) =>
+      fetchAllPages((page) => getCompanies({ limit: 100, page, sortBy: 'name', sortOrder: 'asc' }, signal)),
     enabled: open,
   });
   const usersQuery = useQuery({
@@ -100,6 +103,7 @@ export function ContactDialog({ open, contact, onClose, onSaved }: ContactDialog
 
   const companies = companiesQuery.data?.data ?? [];
   const users = usersQuery.data ?? [];
+  const companiesTotal = companiesQuery.data?.total;
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -132,6 +136,13 @@ export function ContactDialog({ open, contact, onClose, onSaved }: ContactDialog
     },
   });
 
+  // Block backdrop/X/Cancel while a save is in flight; the success path still
+  // closes via saveMutation.onSuccess.
+  const requestClose = () => {
+    if (saveMutation.isPending) return;
+    onClose();
+  };
+
   function setField<K extends keyof ContactFormValues>(key: K, value: ContactFormValues[K]) {
     setValues((prev) => ({ ...prev, [key]: value }));
   }
@@ -159,11 +170,16 @@ export function ContactDialog({ open, contact, onClose, onSaved }: ContactDialog
       aria-modal="true"
       aria-label={isEdit ? 'Edit contact' : 'Create contact'}
     >
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={requestClose} />
       <div className="relative z-50 w-full max-w-2xl rounded-xl border bg-card p-6 shadow-xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-semibold">{isEdit ? 'Edit Contact' : 'Create Contact'}</h2>
-          <button onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent">
+          <button
+            onClick={requestClose}
+            disabled={saveMutation.isPending}
+            aria-label="Close"
+            className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent disabled:opacity-50"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -221,8 +237,9 @@ export function ContactDialog({ open, contact, onClose, onSaved }: ContactDialog
               value={values.companyId}
               onChange={(e) => setField('companyId', e.target.value)}
               className={selectClassName(Boolean(errors.companyId))}
+              disabled={companiesQuery.isLoading}
             >
-              <option value="">None</option>
+              <option value="">{companiesQuery.isLoading ? 'Loading companies...' : 'None'}</option>
               {companies.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -230,6 +247,19 @@ export function ContactDialog({ open, contact, onClose, onSaved }: ContactDialog
               ))}
             </select>
             {errors.companyId && <p className="text-xs text-destructive mt-1">{errors.companyId}</p>}
+            {companiesQuery.isError && (
+              <p className="text-xs text-destructive mt-1">
+                Failed to load companies.{' '}
+                <button type="button" className="underline" onClick={() => companiesQuery.refetch()}>
+                  Retry
+                </button>
+              </p>
+            )}
+            {companiesTotal != null && companies.length < companiesTotal && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Showing first {companies.length} of {companiesTotal}.
+              </p>
+            )}
           </div>
           <div>
             <Label htmlFor="contact-company-name">Company Name (text)</Label>
@@ -272,8 +302,9 @@ export function ContactDialog({ open, contact, onClose, onSaved }: ContactDialog
               value={values.ownerId}
               onChange={(e) => setField('ownerId', e.target.value)}
               className={selectClassName(Boolean(errors.ownerId))}
+              disabled={usersQuery.isLoading}
             >
-              <option value="">Unassigned</option>
+              <option value="">{usersQuery.isLoading ? 'Loading users...' : 'Unassigned'}</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name}
@@ -281,6 +312,14 @@ export function ContactDialog({ open, contact, onClose, onSaved }: ContactDialog
               ))}
             </select>
             {errors.ownerId && <p className="text-xs text-destructive mt-1">{errors.ownerId}</p>}
+            {usersQuery.isError && (
+              <p className="text-xs text-destructive mt-1">
+                Failed to load users.{' '}
+                <button type="button" className="underline" onClick={() => usersQuery.refetch()}>
+                  Retry
+                </button>
+              </p>
+            )}
           </div>
           <div className="col-span-2">
             <Label htmlFor="contact-notes">Notes</Label>
@@ -296,7 +335,7 @@ export function ContactDialog({ open, contact, onClose, onSaved }: ContactDialog
         </div>
 
         <div className="mt-6 flex items-center justify-end gap-3">
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={requestClose} disabled={saveMutation.isPending}>
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={saveMutation.isPending}>

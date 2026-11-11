@@ -15,6 +15,7 @@ import {
   getCompanies,
   getContacts,
   getOrganizationUsers,
+  fetchAllPages,
 } from '@/lib/api';
 import type { DealListItem, PipelineStage } from '@/lib/api';
 
@@ -94,14 +95,18 @@ export function DealDialog({ open, deal, pipelineId, stage, onClose, onSaved }: 
     }
   }, [open, deal]);
 
+  // Every page is loaded (bounded) so dropdowns are not silently truncated
+  // at the first 100 records.
   const companiesQuery = useQuery({
     queryKey: ['crm', 'companies', 'options'],
-    queryFn: ({ signal }) => getCompanies({ limit: 100, sortBy: 'name', sortOrder: 'asc' }, signal),
+    queryFn: ({ signal }) =>
+      fetchAllPages((page) => getCompanies({ limit: 100, page, sortBy: 'name', sortOrder: 'asc' }, signal)),
     enabled: open,
   });
   const contactsQuery = useQuery({
     queryKey: ['crm', 'contacts', 'options'],
-    queryFn: ({ signal }) => getContacts({ limit: 100, sortBy: 'lastName', sortOrder: 'asc' }, signal),
+    queryFn: ({ signal }) =>
+      fetchAllPages((page) => getContacts({ limit: 100, page, sortBy: 'lastName', sortOrder: 'asc' }, signal)),
     enabled: open,
   });
   const usersQuery = useQuery({
@@ -113,6 +118,8 @@ export function DealDialog({ open, deal, pipelineId, stage, onClose, onSaved }: 
   const companies = companiesQuery.data?.data ?? [];
   const contacts = contactsQuery.data?.data ?? [];
   const users = usersQuery.data ?? [];
+  const companiesTotal = companiesQuery.data?.total;
+  const contactsTotal = contactsQuery.data?.total;
 
   const saveMutation = useMutation({
     mutationFn: () => {
@@ -156,6 +163,13 @@ export function DealDialog({ open, deal, pipelineId, stage, onClose, onSaved }: 
     },
   });
 
+  // Block backdrop/X/Cancel while a save is in flight; the success path still
+  // closes via saveMutation.onSuccess.
+  const requestClose = () => {
+    if (saveMutation.isPending) return;
+    onClose();
+  };
+
   function setField<K extends keyof DealFormValues>(key: K, value: DealFormValues[K]) {
     setValues((prev) => ({ ...prev, [key]: value }));
   }
@@ -183,11 +197,16 @@ export function DealDialog({ open, deal, pipelineId, stage, onClose, onSaved }: 
       aria-modal="true"
       aria-label={isEdit ? 'Edit deal' : 'Create deal'}
     >
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={requestClose} />
       <div className="relative z-50 w-full max-w-2xl rounded-xl border bg-card p-6 shadow-xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-semibold">{isEdit ? 'Edit Deal' : 'Create Deal'}</h2>
-          <button onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent">
+          <button
+            onClick={requestClose}
+            disabled={saveMutation.isPending}
+            aria-label="Close"
+            className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent disabled:opacity-50"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -251,8 +270,9 @@ export function DealDialog({ open, deal, pipelineId, stage, onClose, onSaved }: 
               value={values.ownerId}
               onChange={(e) => setField('ownerId', e.target.value)}
               className={selectClassName(Boolean(errors.ownerId))}
+              disabled={usersQuery.isLoading}
             >
-              <option value="">Unassigned</option>
+              <option value="">{usersQuery.isLoading ? 'Loading users...' : 'Unassigned'}</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name}
@@ -260,6 +280,14 @@ export function DealDialog({ open, deal, pipelineId, stage, onClose, onSaved }: 
               ))}
             </select>
             {errors.ownerId && <p className="text-xs text-destructive mt-1">{errors.ownerId}</p>}
+            {usersQuery.isError && (
+              <p className="text-xs text-destructive mt-1">
+                Failed to load users.{' '}
+                <button type="button" className="underline" onClick={() => usersQuery.refetch()}>
+                  Retry
+                </button>
+              </p>
+            )}
           </div>
 
           <div>
@@ -269,8 +297,9 @@ export function DealDialog({ open, deal, pipelineId, stage, onClose, onSaved }: 
               value={values.companyId}
               onChange={(e) => setField('companyId', e.target.value)}
               className={selectClassName(Boolean(errors.companyId))}
+              disabled={companiesQuery.isLoading}
             >
-              <option value="">None</option>
+              <option value="">{companiesQuery.isLoading ? 'Loading companies...' : 'None'}</option>
               {companies.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -278,6 +307,19 @@ export function DealDialog({ open, deal, pipelineId, stage, onClose, onSaved }: 
               ))}
             </select>
             {errors.companyId && <p className="text-xs text-destructive mt-1">{errors.companyId}</p>}
+            {companiesQuery.isError && (
+              <p className="text-xs text-destructive mt-1">
+                Failed to load companies.{' '}
+                <button type="button" className="underline" onClick={() => companiesQuery.refetch()}>
+                  Retry
+                </button>
+              </p>
+            )}
+            {companiesTotal != null && companies.length < companiesTotal && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Showing first {companies.length} of {companiesTotal}.
+              </p>
+            )}
           </div>
 
           <div>
@@ -287,8 +329,9 @@ export function DealDialog({ open, deal, pipelineId, stage, onClose, onSaved }: 
               value={values.contactId}
               onChange={(e) => setField('contactId', e.target.value)}
               className={selectClassName(Boolean(errors.contactId))}
+              disabled={contactsQuery.isLoading}
             >
-              <option value="">None</option>
+              <option value="">{contactsQuery.isLoading ? 'Loading contacts...' : 'None'}</option>
               {contacts.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.firstName} {c.lastName}
@@ -296,6 +339,19 @@ export function DealDialog({ open, deal, pipelineId, stage, onClose, onSaved }: 
               ))}
             </select>
             {errors.contactId && <p className="text-xs text-destructive mt-1">{errors.contactId}</p>}
+            {contactsQuery.isError && (
+              <p className="text-xs text-destructive mt-1">
+                Failed to load contacts.{' '}
+                <button type="button" className="underline" onClick={() => contactsQuery.refetch()}>
+                  Retry
+                </button>
+              </p>
+            )}
+            {contactsTotal != null && contacts.length < contactsTotal && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Showing first {contacts.length} of {contactsTotal}.
+              </p>
+            )}
           </div>
 
           {!isEdit && stage && (
@@ -319,7 +375,7 @@ export function DealDialog({ open, deal, pipelineId, stage, onClose, onSaved }: 
         </div>
 
         <div className="mt-6 flex items-center justify-end gap-3">
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={requestClose} disabled={saveMutation.isPending}>
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={saveMutation.isPending}>

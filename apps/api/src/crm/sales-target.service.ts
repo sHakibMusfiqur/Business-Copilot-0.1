@@ -53,31 +53,47 @@ export class SalesTargetService {
       orderBy: { periodStart: 'desc' },
     });
 
-    const data = await Promise.all(
-      targets.map(async (target) => {
-        const achievedAgg = await this.prisma.deal.aggregate({
-          where: {
-            organizationId: orgId,
-            deletedAt: null,
-            wonAt: { gte: target.periodStart, lte: target.periodEnd },
-            ...(target.ownerId ? { ownerId: target.ownerId } : {}),
-          },
-          _sum: { value: true },
-          _count: { id: true },
-        });
+    // Single fetch for every won deal that can fall inside any target period
+    // (previously one aggregate query per target — N+1). Per-target predicates
+    // are applied in memory exactly as the per-target aggregates did.
+    let wonDeals: Array<{ value: Prisma.Decimal; ownerId: string | null; wonAt: Date | null }> = [];
+    if (targets.length > 0) {
+      const minStart = new Date(Math.min(...targets.map((t) => t.periodStart.getTime())));
+      const maxEnd = new Date(Math.max(...targets.map((t) => t.periodEnd.getTime())));
+      wonDeals = await this.prisma.deal.findMany({
+        where: {
+          organizationId: orgId,
+          deletedAt: null,
+          wonAt: { gte: minStart, lte: maxEnd },
+        },
+        select: { value: true, ownerId: true, wonAt: true },
+      });
+    }
 
-        const amount = toNumber(target.amount);
-        const achieved = toNumber(achievedAgg._sum.value);
+    const data = targets.map((target) => {
+      const inPeriod = wonDeals.filter(
+        (d) =>
+          d.wonAt !== null &&
+          d.wonAt >= target.periodStart &&
+          d.wonAt <= target.periodEnd &&
+          (target.ownerId ? d.ownerId === target.ownerId : true),
+      );
 
-        return {
-          ...target,
-          amount,
-          achieved,
-          wonCount: achievedAgg._count.id,
-          achievement: amount > 0 ? Math.round((achieved / amount) * 1000) / 10 : 0,
-        };
-      }),
-    );
+      // Exact decimal accumulation, matching the previous Prisma _sum result.
+      let sum = new Prisma.Decimal(0);
+      for (const d of inPeriod) sum = sum.plus(d.value);
+
+      const amount = toNumber(target.amount);
+      const achieved = toNumber(sum);
+
+      return {
+        ...target,
+        amount,
+        achieved,
+        wonCount: inPeriod.length,
+        achievement: amount > 0 ? Math.round((achieved / amount) * 1000) / 10 : 0,
+      };
+    });
 
     return { data, meta: { total: data.length, page: 1, limit: data.length, totalPages: 1 } };
   }
@@ -168,7 +184,7 @@ export class SalesTargetService {
 
     const updated = await this.prisma.salesTarget
       .update({
-        where: { id: targetId },
+        where: { id: targetId, organizationId: orgId },
         data: updateData,
         select: TARGET_SELECT,
       })
@@ -193,7 +209,9 @@ export class SalesTargetService {
     });
     if (!existing) throw new NotFoundException('Sales target not found');
 
-    await this.prisma.salesTarget.delete({ where: { id: targetId } });
+    // Org scope on the write itself (not just the preceding findFirst) so the
+    // delete cannot cross tenants even if the row changes hands concurrently.
+    await this.prisma.salesTarget.delete({ where: { id: targetId, organizationId: orgId } });
 
     this.logger.log(`Sales target deleted: ${targetId} by ${userId}`);
     return { message: 'Sales target deleted successfully' };

@@ -105,7 +105,9 @@ export class DealService {
           lead: { select: LEAD_SELECT },
           owner: { select: OWNER_SELECT },
         },
-        orderBy: { [field]: order },
+        // Stable pagination: tiebreak on id so multi-page fetches cannot
+        // duplicate or drop deals when the sort field has equal values.
+        orderBy: [{ [field]: order }, { id: 'asc' }],
         skip: (page - 1) * limit,
         take: limit,
       }),
@@ -365,7 +367,7 @@ export class DealService {
       });
 
       return tx.deal.update({
-        where: { id: dealId },
+        where: { id: dealId, organizationId: orgId },
         data: {
           stageId: stage.id,
           pipelineId: stage.pipelineId,

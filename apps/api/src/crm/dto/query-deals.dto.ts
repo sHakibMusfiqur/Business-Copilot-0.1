@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsOptional, IsInt, Min, Max, IsString, IsEnum } from 'class-validator';
+import { IsOptional, IsInt, Min, Max, IsString, IsEnum, IsIn } from 'class-validator';
 
 const allowedSortFields = [
   'title',
@@ -61,8 +61,8 @@ export class QueryDealsDto {
   @IsEnum(allowedSortFields)
   sortBy?: string = 'createdAt';
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ enum: ['asc', 'desc'] })
   @IsOptional()
-  @IsString()
+  @IsIn(['asc', 'desc'])
   sortOrder?: 'asc' | 'desc' = 'desc';
 }

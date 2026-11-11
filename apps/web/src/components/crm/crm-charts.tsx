@@ -110,7 +110,11 @@ export function FunnelBars({ stages }: { stages: CrmFunnelStage[] }) {
   return (
     <div role="group" aria-label="Deal funnel by stage" className="space-y-4">
       {stages.map((stage, index) => {
-        const width = Math.max(2, Math.round((stage.dealCount / entryCount) * 100));
+        // Zero-count stages must render an empty bar — the old Math.max(2, …)
+        // painted a 2% sliver that falsely implied a non-empty stage. Non-zero
+        // stages keep the 2% floor so tiny ratios stay visible.
+        const width =
+          stage.dealCount === 0 ? 0 : Math.max(2, Math.round((stage.dealCount / entryCount) * 100));
         const isFirst = index === 0;
 
         return (

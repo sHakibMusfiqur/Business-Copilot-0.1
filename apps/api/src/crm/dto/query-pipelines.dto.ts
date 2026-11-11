@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsEnum, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 const allowedSortFields = ['name', 'createdAt', 'updatedAt'] as const;
 
@@ -30,8 +30,8 @@ export class QueryPipelinesDto {
   @IsEnum(allowedSortFields)
   sortBy?: string = 'createdAt';
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ enum: ['asc', 'desc'] })
   @IsOptional()
-  @IsString()
+  @IsIn(['asc', 'desc'])
   sortOrder?: 'asc' | 'desc' = 'desc';
 }

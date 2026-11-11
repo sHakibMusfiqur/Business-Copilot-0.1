@@ -1,6 +1,15 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { IsString, IsOptional, IsEnum, IsNumber, Min, MinLength, MaxLength } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  IsEmail,
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsNumber,
+  Min,
+  MinLength,
+  MaxLength,
+} from 'class-validator';
 import { LeadStatus } from '@prisma/client';
 
 export class UpdateLeadDto {
@@ -8,6 +17,7 @@ export class UpdateLeadDto {
   @IsOptional()
   @IsString()
   @MinLength(1)
+  @MaxLength(200)
   name?: string;
 
   @ApiPropertyOptional()
@@ -21,19 +31,25 @@ export class UpdateLeadDto {
   @MaxLength(40)
   companyId?: string | null;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true })
   @IsOptional()
-  @IsString()
-  email?: string;
+  @IsEmail()
+  @MaxLength(254)
+  @Transform(({ value }) => (typeof value === 'string' ? value.toLowerCase().trim() : value))
+  // null clears the email (service writes it straight through); '' is rejected
+  // by @IsEmail, matching CreateLeadDto.
+  email?: string | null;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(40)
   phone?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(100)
   source?: string;
 
   @ApiPropertyOptional({ enum: LeadStatus })
@@ -51,10 +67,12 @@ export class UpdateLeadDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(40)
   assignedToId?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  @MaxLength(5000)
   notes?: string;
 }

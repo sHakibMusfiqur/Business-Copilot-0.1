@@ -1,6 +1,16 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { IsOptional, IsInt, Min, Max, IsString, IsBoolean } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { IsOptional, IsInt, Min, Max, IsString, IsBoolean, IsIn } from 'class-validator';
+
+/**
+ * Query strings arrive as 'true'/'false'; Boolean('false') === true, so coerce
+ * explicitly and preserve absence (undefined) so filters stay opt-in.
+ * Mirrors the platform-admin query DTO pattern.
+ */
+function toBooleanQuery(value: unknown): boolean | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  return value === true || value === 'true' || value === '1';
+}
 
 export class QueryInventoryDto {
   @ApiPropertyOptional({ default: 1, minimum: 1 })
@@ -25,19 +35,19 @@ export class QueryInventoryDto {
 
   @ApiPropertyOptional()
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(({ value }) => toBooleanQuery(value))
   @IsBoolean()
   isActive?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(({ value }) => toBooleanQuery(value))
   @IsBoolean()
   lowStock?: boolean;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @Type(() => Boolean)
+  @Transform(({ value }) => toBooleanQuery(value))
   @IsBoolean()
   outOfStock?: boolean;
 
@@ -51,8 +61,8 @@ export class QueryInventoryDto {
   @IsString()
   sortBy?: string = 'updatedAt';
 
-  @ApiPropertyOptional({ default: 'desc' })
+  @ApiPropertyOptional({ default: 'desc', enum: ['asc', 'desc'] })
   @IsOptional()
-  @IsString()
+  @IsIn(['asc', 'desc'])
   sortOrder?: 'asc' | 'desc' = 'desc';
 }

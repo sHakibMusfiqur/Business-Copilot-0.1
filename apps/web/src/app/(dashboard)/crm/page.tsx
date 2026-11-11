@@ -246,12 +246,12 @@ export default function CrmDashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <DashboardCard className="lg:col-span-2">
+        <DashboardCard className="lg:col-span-2 min-w-0">
           <h2 className="mb-4 text-sm font-medium">Revenue Trend</h2>
           <RevenueTrendChart trend={revenueTrend} />
         </DashboardCard>
 
-        <DashboardCard>
+        <DashboardCard className="min-w-0">
           <h2 className="mb-4 text-sm font-medium">Stage Funnel</h2>
           <FunnelBars stages={funnel} />
         </DashboardCard>

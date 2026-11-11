@@ -125,7 +125,8 @@ export function computeRevenueTrend(
 /**
  * Counts distinct deals that reached each stage, using current stage membership
  * plus recorded stage transitions so a deal that already advanced still shows
- * in the funnel of earlier stages.
+ * in the funnel of earlier stages. `value` sums those same distinct deals, so
+ * count and value always describe the identical "reached" set.
  */
 export function computeFunnel(
   stages: MetricStage[],
@@ -140,18 +141,27 @@ export function computeFunnel(
   conversionFromPrevious: number;
 }> {
   const reached = new Map<string, Set<string>>();
-  const valueByStage = new Map<string, number>();
+  const dealValue = new Map<string, number>();
 
   for (const stage of stages) reached.set(stage.id, new Set());
 
   for (const deal of deals) {
+    dealValue.set(deal.id, deal.value);
     if (!deal.stageId) continue;
     reached.get(deal.stageId)?.add(deal.id);
-    valueByStage.set(deal.stageId, (valueByStage.get(deal.stageId) ?? 0) + deal.value);
   }
 
   for (const entry of reach) {
     reached.get(entry.stageId)?.add(entry.dealId);
+  }
+
+  const valueByStage = new Map<string, number>();
+  for (const stage of stages) {
+    let sum = 0;
+    for (const dealId of reached.get(stage.id) ?? []) {
+      sum += dealValue.get(dealId) ?? 0;
+    }
+    valueByStage.set(stage.id, round2(sum));
   }
 
   return stages.map((stage, i) => {
@@ -162,7 +172,7 @@ export function computeFunnel(
       name: stage.name,
       position: stage.position,
       dealCount: count,
-      value: round2(valueByStage.get(stage.id) ?? 0),
+      value: valueByStage.get(stage.id) ?? 0,
       conversionFromPrevious: i === 0 ? 100 : percentage(count, previous ?? 0),
     };
   });

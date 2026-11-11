@@ -94,17 +94,27 @@ export default function CrmDealsPage() {
 
   const dealsQuery = useQuery<DealListResponse>({
     queryKey: ['crm', 'deals', 'board', { pipelineId, search }],
-    queryFn: ({ signal }) =>
-      getDeals(
-        {
-          pipelineId: pipelineId ?? undefined,
-          search: search || undefined,
-          limit: 200,
-          sortBy: 'expectedCloseDate',
-          sortOrder: 'asc',
-        },
-        signal,
-      ),
+    queryFn: async ({ signal }) => {
+      const baseParams = {
+        pipelineId: pipelineId ?? undefined,
+        search: search || undefined,
+        // Backend max page size (QueryDealsDto.limit Max(200))
+        limit: 200,
+        sortBy: 'expectedCloseDate',
+        sortOrder: 'asc' as const,
+      };
+      const first = await getDeals({ ...baseParams, page: 1 }, signal);
+      const all: DealListItem[] = [...first.data];
+      // Fetch every page so the board is not truncated at 200 records.
+      // Safety cap bounds the request count for very large pipelines; the board
+      // keeps showing the "Showing X of Y" notice when the cap is hit.
+      const maxPages = Math.min(first.meta.totalPages, 10);
+      for (let page = 2; page <= maxPages && all.length < first.meta.total; page++) {
+        const next = await getDeals({ ...baseParams, page }, signal);
+        all.push(...next.data);
+      }
+      return { data: all, meta: first.meta };
+    },
     enabled: canRead && pipelineId != null,
   });
 

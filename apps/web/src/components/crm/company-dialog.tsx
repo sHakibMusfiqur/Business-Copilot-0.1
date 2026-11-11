@@ -127,6 +127,13 @@ export function CompanyDialog({ open, company, onClose, onSaved }: CompanyDialog
     },
   });
 
+  // Block backdrop/X/Cancel while a save is in flight; the success path still
+  // closes via saveMutation.onSuccess.
+  const requestClose = () => {
+    if (saveMutation.isPending) return;
+    onClose();
+  };
+
   function setField<K extends keyof CompanyFormValues>(key: K, value: CompanyFormValues[K]) {
     setValues((prev) => ({ ...prev, [key]: value }));
   }
@@ -149,11 +156,16 @@ export function CompanyDialog({ open, company, onClose, onSaved }: CompanyDialog
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true" aria-label={isEdit ? 'Edit company' : 'Create company'}>
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={requestClose} />
       <div className="relative z-50 w-full max-w-3xl rounded-xl border bg-card p-6 shadow-xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-semibold">{isEdit ? 'Edit Company' : 'Create Company'}</h2>
-          <button onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent">
+          <button
+            onClick={requestClose}
+            disabled={saveMutation.isPending}
+            aria-label="Close"
+            className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent disabled:opacity-50"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -180,14 +192,23 @@ export function CompanyDialog({ open, company, onClose, onSaved }: CompanyDialog
               id="company-owner"
               value={values.ownerId}
               onChange={(e) => setField('ownerId', e.target.value)}
-              className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="flex h-10 w-full rounded-lg border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50"
+              disabled={usersQuery.isLoading}
             >
-              <option value="">Unassigned</option>
+              <option value="">{usersQuery.isLoading ? 'Loading users...' : 'Unassigned'}</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>{u.name}</option>
               ))}
             </select>
             {errors.ownerId && <p className="text-xs text-destructive mt-1">{errors.ownerId}</p>}
+            {usersQuery.isError && (
+              <p className="text-xs text-destructive mt-1">
+                Failed to load users.{' '}
+                <button type="button" className="underline" onClick={() => usersQuery.refetch()}>
+                  Retry
+                </button>
+              </p>
+            )}
           </div>
           <div className="col-span-2 sm:col-span-1">
             <Label htmlFor="company-email">Email</Label>
@@ -243,7 +264,7 @@ export function CompanyDialog({ open, company, onClose, onSaved }: CompanyDialog
         </div>
 
         <div className="mt-6 flex items-center justify-end gap-3">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button variant="outline" onClick={requestClose} disabled={saveMutation.isPending}>Cancel</Button>
           <Button onClick={handleSubmit} disabled={saveMutation.isPending}>
             {saveMutation.isPending ? (
               <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>

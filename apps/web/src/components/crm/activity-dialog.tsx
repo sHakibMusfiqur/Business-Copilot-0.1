@@ -17,6 +17,7 @@ import {
   getDeals,
   getCompanies,
   getOrganizationUsers,
+  fetchAllPages,
 } from '@/lib/api';
 import type { CrmActivity, ActivityPayload } from '@/lib/api';
 
@@ -24,12 +25,21 @@ type LinkType = 'lead' | 'contact' | 'deal' | 'company';
 
 const ACTIVITY_TYPES = ['CALL', 'EMAIL', 'MEETING', 'TASK', 'NOTE'] as const;
 
-const activitySchema = z.object({
+/** Fields editable in both create and edit mode. */
+const activityBaseSchema = z.object({
   type: z.enum(ACTIVITY_TYPES),
   title: z.string().min(1, 'Title is required').max(200, 'Title must be 200 characters or fewer'),
   description: z.string().max(5000),
   dueDate: z.string().optional(),
   completed: z.boolean(),
+});
+
+/**
+ * Create mode additionally requires the link and assignee. The backend treats
+ * these as create-only (UpdateActivityDto has no link/assignee fields), so edit
+ * mode must not validate them — otherwise edits can never save.
+ */
+const activitySchema = activityBaseSchema.extend({
   linkType: z.enum(['lead', 'contact', 'deal', 'company']),
   linkId: z.string().min(1, 'Select what this activity is linked to'),
   assignedToId: z.string(),
@@ -120,25 +130,28 @@ export function ActivityDialog({ open, activity, defaultLink, onClose, onSaved }
 
   const linkType = values.linkType;
 
-  // Only the selector for the chosen link type is fetched
+  // Only the selector for the chosen link type is fetched; every page is
+  // loaded (bounded) so options are not silently truncated at 100.
   const leadOptionsQuery = useQuery({
     queryKey: ['crm', 'leads', 'options'],
-    queryFn: async ({ signal }) => (await getLeads({ limit: 100 }, signal)) as { data: LeadOption[] },
+    queryFn: ({ signal }) => fetchAllPages<LeadOption>((page) => getLeads({ limit: 100, page }, signal)),
     enabled: open && !isEdit && linkType === 'lead',
   });
   const contactOptionsQuery = useQuery({
     queryKey: ['crm', 'contacts', 'options'],
-    queryFn: ({ signal }) => getContacts({ limit: 100, sortBy: 'lastName', sortOrder: 'asc' }, signal),
+    queryFn: ({ signal }) =>
+      fetchAllPages((page) => getContacts({ limit: 100, page, sortBy: 'lastName', sortOrder: 'asc' }, signal)),
     enabled: open && !isEdit && linkType === 'contact',
   });
   const dealOptionsQuery = useQuery({
     queryKey: ['crm', 'deals', 'options'],
-    queryFn: ({ signal }) => getDeals({ limit: 100 }, signal),
+    queryFn: ({ signal }) => fetchAllPages((page) => getDeals({ limit: 100, page }, signal)),
     enabled: open && !isEdit && linkType === 'deal',
   });
   const companyOptionsQuery = useQuery({
     queryKey: ['crm', 'companies', 'options'],
-    queryFn: ({ signal }) => getCompanies({ limit: 100, sortBy: 'name', sortOrder: 'asc' }, signal),
+    queryFn: ({ signal }) =>
+      fetchAllPages((page) => getCompanies({ limit: 100, page, sortBy: 'name', sortOrder: 'asc' }, signal)),
     enabled: open && !isEdit && linkType === 'company',
   });
   const usersQuery = useQuery({
@@ -147,10 +160,31 @@ export function ActivityDialog({ open, activity, defaultLink, onClose, onSaved }
     enabled: open && !isEdit,
   });
 
+  // Only one entity selector is enabled at a time, so combined flags are safe.
+  const optionsLoading =
+    leadOptionsQuery.isLoading ||
+    contactOptionsQuery.isLoading ||
+    dealOptionsQuery.isLoading ||
+    companyOptionsQuery.isLoading;
+  const optionsError =
+    leadOptionsQuery.isError ||
+    contactOptionsQuery.isError ||
+    dealOptionsQuery.isError ||
+    companyOptionsQuery.isError;
+  const activeOptions =
+    values.linkType === 'lead'
+      ? leadOptionsQuery.data
+      : values.linkType === 'contact'
+        ? contactOptionsQuery.data
+        : values.linkType === 'deal'
+          ? dealOptionsQuery.data
+          : companyOptionsQuery.data;
+
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const parsed = activitySchema.parse(values);
+      // Edit mode validates/sends only the base fields; link + assignee are create-only.
       if (isEdit && activity) {
+        const parsed = activityBaseSchema.parse(values);
         const payload: Partial<ActivityPayload> = {
           type: parsed.type,
           title: parsed.title,
@@ -161,6 +195,7 @@ export function ActivityDialog({ open, activity, defaultLink, onClose, onSaved }
         return updateCrmActivity(activity.id, payload);
       }
 
+      const parsed = activitySchema.parse(values);
       const payload: ActivityPayload = {
         type: parsed.type,
         title: parsed.title,
@@ -189,12 +224,21 @@ export function ActivityDialog({ open, activity, defaultLink, onClose, onSaved }
     },
   });
 
+  // Close (backdrop/X/Cancel) is blocked while a save is in flight so the
+  // dialog cannot vanish under an unfinished write. The success path still
+  // closes via saveMutation.onSuccess.
+  const requestClose = () => {
+    if (saveMutation.isPending) return;
+    onClose();
+  };
+
   function setField<K extends keyof ActivityFormValues>(key: K, value: ActivityFormValues[K]) {
     setValues((prev) => ({ ...prev, [key]: value }));
   }
 
   function handleSubmit() {
-    const result = activitySchema.safeParse(values);
+    // Edit mode must not require link/assignee (they are create-only).
+    const result = isEdit ? activityBaseSchema.safeParse(values) : activitySchema.safeParse(values);
     if (!result.success) {
       const fieldErrors: Record<string, string> = {};
       for (const issue of result.error.issues) {
@@ -218,11 +262,16 @@ export function ActivityDialog({ open, activity, defaultLink, onClose, onSaved }
       aria-modal="true"
       aria-label={isEdit ? 'Edit activity' : 'Create activity'}
     >
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={requestClose} />
       <div className="relative z-50 w-full max-w-xl rounded-xl border bg-card p-6 shadow-xl max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-semibold">{isEdit ? 'Edit Activity' : 'Create Activity'}</h2>
-          <button onClick={onClose} aria-label="Close" className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent">
+          <button
+            onClick={requestClose}
+            disabled={saveMutation.isPending}
+            aria-label="Close"
+            className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent disabled:opacity-50"
+          >
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -328,8 +377,9 @@ export function ActivityDialog({ open, activity, defaultLink, onClose, onSaved }
                   value={values.linkId}
                   onChange={(e) => setField('linkId', e.target.value)}
                   className={selectClassName(Boolean(errors.linkId))}
+                  disabled={optionsLoading}
                 >
-                  <option value="">Select...</option>
+                  <option value="">{optionsLoading ? 'Loading options...' : 'Select...'}</option>
                   {values.linkType === 'lead' &&
                     (leadOptionsQuery.data?.data ?? []).map((o) => (
                       <option key={o.id} value={o.id}>
@@ -356,11 +406,28 @@ export function ActivityDialog({ open, activity, defaultLink, onClose, onSaved }
                     ))}
                 </select>
                 {errors.linkId && <p className="text-xs text-destructive mt-1">{errors.linkId}</p>}
-                {(leadOptionsQuery.isError ||
-                  contactOptionsQuery.isError ||
-                  dealOptionsQuery.isError ||
-                  companyOptionsQuery.isError) && (
-                  <p className="text-xs text-destructive mt-1">Failed to load options. Reopen and try again.</p>
+                {optionsError && (
+                  <p className="text-xs text-destructive mt-1">
+                    Failed to load options.{' '}
+                    <button
+                      type="button"
+                      className="underline"
+                      onClick={() => {
+                        if (values.linkType === 'lead') leadOptionsQuery.refetch();
+                        else if (values.linkType === 'contact') contactOptionsQuery.refetch();
+                        else if (values.linkType === 'deal') dealOptionsQuery.refetch();
+                        else companyOptionsQuery.refetch();
+                      }}
+                    >
+                      Retry
+                    </button>
+                  </p>
+                )}
+                {activeOptions && activeOptions.total > activeOptions.data.length && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Showing first {activeOptions.data.length} of {activeOptions.total} — search on the list
+                    pages to find more.
+                  </p>
                 )}
               </div>
 
@@ -371,8 +438,11 @@ export function ActivityDialog({ open, activity, defaultLink, onClose, onSaved }
                   value={values.assignedToId}
                   onChange={(e) => setField('assignedToId', e.target.value)}
                   className={selectClassName(Boolean(errors.assignedToId))}
+                  disabled={usersQuery.isLoading}
                 >
-                  <option value="">Anyone (unassigned)</option>
+                  <option value="">
+                    {usersQuery.isLoading ? 'Loading users...' : 'Anyone (unassigned)'}
+                  </option>
                   {users.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name}
@@ -380,6 +450,14 @@ export function ActivityDialog({ open, activity, defaultLink, onClose, onSaved }
                   ))}
                 </select>
                 {errors.assignedToId && <p className="text-xs text-destructive mt-1">{errors.assignedToId}</p>}
+                {usersQuery.isError && (
+                  <p className="text-xs text-destructive mt-1">
+                    Failed to load users.{' '}
+                    <button type="button" className="underline" onClick={() => usersQuery.refetch()}>
+                      Retry
+                    </button>
+                  </p>
+                )}
               </div>
             </>
           )}
@@ -401,7 +479,7 @@ export function ActivityDialog({ open, activity, defaultLink, onClose, onSaved }
         </div>
 
         <div className="mt-6 flex items-center justify-end gap-3">
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={requestClose} disabled={saveMutation.isPending}>
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={saveMutation.isPending}>

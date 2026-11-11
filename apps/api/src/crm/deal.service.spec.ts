@@ -362,7 +362,7 @@ describe('DealService.findAll', () => {
         where: { organizationId: ORG_ID, deletedAt: null },
         skip: 0,
         take: 10,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
       }),
     );
     expect(result.meta).toEqual({ total: 3, page: 1, limit: 10, totalPages: 1 });
@@ -412,7 +412,7 @@ describe('DealService.findAll', () => {
         }),
         skip: 20,
         take: 10,
-        orderBy: { value: 'asc' },
+        orderBy: [{ value: 'asc' }, { id: 'asc' }],
       }),
     );
   });
@@ -425,7 +425,7 @@ describe('DealService.findAll', () => {
     await service.findAll(ORG_ID, { sortBy: 'notAField', sortOrder: 'desc' } as never);
 
     expect(dealFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({ orderBy: { createdAt: 'desc' } }),
+      expect.objectContaining({ orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] }),
     );
   });
 });

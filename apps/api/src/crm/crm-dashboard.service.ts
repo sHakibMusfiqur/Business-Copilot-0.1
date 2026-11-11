@@ -155,9 +155,6 @@ export class CrmDashboardService {
     const conversionRate = percentage(wonInPeriod.length, closedCount);
     const salesCycle = computeSalesCycle(wonInPeriod);
 
-    const targetAmount = round2(targetRows.reduce((sum, t) => sum + toNumber(t.amount), 0));
-    const targetAchievement = targetAmount > 0 ? percentage(revenue, targetAmount) : null;
-
     const funnel = computeFunnel(stages, deals, reach);
     const revenueTrend = computeRevenueTrend(wonInPeriod, range, granularity);
 
@@ -191,11 +188,21 @@ export class CrmDashboardService {
       .sort((a, b) => b.wonRevenue - a.wonRevenue || b.openValue - a.openValue)
       .slice(0, leaderboardLimit);
 
+    // Each target is measured against its OWN period, using the same owner
+    // semantics as SalesTargetService.findAll: an owner-specific target counts
+    // that owner's won deals in the target period; an org-wide target
+    // (ownerId null) counts all org deals won in that period.
     const targets = targetRows.map((t) => {
       const amount = toNumber(t.amount);
       const achieved = round2(
-        wonInPeriod
-          .filter((d) => d.ownerId === t.ownerId || (t.ownerId === null && d.ownerId === null))
+        deals
+          .filter(
+            (d) =>
+              d.wonAt !== null &&
+              d.wonAt >= t.periodStart &&
+              d.wonAt <= t.periodEnd &&
+              (t.ownerId ? d.ownerId === t.ownerId : true),
+          )
           .reduce((sum, d) => sum + d.value, 0),
       );
       return {
@@ -210,6 +217,13 @@ export class CrmDashboardService {
         achievement: amount > 0 ? percentage(achieved, amount) : 0,
       };
     });
+
+    // Achievement KPI uses the same per-target periods as the rows above, so
+    // numerator and denominator are measured consistently (no more whole-range
+    // revenue against summed target amounts).
+    const targetAmount = round2(targets.reduce((sum, t) => sum + t.amount, 0));
+    const achievedTotal = round2(targets.reduce((sum, t) => sum + t.achieved, 0));
+    const targetAchievement = targetAmount > 0 ? percentage(achievedTotal, targetAmount) : null;
 
     const kpis = {
       revenue,

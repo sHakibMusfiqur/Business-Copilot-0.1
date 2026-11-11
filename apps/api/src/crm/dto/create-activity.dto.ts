@@ -3,6 +3,17 @@ import { Type, Transform } from 'class-transformer';
 import { IsBoolean, IsDate, IsEnum, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
 import { ActivityType } from '@prisma/client';
 
+/**
+ * JSON bodies should carry real booleans; tolerate 'true'/'false' strings but
+ * pass anything else through so @IsBoolean rejects it with 400 instead of
+ * coercing garbage (Boolean('false') === true).
+ */
+function toBooleanBody(value: unknown): unknown {
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  return value;
+}
+
 export class CreateActivityDto {
   @ApiProperty({ enum: ActivityType })
   @IsEnum(ActivityType)
@@ -30,7 +41,7 @@ export class CreateActivityDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
-  @Type(() => Boolean)
+  @Transform(({ value }) => toBooleanBody(value))
   completed?: boolean;
 
   @ApiPropertyOptional()

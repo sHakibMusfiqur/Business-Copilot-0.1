@@ -117,6 +117,25 @@ export interface CrmListMeta {
   totalPages: number;
 }
 
+/**
+ * Fetches every page of a list endpoint (bounded by maxPages) so entity
+ * dropdowns are not silently truncated at the first page. Returns all rows
+ * plus the server-reported total so callers can surface truncation.
+ */
+export async function fetchAllPages<T>(
+  fetchPage: (page: number) => Promise<{ data: T[]; meta: CrmListMeta }>,
+  maxPages = 5,
+): Promise<{ data: T[]; total: number }> {
+  const first = await fetchPage(1);
+  const all: T[] = [...first.data];
+  const pages = Math.min(first.meta.totalPages, maxPages);
+  for (let page = 2; page <= pages && all.length < first.meta.total; page++) {
+    const next = await fetchPage(page);
+    all.push(...next.data);
+  }
+  return { data: all, total: first.meta.total };
+}
+
 export interface CrmUserRef {
   id: string;
   name: string;

@@ -56,12 +56,24 @@ export function CompanyDetailsDialog({ companyId, company, open, onClose }: Comp
         )}
 
         {detailQuery.isError && (
-          <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive">
-            Failed to load company details: {detailQuery.error.message}
+          <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-4 text-sm text-destructive flex items-center justify-between gap-3">
+            <span>
+              Failed to load company details: {detailQuery.error instanceof Error ? detailQuery.error.message : 'Unknown error'}
+            </span>
+            <button
+              type="button"
+              className="shrink-0 rounded-md border border-destructive/40 px-3 py-1 text-xs font-medium hover:bg-destructive/20"
+              onClick={() => detailQuery.refetch()}
+            >
+              Retry
+            </button>
           </div>
         )}
 
-        {!detailQuery.isLoading && !detailQuery.isError && header && (
+        {/* Fallback row data renders even when the detail fetch failed, so the
+            dialog still shows what the list page already knows. Stats and
+            related lists only render when the full detail actually loaded. */}
+        {!detailQuery.isLoading && header && (
           <>
             <div className="flex items-center gap-3 mb-6">
               <div className="rounded-full bg-muted p-3">
@@ -181,6 +193,12 @@ export function CompanyDetailsDialog({ companyId, company, open, onClose }: Comp
               </div>
             )}
           </>
+        )}
+
+        {!detailQuery.isLoading && !detailQuery.isError && !header && (
+          <div className="py-12 text-center text-sm text-muted-foreground">
+            No company data to display.
+          </div>
         )}
       </div>
     </div>
