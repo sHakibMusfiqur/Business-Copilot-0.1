@@ -9,6 +9,8 @@ import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
 
+import { parseStrictIsoDate, startOfDay, startOfNextUtcDay } from './crm-metrics';
+
 import type { CreateSalesTargetDto } from './dto/create-sales-target.dto';
 import type { UpdateSalesTargetDto } from './dto/update-sales-target.dto';
 import type { QuerySalesTargetsDto } from './dto/query-sales-targets.dto';
@@ -43,8 +45,22 @@ export class SalesTargetService {
     if (query.from || query.to) {
       where.periodStart = {};
       where.periodEnd = {};
-      if (query.from) where.periodEnd = { gte: new Date(query.from) };
-      if (query.to) where.periodStart = { lte: new Date(query.to) };
+      // Day-scoped overlap: `from` compares against the start of its day (a
+      // target ending any time on that day still overlaps) and `to` against
+      // the exclusive next-day boundary (a target starting any time on that
+      // day still overlaps). Date-only inputs behave exactly as before.
+      // Strict calendar validation: 2026-02-30 must be a 400, not a silent
+      // roll-over to 2026-03-02 feeding Prisma a different day.
+      if (query.from) {
+        const from = parseStrictIsoDate(query.from);
+        if (from === null) throw new BadRequestException('Invalid from date');
+        where.periodEnd = { gte: startOfDay(from) };
+      }
+      if (query.to) {
+        const to = parseStrictIsoDate(query.to);
+        if (to === null) throw new BadRequestException('Invalid to date');
+        where.periodStart = { lt: startOfNextUtcDay(to) };
+      }
     }
 
     const targets = await this.prisma.salesTarget.findMany({
@@ -56,26 +72,36 @@ export class SalesTargetService {
     // Single fetch for every won deal that can fall inside any target period
     // (previously one aggregate query per target — N+1). Per-target predicates
     // are applied in memory exactly as the per-target aggregates did.
+    // The window's upper bound is the exclusive next-day boundary of the LATEST
+    // periodEnd so deals won at any time on that end date (noon, 23:59, …)
+    // are fetched rather than cut off at midnight.
     let wonDeals: Array<{ value: Prisma.Decimal; ownerId: string | null; wonAt: Date | null }> = [];
     if (targets.length > 0) {
       const minStart = new Date(Math.min(...targets.map((t) => t.periodStart.getTime())));
-      const maxEnd = new Date(Math.max(...targets.map((t) => t.periodEnd.getTime())));
+      const maxEndExclusive = startOfNextUtcDay(
+        new Date(Math.max(...targets.map((t) => t.periodEnd.getTime()))),
+      );
       wonDeals = await this.prisma.deal.findMany({
         where: {
           organizationId: orgId,
           deletedAt: null,
-          wonAt: { gte: minStart, lte: maxEnd },
+          wonAt: { gte: minStart, lt: maxEndExclusive },
         },
         select: { value: true, ownerId: true, wonAt: true },
       });
     }
 
     const data = targets.map((target) => {
+      // periodEnd is day-scoped: the whole end DATE is part of the period.
+      // `< startOfNextUtcDay(periodEnd)` is the exclusive-boundary form of
+      // "won at any time through the end of that day" — a deal won exactly at
+      // the next day's start is excluded.
+      const periodEndExclusive = startOfNextUtcDay(target.periodEnd);
       const inPeriod = wonDeals.filter(
         (d) =>
           d.wonAt !== null &&
           d.wonAt >= target.periodStart &&
-          d.wonAt <= target.periodEnd &&
+          d.wonAt < periodEndExclusive &&
           (target.ownerId ? d.ownerId === target.ownerId : true),
       );
 
@@ -109,7 +135,10 @@ export class SalesTargetService {
       where: {
         organizationId: orgId,
         deletedAt: null,
-        wonAt: { gte: target.periodStart, lte: target.periodEnd },
+        // Day-scoped periodEnd (exclusive next-day boundary) — must stay in
+        // lockstep with findAll so a target's achieved value is identical
+        // however it is looked up.
+        wonAt: { gte: target.periodStart, lt: startOfNextUtcDay(target.periodEnd) },
         ...(target.ownerId ? { ownerId: target.ownerId } : {}),
       },
       _sum: { value: true },
@@ -129,8 +158,14 @@ export class SalesTargetService {
   }
 
   async create(orgId: string, userId: string, dto: CreateSalesTargetDto) {
-    const periodStart = new Date(dto.periodStart);
-    const periodEnd = new Date(dto.periodEnd);
+    const periodStart = parseStrictIsoDate(dto.periodStart);
+    const periodEnd = parseStrictIsoDate(dto.periodEnd);
+    if (periodStart === null || periodEnd === null) {
+      // Invalid or impossible calendar dates (2026-02-30 → silently
+      // 2026-03-02 via `new Date()`) must be a 400, not a Prisma/serialization
+      // failure — or worse, stored as a different day.
+      throw new BadRequestException('Invalid periodStart or periodEnd');
+    }
     if (periodStart > periodEnd) {
       throw new BadRequestException('periodStart must be on or before periodEnd');
     }
@@ -166,8 +201,13 @@ export class SalesTargetService {
     });
     if (!existing) throw new NotFoundException('Sales target not found');
 
-    const periodStart = dto.periodStart ? new Date(dto.periodStart) : existing.periodStart;
-    const periodEnd = dto.periodEnd ? new Date(dto.periodEnd) : existing.periodEnd;
+    const periodStart = dto.periodStart ? parseStrictIsoDate(dto.periodStart) : existing.periodStart;
+    const periodEnd = dto.periodEnd ? parseStrictIsoDate(dto.periodEnd) : existing.periodEnd;
+    if (periodStart === null || periodEnd === null) {
+      // Same strict validation as create: impossible calendar dates are a 400
+      // and never reach Prisma.
+      throw new BadRequestException('Invalid periodStart or periodEnd');
+    }
     if (periodStart > periodEnd) {
       throw new BadRequestException('periodStart must be on or before periodEnd');
     }

@@ -1,15 +1,15 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsOptional, IsString } from 'class-validator';
+import { IsISO8601, IsOptional, IsString } from 'class-validator';
 
 export class QuerySalesTargetsDto {
   @ApiPropertyOptional()
   @IsOptional()
-  @IsDateString()
+  @IsISO8601({ strict: true })
   from?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
-  @IsDateString()
+  @IsISO8601({ strict: true })
   to?: string;
 
   @ApiPropertyOptional()

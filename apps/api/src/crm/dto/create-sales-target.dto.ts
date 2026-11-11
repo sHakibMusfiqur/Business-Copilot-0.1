@@ -1,14 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsDateString, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsISO8601, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 export class CreateSalesTargetDto {
   @ApiProperty({ description: 'Inclusive ISO date the target period starts' })
-  @IsDateString()
+  @IsISO8601({ strict: true })
   periodStart!: string;
 
   @ApiProperty({ description: 'Inclusive ISO date the target period ends' })
-  @IsDateString()
+  @IsISO8601({ strict: true })
   periodEnd!: string;
 
   @ApiProperty()

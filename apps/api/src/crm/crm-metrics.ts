@@ -1,3 +1,5 @@
+import { isISO8601 } from 'class-validator';
+
 export type Granularity = 'day' | 'week' | 'month';
 
 export interface MetricDeal {
@@ -33,6 +35,37 @@ export interface DateRange {
 export function startOfDay(date: Date): Date {
   const d = new Date(date);
   d.setUTCHours(0, 0, 0, 0);
+  return d;
+}
+
+/**
+ * Parses an ISO date/datetime string with STRICT calendar validation and
+ * returns null when the value is not a real date.
+ *
+ * Plain `new Date('2026-02-30')` silently rolls the date over to 2026-03-02
+ * (JavaScript normalises out-of-range components instead of failing), and
+ * class-validator's `@IsDateString()` accepts such strings — so an invalid
+ * date could previously reach Prisma/reporting as a different, "valid" day.
+ * `isISO8601(..., { strict: true })` rejects impossible calendar dates
+ * (2026-02-30, 2026-02-29 in a non-leap year, 2026-04-31, month 13, garbage)
+ * while accepting every format `@IsDateString()` accepted for real dates
+ * (date-only, datetime with/without offset, space separator).
+ */
+export function parseStrictIsoDate(value: string): Date | null {
+  if (!isISO8601(value, { strict: true })) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/**
+ * Exclusive day boundary: 00:00:00.000 UTC of the day AFTER the given date's
+ * UTC day. Used so a range/end date that covers "through the entire day" can
+ * be expressed as `timestamp < startOfNextUtcDay(day)` — a next-day boundary
+ * instead of fragile `<= 23:59:59.999` millisecond comparisons.
+ */
+export function startOfNextUtcDay(date: Date): Date {
+  const d = startOfDay(date);
+  d.setUTCDate(d.getUTCDate() + 1);
   return d;
 }
 
@@ -93,12 +126,21 @@ export function percentage(part: number, total: number): number {
   return Math.round((part / total) * 1000) / 10;
 }
 
+/**
+ * Buckets won deals into the revenue trend.
+ *
+ * `range.end` is an EXCLUSIVE boundary (next-day start). The last bucket is
+ * therefore derived from the last millisecond the range actually covers, so a
+ * date-scoped range like [Jun 1, Jun 16) still ends at the Jun 15 bucket
+ * instead of producing an empty trailing Jun 16 bucket.
+ */
 export function computeRevenueTrend(
   wonDeals: MetricDeal[],
   range: DateRange,
   granularity: Granularity,
 ): { labels: string[]; revenue: number[]; deals: number[] } {
-  const buckets = buildBuckets(range, granularity);
+  const lastCoveredInstant = new Date(range.end.getTime() - 1);
+  const buckets = buildBuckets({ start: range.start, end: lastCoveredInstant }, granularity);
   const index = new Map<string, number>();
   buckets.forEach((bucket, i) => index.set(bucket.toISOString().slice(0, 10), i));
 
@@ -107,7 +149,9 @@ export function computeRevenueTrend(
 
   for (const deal of wonDeals) {
     if (!deal.wonAt) continue;
-    if (deal.wonAt < range.start || deal.wonAt > range.end) continue;
+    // range.end is exclusive: a deal stamped exactly at the boundary belongs
+    // to the next range, not this one.
+    if (deal.wonAt < range.start || deal.wonAt >= range.end) continue;
     const key = bucketStart(deal.wonAt, granularity).toISOString().slice(0, 10);
     const i = index.get(key);
     if (i === undefined) continue;

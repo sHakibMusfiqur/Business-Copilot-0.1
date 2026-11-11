@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../prisma/prisma.service';
@@ -7,8 +7,11 @@ import {
   computeFunnel,
   computeRevenueTrend,
   computeSalesCycle,
+  parseStrictIsoDate,
   percentage,
   round2,
+  startOfDay,
+  startOfNextUtcDay,
   type MetricDeal,
   type MetricStage,
   type StageReach,
@@ -24,18 +27,37 @@ export interface CrmDateRange {
   end: Date;
 }
 
-/** Resolves the reporting window; defaults to the last 12 months. */
+/**
+ * Resolves the reporting window; defaults to the last 12 months.
+ *
+ * Date semantics (all boundaries are UTC days):
+ * - `start` is INCLUSIVE: it is the 00:00 start of the selected start day, so
+ *   the entire first day is covered.
+ * - `end` is EXCLUSIVE: it is 00:00 of the day AFTER the selected end day, so
+ *   the entire end day (through 23:59:59.999) is covered without fragile
+ *   `- 1ms` comparisons. Consumers must compare with `< range.end`.
+ * - With no `endDate`, the range ends at the boundary of the CURRENT day
+ *   (tomorrow 00:00 UTC exclusive) — never ~24 hours into the future.
+ *
+ * Invalid, unparsable, or impossible calendar dates (e.g. 2026-02-30, which
+ * `new Date()` would silently roll over to 2026-03-02) and inverted ranges
+ * throw BadRequestException (HTTP 400).
+ */
 export function resolveRange(query: Pick<QueryCrmReportsDto, 'startDate' | 'endDate'>): CrmDateRange {
   const now = new Date();
   const defaultStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (DEFAULT_RANGE_MONTHS - 1), 1));
-  const start = query.startDate ? new Date(query.startDate) : defaultStart;
-  const end = query.endDate ? new Date(query.endDate) : new Date(now.getTime() + 24 * 60 * 60 * 1000 - 1000);
+  const parsedStart = query.startDate ? parseStrictIsoDate(query.startDate) : defaultStart;
+  const parsedEnd = query.endDate ? parseStrictIsoDate(query.endDate) : now;
 
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-    throw new Error('Invalid date range');
+  if (parsedStart === null || parsedEnd === null) {
+    throw new BadRequestException('Invalid startDate or endDate');
   }
-  if (start > end) {
-    throw new Error('startDate must be before endDate');
+
+  const start = startOfDay(parsedStart);
+  const end = startOfNextUtcDay(parsedEnd);
+
+  if (start.getTime() >= end.getTime()) {
+    throw new BadRequestException('startDate must be on or before endDate');
   }
   return { start, end };
 }
@@ -109,7 +131,9 @@ export class CrmDashboardService {
       this.prisma.salesTarget.findMany({
         where: {
           organizationId: orgId,
-          periodStart: { lte: range.end },
+          // range.end is the exclusive next-day boundary: a target starting
+          // any time on the last covered day still overlaps the range.
+          periodStart: { lt: range.end },
           periodEnd: { gte: range.start },
           ...(ownerId ? { ownerId } : {}),
         },
@@ -124,9 +148,9 @@ export class CrmDashboardService {
         },
         orderBy: { periodStart: 'asc' },
       }),
-      this.prisma.lead.count({ where: { organizationId: orgId, deletedAt: null, createdAt: { gte: range.start, lte: range.end } } }),
-      this.prisma.contact.count({ where: { organizationId: orgId, deletedAt: null, createdAt: { gte: range.start, lte: range.end } } }),
-      this.prisma.deal.count({ where: { organizationId: orgId, deletedAt: null, createdAt: { gte: range.start, lte: range.end } } }),
+      this.prisma.lead.count({ where: { organizationId: orgId, deletedAt: null, createdAt: { gte: range.start, lt: range.end } } }),
+      this.prisma.contact.count({ where: { organizationId: orgId, deletedAt: null, createdAt: { gte: range.start, lt: range.end } } }),
+      this.prisma.deal.count({ where: { organizationId: orgId, deletedAt: null, createdAt: { gte: range.start, lt: range.end } } }),
     ]);
 
     const deals: MetricDeal[] = dealRows.map((d) => ({
@@ -144,8 +168,11 @@ export class CrmDashboardService {
     const stages: MetricStage[] = pipelines.flatMap((p) => p.stages);
     const reach: StageReach[] = historyRows.map((row) => ({ dealId: row.dealId, stageId: row.toStageId }));
 
-    const wonInPeriod = deals.filter((d) => d.wonAt && d.wonAt >= range.start && d.wonAt <= range.end);
-    const lostInPeriod = deals.filter((d) => d.lostAt && d.lostAt >= range.start && d.lostAt <= range.end);
+    // range.end is exclusive (next-day start): won/lost stamps at any time on
+    // the last covered day — 23:59 included — are in range; a stamp exactly at
+    // the next day's start is not.
+    const wonInPeriod = deals.filter((d) => d.wonAt && d.wonAt >= range.start && d.wonAt < range.end);
+    const lostInPeriod = deals.filter((d) => d.lostAt && d.lostAt >= range.start && d.lostAt < range.end);
     const openDeals = deals.filter((d) => !d.wonAt && !d.lostAt);
 
     const revenue = round2(wonInPeriod.reduce((sum, d) => sum + d.value, 0));
@@ -191,7 +218,10 @@ export class CrmDashboardService {
     // Each target is measured against its OWN period, using the same owner
     // semantics as SalesTargetService.findAll: an owner-specific target counts
     // that owner's won deals in the target period; an org-wide target
-    // (ownerId null) counts all org deals won in that period.
+    // (ownerId null) counts all org deals won in that period. periodEnd is
+    // day-scoped: deals won at any time ON the end date (noon, 23:59, …) are
+    // included via the exclusive next-day boundary — identical to
+    // SalesTargetService.findAll/findById.
     const targets = targetRows.map((t) => {
       const amount = toNumber(t.amount);
       const achieved = round2(
@@ -200,7 +230,7 @@ export class CrmDashboardService {
             (d) =>
               d.wonAt !== null &&
               d.wonAt >= t.periodStart &&
-              d.wonAt <= t.periodEnd &&
+              d.wonAt < startOfNextUtcDay(t.periodEnd) &&
               (t.ownerId ? d.ownerId === t.ownerId : true),
           )
           .reduce((sum, d) => sum + d.value, 0),
@@ -243,8 +273,13 @@ export class CrmDashboardService {
       newDealCount: dealCount,
     };
 
+    // Internally `range.end` is an exclusive next-day bound; the payload
+    // reports the LAST INCLUDED DAY (00:00) so the API keeps returning a
+    // display-friendly date that matches the day the user selected — never a
+    // timestamp ~24h in the future.
+    const lastCoveredDay = new Date(range.end.getTime() - 86_400_000);
     return {
-      range: { startDate: range.start.toISOString(), endDate: range.end.toISOString() },
+      range: { startDate: range.start.toISOString(), endDate: lastCoveredDay.toISOString() },
       granularity,
       kpis,
       funnel,

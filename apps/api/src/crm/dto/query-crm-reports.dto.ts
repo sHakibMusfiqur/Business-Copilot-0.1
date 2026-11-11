@@ -1,16 +1,16 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsISO8601, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export class QueryCrmReportsDto {
   @ApiPropertyOptional({ description: 'Inclusive ISO date lower bound' })
   @IsOptional()
-  @IsDateString()
+  @IsISO8601({ strict: true })
   startDate?: string;
 
   @ApiPropertyOptional({ description: 'Inclusive ISO date upper bound' })
   @IsOptional()
-  @IsDateString()
+  @IsISO8601({ strict: true })
   endDate?: string;
 
   @ApiPropertyOptional()
