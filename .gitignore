@@ -32,6 +32,9 @@ Thumbs.db
 # Docker
 docker-data/
 
+# Demo seed (kept locally, not tracked)
+apps/api/prisma/seed-demo-companies.ts
+
 # Build
 *.js.map
 *.d.ts.map

@@ -225,10 +225,6 @@ export function OrgAwareLogin({ slug: slugProp }: OrgAwareLoginProps) {
     if (user) redirectAfterLogin(user);
   }, [user, redirectAfterLogin]);
 
-  if (user) {
-    return null;
-  }
-
   function handleEmailContinue(e: React.FormEvent) {
     e.preventDefault();
     const value = email.trim();
@@ -370,6 +366,10 @@ export function OrgAwareLogin({ slug: slugProp }: OrgAwareLoginProps) {
       backgroundImage: `linear-gradient(to bottom right, ${hexToRgba(effectiveBrand.primaryColor, 0.05)}, transparent 50%, ${hexToRgba(effectiveBrand.secondaryColor, 0.06)})`,
     };
   }, [effectiveBrand]);
+
+  if (user) {
+    return null;
+  }
 
   return (
     <div className="relative flex min-h-screen overflow-hidden bg-background">
