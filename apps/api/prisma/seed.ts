@@ -68,15 +68,22 @@ async function main() {
 
   // ─── Users ─────────────────────────────────────────────────────
 
+  // Seeded accounts are provisioned by the platform itself (no outbound mail
+  // in development), yet JwtStrategy rejects *every* request from an account
+  // with emailVerified=false. The backfill in the email-verified migration only
+  // covered rows that already existed, so each seed run must mark its own
+  // accounts verified — otherwise the account can log in but every subsequent
+  // API call returns 401.
   const admin = await prisma.user.upsert({
     where: { email: SEED_ADMIN_EMAIL as string },
-    update: { organizationId: org.id },
+    update: { organizationId: org.id, emailVerified: true },
     create: {
       email: SEED_ADMIN_EMAIL as string,
       password: adminPassword,
       name: 'Admin User',
       role: UserRole.ADMIN,
       isActive: true,
+      emailVerified: true,
       organizationId: org.id,
     },
   });
@@ -93,13 +100,14 @@ async function main() {
 
   const manager = await prisma.user.upsert({
     where: { email: SEED_MANAGER_EMAIL as string },
-    update: { organizationId: org.id },
+    update: { organizationId: org.id, emailVerified: true },
     create: {
       email: SEED_MANAGER_EMAIL as string,
       password: managerPassword,
       name: 'Manager User',
       role: UserRole.MANAGER,
       isActive: true,
+      emailVerified: true,
       organizationId: org.id,
     },
   });
@@ -116,13 +124,14 @@ async function main() {
 
   const regularUser = await prisma.user.upsert({
     where: { email: SEED_USER_EMAIL as string },
-    update: { organizationId: org.id },
+    update: { organizationId: org.id, emailVerified: true },
     create: {
       email: SEED_USER_EMAIL as string,
       password: userPassword,
       name: 'Regular User',
       role: UserRole.USER,
       isActive: true,
+      emailVerified: true,
       organizationId: org.id,
     },
   });
@@ -214,25 +223,46 @@ async function main() {
 
   // ─── Departments ───────────────────────────────────────────────
 
-  await Promise.all([
-    prisma.department.upsert({ where: { organizationId_code: { organizationId: null, code: 'ENG' } }, update: {}, create: { code: 'ENG', name: 'Engineering' } }),
-    prisma.department.upsert({ where: { organizationId_code: { organizationId: null, code: 'SALES' } }, update: {}, create: { code: 'SALES', name: 'Sales' } }),
-    prisma.department.upsert({ where: { organizationId_code: { organizationId: null, code: 'HR' } }, update: {}, create: { code: 'HR', name: 'Human Resources' } }),
-    prisma.department.upsert({ where: { organizationId_code: { organizationId: null, code: 'FIN' } }, update: {}, create: { code: 'FIN', name: 'Finance' } }),
-  ]);
+  // Prisma types the `organizationId_code` compound-unique input as
+  // non-nullable even though the column is nullable, so these org-less
+  // platform departments cannot go through `upsert`. Resolve them manually to
+  // keep the seed idempotent.
+  const PLATFORM_DEPARTMENTS = [
+    { code: 'ENG', name: 'Engineering' },
+    { code: 'SALES', name: 'Sales' },
+    { code: 'HR', name: 'Human Resources' },
+    { code: 'FIN', name: 'Finance' },
+  ];
+
+  for (const dept of PLATFORM_DEPARTMENTS) {
+    const existing = await prisma.department.findFirst({
+      where: { organizationId: null, code: dept.code },
+    });
+    if (existing) {
+      await prisma.department.update({ where: { id: existing.id }, data: { name: dept.name } });
+    } else {
+      await prisma.department.create({
+        data: { code: dept.code, name: dept.name, organizationId: null },
+      });
+    }
+  }
 
   console.log('Departments created');
 
   // ─── Platform Admin ────────────────────────────────────────────
 
+  // The Platform Console account must be email-verified: JwtStrategy rejects
+  // unverified users on every request, so without this the admin signs in
+  // successfully and /admin then never resolves (401 from /auth/me).
   await prisma.user.upsert({
     where: { email: SEED_SUPER_ADMIN_EMAIL as string },
-    update: {},
+    update: { emailVerified: true },
     create: {
       email: SEED_SUPER_ADMIN_EMAIL as string,
       name: 'Super Admin',
       password: superAdminPassword,
       role: 'SUPER_ADMIN',
+      emailVerified: true,
     },
   });
   console.log(`  Super Admin: ${SEED_SUPER_ADMIN_EMAIL}`);
@@ -247,12 +277,13 @@ async function main() {
     const devAdminPassword = await argon2.hash(DEV_ADMIN_PASSWORD);
     await prisma.user.upsert({
       where: { email: DEV_ADMIN_EMAIL },
-      update: {},
+      update: { emailVerified: true },
       create: {
         email: DEV_ADMIN_EMAIL,
         name: 'Platform Admin',
         password: devAdminPassword,
         role: 'SUPER_ADMIN',
+        emailVerified: true,
       },
     });
     console.log(`  Dev Platform Admin: ${DEV_ADMIN_EMAIL} (password set from seed) [DEVELOPMENT ONLY]`);

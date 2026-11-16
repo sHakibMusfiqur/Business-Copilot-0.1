@@ -51,6 +51,13 @@ export default function PlatformDashboardPage() {
     staleTime: 30_000,
   });
 
+  // The error branch must run first: after a failed request `data` stays
+  // undefined, so an `isLoading || !data` guard above it would render the
+  // skeleton forever and make ErrorState unreachable.
+  if (isError) {
+    return <ErrorState message="Could not load platform dashboard" onRetry={() => refetch()} />;
+  }
+
   if (isLoading || !data) {
     return (
       <div className="space-y-4">
@@ -62,10 +69,6 @@ export default function PlatformDashboardPage() {
         </div>
       </div>
     );
-  }
-
-  if (isError) {
-    return <ErrorState message="Could not load platform dashboard" onRetry={() => refetch()} />;
   }
 
   const d = data as DashboardResponse;

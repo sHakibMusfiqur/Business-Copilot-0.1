@@ -17,15 +17,17 @@ export default function AdminRevenuePage() {
   const dash = useQuery({ queryKey: ['admin', 'dashboard'], queryFn: () => getAdminDashboard(), staleTime: 30_000 });
   const plans = useQuery({ queryKey: ['admin', 'plans'], queryFn: () => getAdminPlans(), staleTime: 60_000 });
 
+  // Error first: `!dash.data` is also true after a failure, so a loading guard
+  // above it would hide ErrorState behind an endless skeleton.
+  if (dash.isError) {
+    return <ErrorState message="Could not load revenue data" onRetry={() => dash.refetch()} />;
+  }
   if (dash.isLoading || !dash.data) {
     return (
       <div className="space-y-4">
         <LoadingState rows={2} />
       </div>
     );
-  }
-  if (dash.isError) {
-    return <ErrorState message="Could not load revenue data" onRetry={() => dash.refetch()} />;
   }
 
   const d = dash.data;

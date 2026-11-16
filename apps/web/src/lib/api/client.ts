@@ -186,7 +186,10 @@ export async function refreshAccessToken(): Promise<string | null> {
       const response = await axios.post<TokenResponse>(
         `${API_URL}/api/auth/refresh`,
         {},
-        { withCredentials: true },
+        // Bounded so a stalled refresh can never leave a caller (and the shell
+        // spinner that awaits it) hanging indefinitely. The shared `api`
+        // instance already has a timeout; this raw call had none.
+        { withCredentials: true, timeout: 15_000 },
       );
       const token = response.data.accessToken;
       if (generation !== sessionGeneration) return null;
