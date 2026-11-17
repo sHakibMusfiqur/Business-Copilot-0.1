@@ -12,7 +12,7 @@ import {
   Server,
 } from 'lucide-react';
 
-import { getAdminDashboard } from '@/lib/api';
+import { getAdminDashboard, getSystemHealth } from '@/lib/api';
 import { PageHeader } from '@/components/admin/page-header';
 import { PanelCard } from '@/components/admin/panel-card';
 import { ErrorState, LoadingState } from '@/components/admin/states';
@@ -34,6 +34,13 @@ export default function AdminMonitoringPage() {
     queryKey: ['admin', 'dashboard'],
     queryFn: () => getAdminDashboard(),
     staleTime: 30_000,
+  });
+  // Real service health (SUPER_ADMIN): drives the Redis row instead of the
+  // static "Not configured" claim. Secondary query — never gates the page.
+  const health = useQuery({
+    queryKey: ['admin', 'system-health'],
+    queryFn: () => getSystemHealth(),
+    staleTime: 15_000,
   });
 
   // Error first: `!dash.data` is also true after a failure, so a loading guard
@@ -59,6 +66,29 @@ export default function AdminMonitoringPage() {
   const uptimeMs = d.platform?.uptimeMs ?? 0;
   const days = Math.floor(uptimeMs / 86400000);
   const hours = Math.floor((uptimeMs % 86400000) / 3600000);
+
+  // Redis row from the real health endpoint: connected -> live status with
+  // latency; disabled (redis null) -> Unknown/Not configured; while the
+  // request is pending or fails -> Unknown with an honest detail.
+  let redisStatus: 'operational' | 'down' | 'unknown' = 'unknown';
+  let redisDetail = 'Not configured';
+  if (health.isLoading) {
+    redisDetail = 'Checking…';
+  } else if (health.isError) {
+    redisDetail = 'Status unavailable';
+  } else if (health.data?.redis) {
+    const metrics = health.data.redis;
+    if (metrics.status === 'connected') {
+      redisStatus = 'operational';
+      redisDetail = metrics.latency != null ? `Connected · ${metrics.latency}ms` : 'Connected';
+    } else {
+      redisStatus = 'down';
+      redisDetail = metrics.status === 'reconnecting' ? 'Reconnecting' : 'Disconnected';
+    }
+  }
+  const services = SERVICES.map((s) =>
+    s.name === 'Redis' ? { ...s, status: redisStatus, detail: redisDetail } : s,
+  );
 
   return (
     <div className="space-y-4">
@@ -105,7 +135,7 @@ export default function AdminMonitoringPage() {
 
       <PanelCard title="Services" description="Health status of core services">
         <div className="space-y-2">
-          {SERVICES.map((s) => (
+          {services.map((s) => (
             <div
               key={s.name}
               className="flex items-center justify-between rounded-md border border-border bg-muted/30 px-3 py-2.5"
@@ -122,8 +152,20 @@ export default function AdminMonitoringPage() {
                 </div>
               </div>
               <StatusBadge
-                label={s.status === 'operational' ? 'Operational' : 'Unknown'}
-                tone={s.status === 'operational' ? 'success' : 'neutral'}
+                label={
+                  s.status === 'operational'
+                    ? 'Operational'
+                    : s.status === 'down'
+                      ? 'Disconnected'
+                      : 'Unknown'
+                }
+                tone={
+                  s.status === 'operational'
+                    ? 'success'
+                    : s.status === 'down'
+                      ? 'danger'
+                      : 'neutral'
+                }
                 dot
               />
             </div>

@@ -1,5 +1,6 @@
 export const API_ROUTES = {
   HEALTH: '/health',
+  SYSTEM_HEALTH: '/system/health',
   AUTH: {
     LOGIN: '/auth/login',
     ADMIN_LOGIN: '/admin/auth/login',
